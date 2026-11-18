@@ -24,9 +24,9 @@ flowchart TD
 - **Repository**: [https://github.com/octetta/amy-not-the-samey](https://github.com/octetta/amy-not-the-samey)
 - **Focus**: Interactive REPL and command interface for the AMY synthesizer.
 
-The journey began with writing an interactive REPL for the [AMY](https://github.com/shorepine/amy) synthesizer engine. AMY demonstrated the elegance of controlling synthesis parameters via compact ASCII wire commands (`v0w1f440l1`). `amy-not-the-samey` explored immediate, tactile feedback loops, making synthesis interactive and command-line driven rather than buried behind complex GUI knobs or rigid config files.
+The journey began with writing an interactive REPL for the [AMY](https://github.com/shorepine/amy) synthesizer engine. AMY demonstrated the elegance of controlling synthesis parameters via compact ASCII wire commands (`v0w1f440l1`). Having previously contributed to AMY by replacing PortAudio with `miniaudio` for desktop targets, Joseph Stewart built `amy-not-the-samey` to explore immediate, tactile feedback loops, making synthesis interactive and command-line driven rather than buried behind complex GUI knobs or rigid config files.
 
-*Key Lesson*: Compact ASCII command streams provide an extraordinarily fast, human-playable interface for sound design and live performance.
+*Key Lesson*: Compact ASCII command streams provide an extraordinarily fast, human-playable interface for sound design and live performance, and single-header libraries like `miniaudio` provide unbeatable cross-platform backend simplicity.
 
 ---
 

@@ -48,6 +48,7 @@ The following companion projects developed by **Joseph Stewart / Octetta** are v
 - **Author**: David Reid ([mackron@gmail.com](mailto:mackron@gmail.com))
 - **Website**: [miniaud.io](https://miniaud.io)
 - **Role**: Cross-platform low-latency audio hardware playback, capture, and device enumeration supporting Linux (ALSA/PulseAudio), macOS (CoreAudio), Windows (WASAPI/DirectSound), and WebAssembly (Web Audio API via Emscripten).
+- **Lineage**: Joseph Stewart originally introduced `miniaudio` to the AMY project to replace PortAudio on desktop platforms; that battle-tested single-header audio backend directly carried forward into `skred` and `sk3`.
 - **License**: Public Domain (Unlicense) / MIT-0.
 
 ### 2. [miniz](https://github.com/richgel99/miniz)

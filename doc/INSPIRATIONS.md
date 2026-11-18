@@ -13,6 +13,8 @@ This document traces the direct technical lineages and visionary pioneers whose 
 
 The wire control syntax of **ANDS** and **SKODE** in `sk3` drew direct inspiration from AMY's brilliant ASCII wire protocol. AMY proved that complex, multi-timbral polyphonic synthesizer engines do not require bloated binary protocols or heavy JSON overhead: they can be driven at ultra-low latency with compact, single-character parameter commands (e.g., `v0f440a0.5l1Z`) transmitted over serial pipes, POSIX IPC, UDP datagrams, or WebAssembly memory buffers.
 
+Joseph Stewart was an early contributor to AMY, submitting the migration that replaced PortAudio with `miniaudio` for desktop platforms—a lightweight, single-file audio backend choice that proved extraordinarily reliable and carried forward directly into `skred` and `sk3`.
+
 `sk3` builds upon this foundation by extending the ASCII wire stream into a full Forth-inspired concatenative domain-specific language with macros, array parameters, and deterministic schedule queues.
 
 ---
