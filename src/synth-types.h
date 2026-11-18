@@ -152,6 +152,7 @@ typedef struct {
   int last_mode;
   float drive;  // cached per-character soft-clip amount; 0 = bypass (character 0)
 } mmf_t;
+typedef mmf_t skred_filter_t;
 
 #include <stdint.h> // for uint64_t
 
@@ -182,6 +183,7 @@ typedef struct {
     uint64_t stage_start_sample; // Sample count when current stage began
     float stage_start_level;  // Amplitude at the start of current stage
 } envelope_t;
+typedef envelope_t skred_envelope_t;
 
 #define WAVE_NAME_MAX (16+1)
 typedef char wave_name_t[WAVE_NAME_MAX];
@@ -223,5 +225,10 @@ typedef struct {
   float *frames;
   int channels;
 } synth_record_bus_t;
+
+/* Canonical type aliases for public API and client clarity */
+typedef static_wave_meta_t skred_wave_meta_t;
+typedef synth_sample_t skred_sample_t;
+typedef synth_record_bus_t skred_record_bus_t;
 
 #endif /* SKRED_SYNTH_TYPES_H */

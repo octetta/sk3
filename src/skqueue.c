@@ -325,3 +325,24 @@ void queue_clear(queue_t *q) {
     atomic_fetch_add_int(&q->generation, 1);
     simple_mutex_unlock(&q->sorted_mutex);
 }
+
+/* Canonical skqueue_* API wrappers */
+void skqueue_init(skqueue_t *q, int max_size) { queue_init(q, max_size); }
+void skqueue_free(skqueue_t *q) { queue_free(q); }
+bool skqueue_put_event(skqueue_t *q, uint64_t timestamp, int tag, void *data, const event_t *event) {
+    return queue_put_event(q, timestamp, tag, data, event);
+}
+bool skqueue_get_filtered(skqueue_t *q, uint64_t limit_ts, skqueue_item_t *out) {
+    return queue_get_filtered(q, limit_ts, out);
+}
+bool skqueue_peek_timestamp(skqueue_t *q, uint64_t *timestamp) {
+    return queue_peek_timestamp(q, timestamp);
+}
+int skqueue_size(skqueue_t *q) { return queue_size(q); }
+void skqueue_foreach(skqueue_t *q, skqueue_foreach_cb callback, void *userdata) {
+    queue_foreach(q, callback, userdata);
+}
+int skqueue_cancel(skqueue_t *q, skqueue_cancel_cb should_cancel, void *userdata) {
+    return queue_cancel(q, should_cancel, userdata);
+}
+void skqueue_clear(skqueue_t *q) { queue_clear(q); }

@@ -140,4 +140,30 @@ void envelope_schedule_release_e_at(envelope_t *e, uint64_t release_sample);
 void envelope_release_e(envelope_t *e);
 float envelope_step_e(envelope_t *e, uint64_t current_sample);
 
+/* Canonical synth_voice_* function aliases for consistency */
+#define synth_voice_set_freq freq_set
+#define synth_voice_set_amp amp_set
+#define synth_voice_set_pan pan_set
+#define synth_voice_set_wave wave_set
+#define synth_voice_reset wave_reset
+#define synth_voice_trigger voice_trigger
+#define synth_voice_copy voice_copy
+#define synth_voice_set_loop wave_loop
+#define synth_voice_set_direction wave_dir
+#define synth_voice_set_mute wave_mute
+
+/* Canonical synth_filter_* function aliases */
+#define synth_filter_init mmf_init
+#define synth_filter_set_params mmf_set_params
+#define synth_filter_set_freq mmf_set_freq
+#define synth_filter_set_res mmf_set_res
+#define synth_filter_process mmf_process
+
+/* Canonical synth_envelope_* function aliases */
+#define synth_envelope_init envelope_init
+#define synth_envelope_set envelope_set
+#define synth_envelope_trigger amp_envelope_trigger
+#define synth_envelope_release amp_envelope_release
+#define synth_envelope_step amp_envelope_step
+
 #endif /* SKRED_SYNTH_H */

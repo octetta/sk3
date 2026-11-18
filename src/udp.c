@@ -271,6 +271,22 @@ int udp_metrics(skred_udp_metrics_t *out) {
   return 0;
 }
 
+int skred_udp_start(int port) {
+  return udp_start(port);
+}
+
+void skred_udp_stop(void) {
+  udp_stop();
+}
+
+int skred_udp_info(void) {
+  return udp_info();
+}
+
+int skred_udp_metrics(skred_udp_metrics_t *out) {
+  return udp_metrics(out);
+}
+
 //
 
 int udp_send_to(int fd, void *c, int len, void *addr, unsigned int client_len) {

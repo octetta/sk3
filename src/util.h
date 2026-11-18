@@ -10,14 +10,16 @@
 #include "portable_win.h"
 #endif
 
+/* High-resolution timestamp benchmarking state */
 typedef struct {
-  struct timespec a;
-  struct timespec b;
-  int64_t diff;
-  int state;
-  int order;
-  int frames;
-} sben_t;
+  struct timespec a;       /* Interval start timestamp */
+  struct timespec b;       /* Interval stop timestamp */
+  int64_t diff;            /* Elapsed interval in nanoseconds */
+  int state;               /* Benchmark state (BEN_0, BEN_A, BEN_B, BEN_D) */
+  int order;               /* Sequence execution counter */
+  int frames;              /* Processed frames in interval */
+} skred_bench_t;
+typedef skred_bench_t sben_t;
 
 #define BENLEN (4)
 

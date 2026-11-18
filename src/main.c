@@ -102,20 +102,20 @@ static int run_command(const char *line) {
 }
 
 int main(int argc, char **argv) {
-  int useue = 1;
-  unsigned int vc = 256;
-  unsigned int req = 128;
+  int use_editor = 1;
+  unsigned int voice_count = 256;
+  unsigned int requested_frames = 128;
   int udp_port = 60440;
   int events_port = 0; // Default off
-  int output = -1;
-  int input = -1;
+  int output_device = -1;
+  int input_device = -1;
 
   for (int i = 1; i < argc; i++) {
     if (argv[i][0] == '-') {
       switch (argv[i][1]) {
-        case 'n': useue = 0; break;
-        case 'v': vc = atoi(&argv[i][2]); break;
-        case 'r': req = atoi(&argv[i][2]); break;
+        case 'n': use_editor = 0; break;
+        case 'v': voice_count = atoi(&argv[i][2]); break;
+        case 'r': requested_frames = atoi(&argv[i][2]); break;
         case 'p': udp_port = (int)strtol(&(argv[i][2]), NULL, 0); break;
         case 'e': events_port = (int)strtol(&(argv[i][2]), NULL, 0); break;
         case 'l': {
@@ -129,11 +129,11 @@ int main(int argc, char **argv) {
         } break;
         case 'i': {
           skred_enumerate_devices(1);
-          input = atoi(&argv[i][2]);
+          input_device = atoi(&argv[i][2]);
         } break;
         case 'o': {
           skred_enumerate_devices(0);
-          output = atoi(&argv[i][2]);
+          output_device = atoi(&argv[i][2]);
         } break;
         default:
           usage();
@@ -142,7 +142,7 @@ int main(int argc, char **argv) {
     }
   }
 
-  if (!useue) {
+  if (!use_editor) {
     // Force line buffering: buffers are flushed at every '\n'
     setvbuf(stdin,  NULL, _IOLBF, 0);
     setvbuf(stdout, NULL, _IOLBF, 0);
@@ -150,9 +150,9 @@ int main(int argc, char **argv) {
 
   printf("# skred v%s with %s\n", skred_version(), skred_features());
 
-  skred_set_audio_device(output, input);
+  skred_set_audio_device(output_device, input_device);
 
-  if (skred_start(req, vc, udp_port) != 0) {
+  if (skred_start(requested_frames, voice_count, udp_port) != 0) {
     return 1;
   }
 
@@ -162,14 +162,14 @@ int main(int argc, char **argv) {
 
   skred_logger(1);
 
-  if (useue) {
+  if (use_editor) {
     uedit_load_history(HISTORY_FILE);
   }
 
   while (1) {
     char line[1024];
     char *out = NULL;
-    if (useue) {
+    if (use_editor) {
       int r = uedit("# ", line, sizeof(line) - 1);
       if (r == 0) continue;
       if (r < 0) break;
@@ -189,7 +189,7 @@ int main(int argc, char **argv) {
   skred_udp_events_stop();
   skred_stop();
 
-  if (useue) {
+  if (use_editor) {
     uedit_save_history(HISTORY_FILE);
   }
 

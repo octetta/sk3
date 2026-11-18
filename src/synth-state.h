@@ -16,6 +16,16 @@
  * Access:  sv.phase[v],  sw.data[w]
  * This is a direct drop-in for the old globals voice_phase[v], wave_table_data[w].
  *
+ * Naming and indexing conventions throughout the DSP engine:
+ *   - sv: global synthesizer voices state (synth_voices_t)
+ *   - sw: global synthesizer wavetable state (synth_waves_t)
+ *   - v: voice index (0 .. synth_config.voice_max - 1)
+ *   - w: wavetable slot index (0 .. synth_config.wave_table_max - 1)
+ *   - f: frequency in Hz (or normalized floating-point parameter)
+ *   - p: sequencer pattern index (0 .. PATTERNS_MAX - 1)
+ *   - s: sequencer step index (0 .. STEP_MAX - 1)
+ *   - engine: active skred_engine_t context
+ *
  * The audio callback must NEVER call malloc/free.  These pointers are
  * populated once at init time and then treated as plain C arrays for the
  * lifetime of the engine.

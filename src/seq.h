@@ -50,6 +50,12 @@ typedef struct {
   program_op_t op[SEQ_PROGRAM_OP_MAX];
 } event_program_t;
 
+/* Canonical type aliases for namespacing */
+typedef opcode_event_t seq_opcode_event_t;
+typedef event_t seq_event_t;
+typedef program_op_t seq_program_op_t;
+typedef event_program_t seq_event_program_t;
+
 void seq(uint64_t now, void (*event_fn)(const event_t *event),
   void (*program_fn)(int pattern, int step, const event_program_t *program));
 int seq_next_boundary(uint64_t now, uint64_t limit, uint64_t *boundary);
@@ -129,5 +135,14 @@ int seq_kill_by_tag(int tag);
 char *seq_stats(void);
 
 int seq_kill_all(void);
+
+/* Canonical seq_* function aliases */
+#define seq_pattern_reset pattern_reset
+#define seq_queue_event queue_event
+#define seq_tempo_set tempo_set
+#define seq_tempo_set_subdivision tempo_set_subdivision
+#define seq_tempo_bpm_get tempo_bpm_get
+#define seq_tempo_subdivision_get tempo_subdivision_get
+#define seq_tempo_step_seconds_get tempo_step_seconds_get
 
 #endif /* SKRED_SEQ_H */
