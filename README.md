@@ -8,6 +8,7 @@
 
 [![Release](https://img.shields.io/github/v/release/octetta/sk3?color=blue)](https://github.com/octetta/sk3/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Credits](https://img.shields.io/badge/credits-acknowledgements-purple.svg)](CREDITS.md)
 [![Tests](https://img.shields.io/badge/tests-12%2F12%20passing-brightgreen.svg)]()
 
 `sk3` (formerly skred) is a lightweight, high-performance polyphonic synthesizer, deterministic audio engine, and embedded Forth-inspired domain specific language (`skode`) for generative sound design and sequencing.
@@ -54,3 +55,9 @@ make wasm-test   # Run headless Node.js verification test
 - `waves/`: Essential wavetable sound recipes (`drums`, `dwg`, `esq1`).
 - `wasm/`: Emscripten build tools and headless testing harness.
 - `tests/`: Automated unit and contract test suites.
+
+## License & Credits
+
+`sk3` is released under the [MIT License](LICENSE) &copy; 2026 Joseph Ellis Stewart / Octetta.
+
+For detailed third-party software acknowledgements, upstream libraries (miniaudio, miniz), and dogfooded components (k-synth, minimidio, uedit, ueval), please refer to [CREDITS.md](CREDITS.md).
