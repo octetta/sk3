@@ -2,7 +2,7 @@
 
 `sk3` (v1.0.0) stands on the shoulders of remarkable open-source projects, seminal computer music research, and tightly integrated dogfooded libraries created by Joseph Stewart / Octetta.
 
-For the philosophical, sonic, and architectural history behind `sk3`, see [INSPIRATIONS.md](doc/INSPIRATIONS.md).
+For the project's evolution across earlier prototypes and projects, see [HISTORY.md](doc/HISTORY.md). For the philosophical, sonic, and architectural history behind `sk3`, see [INSPIRATIONS.md](doc/INSPIRATIONS.md).
 
 ---
 

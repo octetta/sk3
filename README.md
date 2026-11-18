@@ -49,7 +49,7 @@ make wasm-test   # Run headless Node.js verification test
 
 - `schema/synth/`: Synthesizer engine state and allocation schema specifications (`.def`).
 - `schema/opcodes/`: Opcode dictionary and dispatch schema specifications (`.def`).
-- `doc/`: Architecture guides, generated reference manual (`REFERENCE.md`), and historical lineage (`INSPIRATIONS.md`).
+- `doc/`: Architecture guides, generated reference manual (`REFERENCE.md`), evolutionary history (`HISTORY.md`), and historical lineage (`INSPIRATIONS.md`).
 - `tools/`: Declarative code compilers (`mksynth.c`, `mkopcodes.c`).
 - `src/`: Core C DSP, audio, and language runtime implementations.
 - `src/gen/`: Generated C headers, dispatch tables, and equivalence harnesses.
@@ -62,5 +62,7 @@ make wasm-test   # Run headless Node.js verification test
 `sk3` is released under the [MIT License](LICENSE) &copy; 2026 Joseph Ellis Stewart / Octetta.
 
 For detailed third-party software acknowledgements, upstream libraries (miniaudio, miniz), and dogfooded components (k-synth, minimidio, uedit, ueval), please refer to [CREDITS.md](CREDITS.md).
+
+For the project's evolution across previous iterations and prototypes, see [HISTORY.md](doc/HISTORY.md).
 
 For the historical lineages and sonic pioneers that shaped `sk3` and the Skode language, see [INSPIRATIONS.md](doc/INSPIRATIONS.md).

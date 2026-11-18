@@ -2,7 +2,7 @@
 
 The architecture, sound design philosophy, and expressive control paradigms in `sk3` and the **Skode** language are deeply rooted in the history of electronic music, pioneering synthesizer hardware, and real-time audio programming languages.
 
-This document traces the direct technical lineages and visionary pioneers whose work inspired `sk3`.
+This document traces the direct technical lineages and visionary pioneers whose work inspired `sk3`. For the chronological evolution across earlier prototypes and projects (`amy-not-the-samey`, `rototem`, `rattle`, `hlokk`, `exsynthia`, `skred`, `pulp`), see [HISTORY.md](HISTORY.md).
 
 ---
 
