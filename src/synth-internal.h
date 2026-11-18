@@ -1,5 +1,5 @@
-#ifndef _SYNTH_INTERNAL_H_
-#define _SYNTH_INTERNAL_H_
+#ifndef SKRED_SYNTH_INTERNAL_H
+#define SKRED_SYNTH_INTERNAL_H
 
 #include "synth.h"
 #include "synth-state.h"
@@ -70,15 +70,12 @@ float clampf(float value, float min_value, float max_value);
 int osc_loop_crossings(double distance, double loop_length);
 int clampi(int value, int min_value, int max_value);
 
-#endif
 #define VOLUME_DEFAULT (-6.0f)
 #define DB_TO_LINEAR(v) powf(10.f, (v) / 20.0f)
 #define SYNTH_INVALID_VOICE (100)
-#define DELAY_MAX_FRAMES (65536)
-#define DELAY_BUS_COUNT (4)
-#define DELAY_TIME_SMOOTHING (0.0008f)
-#define FM_TWO_PI (2.0f * (float)M_PI)
 #define SMOOTH_DEFAULT (0.02f)
 #define FILTER_UC (16)
 int mod_voice_invalid(int voice);
 void amp_envelope_schedule_one_shot_release(int v);
+
+#endif /* SKRED_SYNTH_INTERNAL_H */

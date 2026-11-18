@@ -1,5 +1,7 @@
+#ifndef SKRED_SKODE_INTERNAL_H
+#define SKRED_SKODE_INTERNAL_H
+
 #include "miniaudio.h"
-#pragma once
 
 #include "skred.h"
 #include "api.h"
@@ -510,9 +512,4 @@ void skode_format_string_args(char *dst, size_t dst_size, const char *src, doubl
 void skode_format_map_value(char *dst, size_t dst_size, const char *fmt, double val);
 char *skode_extra_ptr(int index);
 
-float *mw_get(char *name, int *frames_out, wav_t *w, int ch);
-float *mw_get_mem(const void *data, size_t data_size, const char *label,
-                  int *frames_out, wav_t *w, int ch, char *out, int len);
-int mw_get_smpl_loop_mem(const void *data, size_t data_size, int frames,
-                         mw_smpl_loop_t *loop);
-float *mw_free(float *f);
+#endif /* SKRED_SKODE_INTERNAL_H */

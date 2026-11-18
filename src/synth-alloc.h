@@ -1,5 +1,5 @@
-#ifndef SYNTH_ALLOC_H
-#define SYNTH_ALLOC_H
+#ifndef SKRED_SYNTH_ALLOC_H
+#define SKRED_SYNTH_ALLOC_H
 
 /*
  * synth-alloc.h — declarations for the voice/wave heap allocators.
@@ -27,4 +27,4 @@ void synth_free_voices(void);
 void synth_alloc_waves(int wave_table_max);
 void synth_free_waves(void);
 
-#endif /* SYNTH_ALLOC_H */
+#endif /* SKRED_SYNTH_ALLOC_H */

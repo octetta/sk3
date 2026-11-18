@@ -1,5 +1,5 @@
-#ifndef _SKODE_DICT_H_
-#define _SKODE_DICT_H_
+#ifndef SKRED_SKODE_DICT_H
+#define SKRED_SKODE_DICT_H
 
 #define SKODE_LEGACY_WORD_T_DEFINED 1
 
@@ -543,10 +543,8 @@ int skode_dict_word_is_promoted_macro(const skode_word_t *word);
  */
 skode_word_t *skode_dict_free_promoted_macro(skode_word_t *word);
 
-#endif
-
 const char *skode_help_category_for_word(const char *name);
-
-
 int skode_help_categories(char categories[][96], int max_categories);
+
+#endif /* SKRED_SKODE_DICT_H */
 

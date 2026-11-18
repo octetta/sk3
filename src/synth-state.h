@@ -1,5 +1,5 @@
-#ifndef SYNTH_STATE_H
-#define SYNTH_STATE_H
+#ifndef SKRED_SYNTH_STATE_H
+#define SKRED_SYNTH_STATE_H
 
 /*
  * synth-state.h — heap-allocated parallel arrays for voice and wave state.
@@ -292,4 +292,4 @@ static inline int synth_voice_count(void) {
     return n;
 }
 
-#endif /* SYNTH_STATE_H */
+#endif /* SKRED_SYNTH_STATE_H */

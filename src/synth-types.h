@@ -1,5 +1,5 @@
-#ifndef _SYNTH_TYPES_H_
-#define _SYNTH_TYPES_H_
+#ifndef SKRED_SYNTH_TYPES_H
+#define SKRED_SYNTH_TYPES_H
 
 #include "portable_atomic.h"
 
@@ -185,8 +185,12 @@ typedef struct {
 
 #define WAVE_NAME_MAX (16+1)
 typedef char wave_name_t[WAVE_NAME_MAX];
+
+#ifndef SKRED_TEXT_T_DEFINED
+#define SKRED_TEXT_T_DEFINED
 #define TEXT_MAX (32+1)
 typedef char text_t[TEXT_MAX];
+#endif
 
 enum {
   SAMPLE_STATE_IDLE = 0,
@@ -220,4 +224,4 @@ typedef struct {
   int channels;
 } synth_record_bus_t;
 
-#endif
+#endif /* SKRED_SYNTH_TYPES_H */

@@ -1,5 +1,5 @@
-#ifndef _UTIL_H_
-#define _UTIL_H_
+#ifndef SKRED_UTIL_H
+#define SKRED_UTIL_H
 
 #define NS_TO_MS (1000000)
 #define S_TO_MS (1000)
@@ -66,4 +66,4 @@ int get_executable_path(char* buffer, size_t size);
 void get_directory(const char* full_path, char* dir_out);
 int join_path(char* buffer, size_t size, const char* base, const char* subpath);
 
-#endif
+#endif /* SKRED_UTIL_H */

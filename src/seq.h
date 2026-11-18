@@ -1,5 +1,5 @@
-#ifndef _SEQ_H_
-#define _SEQ_H_
+#ifndef SKRED_SEQ_H
+#define SKRED_SEQ_H
 
 #include <stdint.h>
 
@@ -111,8 +111,12 @@ extern int seq_pattern_length[PATTERNS_MAX];
 const char *seq_step_source(int pattern, int step);
 const event_program_t *seq_step_program(int pattern, int step);
 
+#ifndef SKRED_TEXT_T_DEFINED
+#define SKRED_TEXT_T_DEFINED
 #define TEXT_MAX (32+1)
 typedef char text_t[TEXT_MAX];
+#endif
+
 extern text_t seq_text[PATTERNS_MAX];
 
 int seq_queued(void);
@@ -126,4 +130,4 @@ char *seq_stats(void);
 
 int seq_kill_all(void);
 
-#endif
+#endif /* SKRED_SEQ_H */

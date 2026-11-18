@@ -1,5 +1,5 @@
-#ifndef _SKODE_H_
-#define _SKODE_H_
+#ifndef SKRED_SKODE_H
+#define SKRED_SKODE_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -247,14 +247,10 @@ int null_printf(const char *fmt, ...);
   .ks_result = NULL, \
 }
 
-//  .output = 0, 
-
-
-/* Required by skode-dict.c -- see parts/docs/SKODE_DICT_INTEGRATION.md */
 int skode_double_to_int(double value, int *out);
 void sk_sleep(int milliseconds);
 
 void skode_init(skode_t *w);
 void skode_free(skode_t *w);
 
-#endif
+#endif /* SKRED_SKODE_H */

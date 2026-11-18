@@ -1,5 +1,5 @@
-#ifndef SKQUEUE_H
-#define SKQUEUE_H
+#ifndef SKRED_SKQUEUE_H
+#define SKRED_SKQUEUE_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -63,4 +63,4 @@ int queue_cancel(queue_t *q, queue_cancel_cb should_cancel, void *userdata);
 
 void queue_clear(queue_t *q);
 
-#endif
+#endif /* SKRED_SKQUEUE_H */

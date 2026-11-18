@@ -1,5 +1,5 @@
-#ifndef _UDP_H_
-#define _UDP_H_
+#ifndef SKRED_UDP_H
+#define SKRED_UDP_H
 
 #include <stdint.h>
 
@@ -18,4 +18,4 @@ void udp_stop(void);
 int udp_info(void);
 int udp_metrics(skred_udp_metrics_t *out);
 
-#endif
+#endif /* SKRED_UDP_H */

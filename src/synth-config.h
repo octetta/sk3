@@ -1,5 +1,5 @@
-#ifndef SYNTH_CONFIG_H
-#define SYNTH_CONFIG_H
+#ifndef SKRED_SYNTH_CONFIG_H
+#define SKRED_SYNTH_CONFIG_H
 
 #include "synth-types.h"   /* VOICE_MAX, WAVE_TABLE_MAX */
 
@@ -59,4 +59,4 @@ void synth_config_set_waves(int n);
 
 
 
-#endif /* SYNTH_CONFIG_H */
+#endif /* SKRED_SYNTH_CONFIG_H */

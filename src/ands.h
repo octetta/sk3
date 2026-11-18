@@ -1,5 +1,5 @@
-#ifndef _ANDS_H_
-#define _ANDS_H_
+#ifndef SKRED_ANDS_H
+#define SKRED_ANDS_H
 
 #include <stdint.h>
 #include <math.h>
@@ -112,7 +112,6 @@ double ands_defer_num(ands_t *s);
 int ands_defer_var(ands_t *s);
 char *ands_defer_string(ands_t *s);
 char ands_defer_mode(ands_t *s);
-char *ands_atom_string(ands_t *s);
 void ands_trace_set(ands_t *s, int n);
 char *atom_string(int i);
 double *ands_data(ands_t *s);
@@ -191,4 +190,4 @@ char *ands_string_from_external(ands_t *s, char *src, int len);
 
 #define ATOM4(c) (c)
 
-#endif
+#endif /* SKRED_ANDS_H */
