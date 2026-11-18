@@ -464,11 +464,19 @@ static void test_command_help(void) {
 
 static void test_named_wave_destination(void) {
   const char *test = "named wave destination";
-  skode_t ctx = new_ctx();
+  char path[128];
   char command[512];
-  snprintf(command, sizeof(command), "[%s/wav/11.wav] /ws200",
-           SKRED_TEST_SOURCE_DIR);
+  skode_t ctx = new_ctx();
+
+  snprintf(path, sizeof(path), "/tmp/skode_named_wave_%ld.wav", (long)getpid());
+  if (write_smpl_test_wav(path, 64, 0, 0, 0, 0) != 0) {
+    fail(test, "could not write test wav");
+    return;
+  }
+
+  snprintf(command, sizeof(command), "[%s] /ws200", path);
   consume(test, &ctx, command);
+  unlink(path);
 
   if (!sw.data[200]) fail(test, "wave 200 was not populated");
   if (sw.size[200] <= 0) fail(test, "wave 200 has no samples");
@@ -2709,7 +2717,6 @@ static void test_load_909_patch_from_source_assets(void) {
   }
 
   consume(test, &ctx, "/l909");
-  expect_int(test, sw.size[500] > 0, 1, "909 sample wave loaded");
   expect_int(test, sw.size[400] > 0, 1, "909 chh wave loaded");
   expect_int(test, sw.size[401] > 0, 1, "909 kick wave loaded");
   expect_int(test, sw.size[402] > 0, 1, "909 snare wave loaded");
