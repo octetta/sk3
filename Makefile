@@ -1,9 +1,14 @@
 HOSTCC ?= cc
 CMAKE ?= cmake
+ifeq ($(origin CMAKE),default)
+  ifneq ($(wildcard /usr/bin/cmake),)
+    CMAKE := /usr/bin/cmake
+  endif
+endif
 VERSION ?= $(shell cat VERSION 2>/dev/null || echo 1.0.0)
 
 DEF_FILES := $(shell find schema/opcodes -type f -name '*.def' 2>/dev/null)
-GEN_OUTPUTS := src/gen/skode_dict_gen.h src/gen/skred_opcodes_gen.c doc/REFERENCE.md src/gen/skode-doc.inc
+GEN_OUTPUTS := src/gen/skode_dict_gen.h src/gen/skred_opcodes_gen.c doc/REFERENCE.md src/gen/skode-doc.inc src/gen/skred-version.h
 
 SYNTH_DEF_FILES := $(shell find schema/synth -type f -name '*.def' 2>/dev/null)
 SYNTH_GEN_OUTPUTS := src/gen/synth_state_gen.h src/gen/synth_alloc_gen.c src/gen/synth_voice_ops_gen.c src/gen/test_schema_bounds_gen.c src/gen/test_synth_equivalence_gen.c
@@ -45,9 +50,14 @@ all: native
 tools/mkopcodes: tools/mkopcodes.c
 	$(HOSTCC) -O2 -Wall -Wextra tools/mkopcodes.c -o tools/mkopcodes
 
-$(GEN_OUTPUTS): tools/mkopcodes $(DEF_FILES)
+$(GEN_OUTPUTS): tools/mkopcodes $(DEF_FILES) VERSION
 	mkdir -p src/gen doc
 	./tools/mkopcodes schema/opcodes src/gen/skode_dict_gen.h src/gen/skred_opcodes_gen.c doc/REFERENCE.md src/gen/skode-doc.inc
+	@v=$$(cat VERSION 2>/dev/null || echo 1.0.0); \
+	maj=$$(echo $$v | cut -d. -f1); \
+	min=$$(echo $$v | cut -d. -f2); \
+	pat=$$(echo $$v | cut -d. -f3 | cut -d- -f1); \
+	printf '#ifndef SKRED_VERSION_H\n#define SKRED_VERSION_H\n\n#define SKRED_VERSION "%s"\n#define SKRED_VERSION_MAJOR %s\n#define SKRED_VERSION_MINOR %s\n#define SKRED_VERSION_PATCH %s\n\n#endif /* SKRED_VERSION_H */\n' "$$v" "$${maj:-0}" "$${min:-0}" "$${pat:-0}" > src/gen/skred-version.h
 
 tools/mksynth: tools/mksynth.c
 	$(HOSTCC) -O2 -Wall -Wextra tools/mksynth.c -o tools/mksynth
@@ -72,7 +82,7 @@ native: gen
 test: gen test-schema native
 	ctest --test-dir $(BUILD_DIR) --output-on-failure
 
-wasm: gen native
+wasm: gen
 	./wasm/mkwasm
 	@if [ -d wasm ]; then \
 		cp -f build_wasm/skred_api.js wasm/skred_api.js 2>/dev/null || true; \
