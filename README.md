@@ -1,6 +1,16 @@
-# skred (sk3) - Audio Engine & Skode Runtime
+# sk3 - Audio Engine & Skode Runtime
 
-`skred` is a lightweight, high-performance polyphonic synthesizer, deterministic audio engine, and embedded Forth-inspired domain specific language (`skode`) for generative sound design and sequencing.
+<p align="center">
+  <img src="doc/assets/osko.png" alt="Osko the mascot" width="64" height="64" />
+  <br>
+  <em>Meet <strong>Osko</strong>, the official mascot of <code>sk3</code></em>
+</p>
+
+[![Release](https://img.shields.io/github/v/release/octetta/sk3?color=blue)](https://github.com/octetta/sk3/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-12%2F12%20passing-brightgreen.svg)]()
+
+`sk3` (formerly skred) is a lightweight, high-performance polyphonic synthesizer, deterministic audio engine, and embedded Forth-inspired domain specific language (`skode`) for generative sound design and sequencing.
 
 Version: `1.0.0`
 
@@ -10,7 +20,7 @@ Version: `1.0.0`
 - **Rich DSP Primitives**: Dual-oscillator algorithms, phase distortion (CZ), frequency modulation (FM), resonant filters, exponential envelopes, polyblep anti-aliasing, and stereo delay lines.
 - **Skode Command Language**: Compact, Forth-like reactive language with declarative grammar, pattern matching, guard expressions, and realtime opcode evaluation.
 - **Dual Runtime Targets**:
-  - **Native C**: High-performance multi-threaded CLI (`skred` / `mini-skred`) and static/shared libraries (`libapi.a`, `libapi.so`) with ALSA, CoreAudio, and MIDI support.
+  - **Native C**: High-performance multi-threaded CLI (`sk3`, with compatibility aliases `skred` / `mini-skred`) and static/shared libraries (`libapi.a`, `libapi.so`) with ALSA, CoreAudio, and MIDI support.
   - **WebAssembly**: Asynchronous, zero-dependency browser and headless Node.js engine via Emscripten.
 - **Code-Generated Contract Architecture**: Synthesizer voice states and opcode dispatch tables are declaratively compiled from `.def` schema specifications via `mksynth` and `mkopcodes`, ensuring 100% boundary invariance and seamless Gleam interop.
 
@@ -27,7 +37,7 @@ mise install
 ```bash
 make gen         # Compile declarative schemas and opcode tables
 make test-schema # Verify schema boundary invariance
-make all         # Build native libraries and skred CLI
+make all         # Build native libraries and sk3 CLI
 make test        # Run full engine contract and state test suite (12/12)
 make wasm        # Compile clean WebAssembly engine (build_wasm/skred_api.js/wasm)
 make wasm-test   # Run headless Node.js verification test
