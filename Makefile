@@ -5,6 +5,7 @@ ifeq ($(origin CMAKE),default)
     CMAKE := /usr/bin/cmake
   endif
 endif
+NODE ?= $(if $(EMSDK_NODE),$(EMSDK_NODE),$(shell which node 2>/dev/null || echo node))
 VERSION ?= $(shell cat VERSION 2>/dev/null || echo 1.0.0)
 
 DEF_FILES := $(shell find schema/opcodes -type f -name '*.def' 2>/dev/null)
@@ -90,7 +91,7 @@ wasm: gen
 	fi
 
 wasm-test:
-	node wasm/test-control-dispatch.js build_wasm/skred_api.js
+	$(NODE) wasm/test-control-dispatch.js build_wasm/skred_api.js
 
 dist-api-wasm: wasm wasm-test
 	mkdir -p $(DIST_WASM_PREFIX)
