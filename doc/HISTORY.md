@@ -92,6 +92,7 @@ Before committing to a single language and engine topology, multiple experimenta
 As `skred` grew in capability, `pulp` was created to solve architectural modularity, maintainability, and multi-language interop:
 - **Declarative Schemas (`schema/*.def`)**: Introduced `mksynth` and `mkopcodes` code generators, ensuring C structs, offsets, and opcode tables were compiled deterministically from single source-of-truth definitions.
 - **Lock-Free Concurrency**: Implemented single-producer/single-consumer ring buffers (`skqueue`) and lockless command pipelines (`control-events.h`).
+- **Korg DW-8000 Delay Architecture**: Implemented multi-track stereo delay lines directly influenced by the Korg DW-8000 onboard digital delay, featuring discrete coarse/fine time parameterization, feedback saturation, LFO modulation, and vintage grit bit-depth reduction.
 - **Target Agnosticism**: Unified native desktop builds (ALSA, CoreAudio), static/shared C libraries, and browser WebAssembly into a single build pipeline.
 - **Companion Ecosystem**: Supported bindings and bridges across higher-level tools (`skode` Gleam library, `skred-web` browser presentations, `mod-to-skode`, and `sid-to-skode`).
 

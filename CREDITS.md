@@ -81,4 +81,5 @@ The following companion projects developed by **Joseph Stewart / Octetta** are v
 - **Frequency Modulation (FM)**: Multi-operator algorithmic frequency modulation with feedback loops.
 - **State Variable Filters (SVF)**: Resonant digital state-variable filter topologies providing continuous lowpass, bandpass, highpass, and notch outputs.
 - **Digital Waveguide (DWG)**: Physical acoustic modeling algorithms for strings, acoustic piano, reeds, and brass instruments.
+- **Korg DW-8000 Digital Delay Architecture**: The multi-bus delay processor (`src/synth-delay.c`) is directly influenced by the onboard digital delay in the Korg DW-8000, incorporating its discrete coarse/fine time parameter hierarchy, feedback scaling, LFO modulation, and vintage grit quantization.
 - **Ensoniq ESQ-1 Wavetable Data**: Classic 8-bit digital wavetable single-cycle waveforms and multi-sample recipes.

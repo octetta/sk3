@@ -19,14 +19,23 @@ Joseph Stewart was an early contributor to AMY, submitting the migration that re
 
 ---
 
-## 2. Wavetable Synthesis: Korg DW-8000 & DWGS
+## 2. Wavetable Synthesis & Digital Delay: Korg DW-8000 & DWGS
 
 - **Institution**: [Korg Corporation](https://www.korg.com/)
-- **Technology**: [DWGS (Digital Waveform Generator System)](https://en.wikipedia.org/wiki/Korg_DW-8000)
+- **Technology**: [DWGS (Digital Waveform Generator System) & Onboard Digital Delay](https://en.wikipedia.org/wiki/Korg_DW-8000)
 
 Introduced in 1985 with the **Korg DW-8000** and **DW-6000**, DWGS established the hybrid synthesis era by pairing sampled single-cycle digital waveforms stored in ROM with analog resonant filters and envelope shapers. Rather than relying solely on pure mathematical primitives (sine, saw, pulse), DWGS provided harmonically dense, complex acoustic and hybrid spectra.
 
 The `dwg` wavetable recipes in `sk3` (`waves/dwg/` and internal oscillator configurations `w15..w30`) pay direct homage to the Korg DWGS concept, delivering instant digital waveguide-inspired string, clarinet, clavi, piano, and brass timbres through a unified oscillator architecture.
+
+### Direct Influence: The DW-8000 Onboard Digital Delay
+The Korg DW-8000 was pioneering not only for its wavetables, but for incorporating one of the earliest onboard digital delay units in a commercial polyphonic synthesizer. The DW-8000 delay line was beloved for its warm, characterful chorus, flanging, doubling, and slapback echoes, parameterized by discrete coarse time ranges, fine adjustments, feedback amounts, and dedicated LFO modulation.
+
+The stereo delay line architecture in `pulp` and `sk3` ([src/synth-delay.c](file:///home/stewartj/book/sk3/src/synth-delay.c)) was **directly influenced and modeled after the Korg DW-8000 delay unit**:
+- **Discrete Coarse & Fine Time Scaling**: The delay time calculation (`delay_base_ms`) derives base delay times via binary shifts scaled by fine fractions ($8.0 \times 2^{\text{coarse}} \times (0.5 + 0.5 \cdot \text{fine}/15)$), exactly reflecting the DW-8000 parameter hierarchy.
+- **Dedicated Delay Modulation**: Discrete modulation frequency ($0..31$) and depth ($0..31$) LFO parameters driving sub-sample delay time modulation for rich chorus and flanging effects.
+- **Grit & Bit-Depth Quantization**: Optional bit reduction (`delay_grit`) replicating the vintage conversion character and harmonic grit of early digital delay lines.
+- **Track-Based Routing**: Multi-bus delay sends (`ds`) allowing voices to route individual amounts into dedicated delay stages.
 
 ---
 
