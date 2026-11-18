@@ -9,7 +9,7 @@
 #include "miniz.h"
 
 static void usage(void) {
-  printf("Usage: skred [options]\n");
+  printf("Usage: sk3 [options]\n");
   printf("  -v<voice-count>          Voice count (1 to 256, default 256)\n");
   printf("  -r<frames>               Requested buffer frame size (default 128)\n");
   printf("  -n                       Disable interactive line editor (for subprocess mode)\n");
@@ -148,7 +148,7 @@ int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IOLBF, 0);
   }
 
-  printf("# skred v%s with %s\n", skred_version(), skred_features());
+  printf("# sk3 v%s with %s\n", skred_version(), skred_features());
 
   skred_set_audio_device(output_device, input_device);
 

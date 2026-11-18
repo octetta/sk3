@@ -128,7 +128,15 @@ foreach(tgt api api_shared)
     endif()
 endforeach()
 
-# mini-skred CLI and skred CLI
+# sk3 CLI and legacy compatibility aliases
+add_executable(sk3 src/main.c)
+target_link_libraries(sk3 PRIVATE api)
+target_include_directories(sk3 PRIVATE
+    "${CMAKE_CURRENT_BINARY_DIR}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/gen"
+)
+
 add_executable(mini-skred src/main.c)
 target_link_libraries(mini-skred PRIVATE api)
 target_include_directories(mini-skred PRIVATE
@@ -170,7 +178,7 @@ install(FILES
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/skred"
 )
 
-install(TARGETS api api_shared mini-skred skred
+install(TARGETS api api_shared sk3 mini-skred skred
     LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
     ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"

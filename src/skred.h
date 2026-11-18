@@ -3,7 +3,9 @@
 
 #include <stdint.h>
 
-#define HISTORY_FILE ".skred_history"
+#ifndef HISTORY_FILE
+#define HISTORY_FILE ".sk3_history"
+#endif
 
 extern int scope_pattern_pointer;
 

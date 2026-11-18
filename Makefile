@@ -32,9 +32,9 @@ DIST_LINUX_ARCHIVE ?= $(DIST_LINUX_PLATFORM_ROOT)/skred-$(VERSION)-maxed-linux-x
 default: help
 
 help:
-	@echo "skred Audio Engine & Skode Runtime Build Targets (v$(VERSION)):"
+	@echo "sk3 Audio Engine & Skode Runtime Build Targets (v$(VERSION)):"
 	@echo "  make help          - Show this list of targets (default)"
-	@echo "  make all           - Build native C engine, libraries, and skred / mini-skred CLI"
+	@echo "  make all           - Build native C engine, libraries, and sk3 CLI"
 	@echo "  make gen           - Run declarative compilers (mksynth and mkopcodes)"
 	@echo "  make native        - Build native library and executables in $(BUILD_DIR)/"
 	@echo "  make test          - Run all schema and engine contract tests"
@@ -125,4 +125,4 @@ sync-skode: $(SYNTH_GEN_OUTPUTS) wasm
 	@echo "==> skred and skode are synchronized!"
 
 clean:
-	rm -rf $(BUILD_DIR) build_wasm $(DIST_DIR) src/gen/test_schema_bounds tools/mksynth tools/mkopcodes *-history.txt .skred_history
+	rm -rf $(BUILD_DIR) build_wasm $(DIST_DIR) src/gen/test_schema_bounds tools/mksynth tools/mkopcodes *-history.txt .skred_history .sk3_history
