@@ -56,6 +56,9 @@ static void synth_eval_and_register_ks_wave(int w, const char *name, const char 
         buf[s] = (float)result->f[s];
       }
 
+      if (sw.data[w] && sw.is_heap[w]) {
+        free(sw.data[w]);
+      }
       strncpy(sw.name[w], name, WAVE_NAME_MAX);
       sw.data[w] = buf;
       sw.size[w] = size;
@@ -137,6 +140,70 @@ static void synth_init_ksynth_drums(void) {
   }
 }
 
+static void synth_init_ksynth_base_waves(void) {
+#ifdef KSYNTH
+  static const struct {
+    int slot;
+    const char *name;
+    const char *ks_code;
+  } base_waves[] = {
+    {
+      WAVE_TABLE_SINE, "sine",
+      "/ Fundamental bandlimited sine wave\n"
+      "P: ~4096\n"
+      "W: w s P\n"
+    },
+    {
+      WAVE_TABLE_SQR, "square",
+      "/ Bandlimited square wave: odd harmonics 1/h\n"
+      "P: ~4096\n"
+      "H: !64\n"
+      "H: H+1\n"
+      "M: a(s(H*1.5707963))\n"
+      "A: (1%H)*M\n"
+      "W: w P $ A\n"
+    },
+    {
+      WAVE_TABLE_SAW_DOWN, "saw-down",
+      "/ Bandlimited sawtooth: rising ramp -1 up to 1\n"
+      "P: ~4096\n"
+      "H: !64\n"
+      "H: H+1\n"
+      "A: 1%H\n"
+      "W: w 0 - P $ A\n"
+    },
+    {
+      WAVE_TABLE_SAW_UP, "saw-up",
+      "/ Bandlimited sawtooth: falling ramp 1 down to -1\n"
+      "P: ~4096\n"
+      "H: !64\n"
+      "H: H+1\n"
+      "A: 1%H\n"
+      "W: w P $ A\n"
+    },
+    {
+      WAVE_TABLE_TRI, "triangle",
+      "/ Bandlimited triangle wave: alternating odd harmonics 1/h^2\n"
+      "P: ~4096\n"
+      "H: !64\n"
+      "H: H+1\n"
+      "M: s(H*1.5707963)\n"
+      "A: (1%(H*H))*M\n"
+      "W: w P $ A\n"
+    },
+    { 0, NULL, NULL }
+  };
+
+  for (int idx = 0; base_waves[idx].name != NULL; idx++) {
+    int w = base_waves[idx].slot;
+    synth_eval_and_register_ks_wave(w, base_waves[idx].name, base_waves[idx].ks_code, 0);
+    if (sw.data[w]) {
+      sw.rate[w] = MAIN_SAMPLE_RATE;
+    }
+  }
+#endif
+}
+
 void wave_table_init(int flag) {
   (void)flag;
 
@@ -149,10 +216,13 @@ void wave_table_init(int flag) {
     sw.refcount[i] = 0;
   }
 
+  synth_init_ksynth_base_waves();
+
   uint64_t white_noise;
   audio_rng_init(&white_noise, 1);
   for (int w = WAVE_TABLE_SINE; w <= WAVE_TABLE_KRG2_CENTERED; w++) {
     if (wave_invalid(w)) continue;
+    if (sw.data[w] != NULL) continue;
     if (w >= WAVE_TABLE_KRG1 && w <= WAVE_TABLE_KRG16) continue;
     if (w == WAVE_TABLE_KRG2_CENTERED) continue;
     int size = SIZE_SINE;

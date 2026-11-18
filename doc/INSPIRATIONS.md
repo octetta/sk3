@@ -59,7 +59,7 @@ There was no compilation step, no asset loading, and no abstraction layer: typin
 The interaction model of `sk3` and the **Skode** language is a direct spiritual descendant of this "POKE" ethos:
 - **Direct Register Manipulation**: Typing atoms into the `sk3` REPL (`v0 w1 440 f 1 l`, `c 1 0.5`, `ds 0.8`) is modern, high-level "POKEing"—writing values straight into synthesizer voice registers with zero delay and instantaneous audible transformation.
 - **`waves/esq1/`**: The complete authentic collection of Ensoniq ESQ-1 8-bit digital wavetables (`50_saw` through `81_oct5th`) built into the `sk3` synthesis engine.
-- **Ksynth SID Emulation (`w300..w304`)**: Bandlimited SID triangle, sawtooth, pulse/PWM, and combined waveform models designed for chiptune and demo-scene authenticity.
+- **SID Waveform Emulation in `sid-to-skode`**: Vector synthesis patch formulas developed in `sid-to-skode` (`w300` triangle, `w301` saw, `w302` pulse, `w303` saw+tri, `w304` saw+pulse) running atop `sk3`'s embedded `k-synth` engine.
 - **POKEY-Inspired Poly-Counters**: Distortion modes, noise registers, and raw frequency dividing concepts inspired by Doug Neubauer's ingenious 4-channel POKEY architecture.
 
 ---
