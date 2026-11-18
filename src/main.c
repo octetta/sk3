@@ -9,15 +9,17 @@
 #include "miniz.h"
 
 static void usage(void) {
-  printf("Usage: sk3 [options]\n");
-  printf("  -v<voice-count>          Voice count (1 to 256, default 256)\n");
-  printf("  -r<frames>               Requested buffer frame size (default 128)\n");
+  printf("Usage: sk3 [options] [file.sk | file.zip]\n");
+  printf("  [file]                   Load .sk script or mount .zip bundle at startup\n");
+  printf("  -c <command>             Execute Skode command after loading file\n");
   printf("  -n                       Disable interactive line editor (for subprocess mode)\n");
   printf("  -p<udp-port>             UDP control port (0 = disable UDP, default 60440)\n");
   printf("  -e<events-port>          UDP events broadcast port (0 = disable, default 0)\n");
   printf("  -o<device-id>            Select output audio device\n");
   printf("  -i<device-id>            Select input audio device\n");
   printf("  -l                       List available audio input and output devices\n");
+  printf("  -v<voice-count>          Voice count (1 to 256, default 256)\n");
+  printf("  -r<frames>               Requested buffer frame size (default 128)\n");
   exit(1);
 }
 
@@ -87,12 +89,18 @@ static int handle_wave_command(const char *line) {
   return 1;
 }
 
+static int is_zip_file(const char *path) {
+  if (!path) return 0;
+  const char *ext = strrchr(path, '.');
+  return (ext && (strcmp(ext, ".zip") == 0 || strcmp(ext, ".ZIP") == 0));
+}
+
 static int run_command(const char *line) {
   if (strncmp(line, "-wave", 5) == 0) {
     return handle_wave_command(line);
   }
 
-  char buf[1024];
+  char buf[4096];
   snprintf(buf, sizeof(buf), "%s", line);
   int r = skred_command(buf);
   char *log = skred_log();
@@ -109,37 +117,84 @@ int main(int argc, char **argv) {
   int events_port = 0; // Default off
   int output_device = -1;
   int input_device = -1;
+  const char *file_to_load = NULL;
+  const char *cmd_to_run = NULL;
 
   for (int i = 1; i < argc; i++) {
     if (argv[i][0] == '-') {
-      switch (argv[i][1]) {
-        case 'n': use_editor = 0; break;
-        case 'v': voice_count = atoi(&argv[i][2]); break;
-        case 'r': requested_frames = atoi(&argv[i][2]); break;
-        case 'p': udp_port = (int)strtol(&(argv[i][2]), NULL, 0); break;
-        case 'e': events_port = (int)strtol(&(argv[i][2]), NULL, 0); break;
-        case 'l': {
-          skred_enumerate_devices(0);
-          skred_enumerate_devices(1);
-          printf("# Output Devices\n");
-          for (int d = 0; d < skred_devices(0); d++) printf("%d %s\n", skred_device_idx(0, d), skred_device_str(0, d));
-          printf("# Input Devices\n");
-          for (int d = 0; d < skred_devices(1); d++) printf("%d %s\n", skred_device_idx(1, d), skred_device_str(1, d));
-          exit(0);
-        } break;
-        case 'i': {
-          skred_enumerate_devices(1);
-          input_device = atoi(&argv[i][2]);
-        } break;
-        case 'o': {
-          skred_enumerate_devices(0);
-          output_device = atoi(&argv[i][2]);
-        } break;
-        default:
+      if (strcmp(argv[i], "-n") == 0) {
+        use_editor = 0;
+      } else if (strcmp(argv[i], "-l") == 0) {
+        skred_enumerate_devices(0);
+        skred_enumerate_devices(1);
+        printf("# Output Devices\n");
+        for (int d = 0; d < skred_devices(0); d++) printf("%d %s\n", skred_device_idx(0, d), skred_device_str(0, d));
+        printf("# Input Devices\n");
+        for (int d = 0; d < skred_devices(1); d++) printf("%d %s\n", skred_device_idx(1, d), skred_device_str(1, d));
+        exit(0);
+      } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+        usage();
+      } else if (strcmp(argv[i], "-c") == 0) {
+        if (i + 1 < argc) {
+          cmd_to_run = argv[++i];
+        } else {
           usage();
-          break;
+        }
+      } else if (strncmp(argv[i], "-c", 2) == 0 && argv[i][2] != '\0') {
+        cmd_to_run = argv[i] + 2;
+      } else if (strcmp(argv[i], "-v") == 0) {
+        if (i + 1 < argc) voice_count = (unsigned int)atoi(argv[++i]);
+        else usage();
+      } else if (strncmp(argv[i], "-v", 2) == 0 && argv[i][2] != '\0') {
+        voice_count = (unsigned int)atoi(&argv[i][2]);
+      } else if (strcmp(argv[i], "-r") == 0) {
+        if (i + 1 < argc) requested_frames = (unsigned int)atoi(argv[++i]);
+        else usage();
+      } else if (strncmp(argv[i], "-r", 2) == 0 && argv[i][2] != '\0') {
+        requested_frames = (unsigned int)atoi(&argv[i][2]);
+      } else if (strcmp(argv[i], "-p") == 0) {
+        if (i + 1 < argc) udp_port = (int)strtol(argv[++i], NULL, 0);
+        else usage();
+      } else if (strncmp(argv[i], "-p", 2) == 0 && argv[i][2] != '\0') {
+        udp_port = (int)strtol(&argv[i][2], NULL, 0);
+      } else if (strcmp(argv[i], "-e") == 0) {
+        if (i + 1 < argc) events_port = (int)strtol(argv[++i], NULL, 0);
+        else usage();
+      } else if (strncmp(argv[i], "-e", 2) == 0 && argv[i][2] != '\0') {
+        events_port = (int)strtol(&argv[i][2], NULL, 0);
+      } else if (strcmp(argv[i], "-i") == 0) {
+        skred_enumerate_devices(1);
+        if (i + 1 < argc) input_device = atoi(argv[++i]);
+        else usage();
+      } else if (strncmp(argv[i], "-i", 2) == 0 && argv[i][2] != '\0') {
+        skred_enumerate_devices(1);
+        input_device = atoi(&argv[i][2]);
+      } else if (strcmp(argv[i], "-o") == 0) {
+        skred_enumerate_devices(0);
+        if (i + 1 < argc) output_device = atoi(argv[++i]);
+        else usage();
+      } else if (strncmp(argv[i], "-o", 2) == 0 && argv[i][2] != '\0') {
+        skred_enumerate_devices(0);
+        output_device = atoi(&argv[i][2]);
+      } else {
+        usage();
+      }
+    } else {
+      if (!file_to_load) {
+        file_to_load = argv[i];
+      } else {
+        usage();
       }
     }
+  }
+
+  if (file_to_load) {
+    FILE *f = fopen(file_to_load, "rb");
+    if (!f) {
+      fprintf(stderr, "sk3: error: cannot open '%s'\n", file_to_load);
+      return 1;
+    }
+    fclose(f);
   }
 
   if (!use_editor) {
@@ -161,6 +216,20 @@ int main(int argc, char **argv) {
   }
 
   skred_logger(1);
+
+  if (file_to_load) {
+    char load_cmd[4096];
+    if (is_zip_file(file_to_load)) {
+      snprintf(load_cmd, sizeof(load_cmd), "[%s] %%z", file_to_load);
+    } else {
+      snprintf(load_cmd, sizeof(load_cmd), "[%s] /ls", file_to_load);
+    }
+    run_command(load_cmd);
+  }
+
+  if (cmd_to_run) {
+    run_command(cmd_to_run);
+  }
 
   if (use_editor) {
     uedit_load_history(HISTORY_FILE);
