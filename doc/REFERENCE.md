@@ -3,7 +3,7 @@
 Release: **1.0.0**  
 Unified Opcode Dictionary and Execution Engine reference for `skred` and `skode`.
 
-Generated automatically by `tools/mkopcodes` from modular opcode definitions in `doc/opcodes/`.
+Generated automatically by `tools/mkopcodes` from modular opcode definitions in `schema/opcodes/`.
 
 ---
 

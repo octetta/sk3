@@ -1,10 +1,10 @@
 HOSTCC ?= cc
 CMAKE ?= cmake
 
-DEF_FILES := $(shell find doc/opcodes -type f -name '*.def' 2>/dev/null)
+DEF_FILES := $(shell find schema/opcodes -type f -name '*.def' 2>/dev/null)
 GEN_OUTPUTS := src/gen/skode_dict_gen.h src/gen/skred_opcodes_gen.c doc/REFERENCE.md src/gen/skode-doc.inc
 
-SYNTH_DEF_FILES := $(shell find schema -type f -name '*.def' 2>/dev/null)
+SYNTH_DEF_FILES := $(shell find schema/synth -type f -name '*.def' 2>/dev/null)
 SYNTH_GEN_OUTPUTS := src/gen/synth_state_gen.h src/gen/synth_alloc_gen.c src/gen/synth_voice_ops_gen.c src/gen/test_schema_bounds_gen.c src/gen/test_synth_equivalence_gen.c
 
 BUILD_DIR ?= build
@@ -34,14 +34,14 @@ tools/mkopcodes: tools/mkopcodes.c
 
 $(GEN_OUTPUTS): tools/mkopcodes $(DEF_FILES)
 	mkdir -p src/gen doc
-	./tools/mkopcodes doc/opcodes src/gen/skode_dict_gen.h src/gen/skred_opcodes_gen.c doc/REFERENCE.md src/gen/skode-doc.inc
+	./tools/mkopcodes schema/opcodes src/gen/skode_dict_gen.h src/gen/skred_opcodes_gen.c doc/REFERENCE.md src/gen/skode-doc.inc
 
 tools/mksynth: tools/mksynth.c
 	$(HOSTCC) -O2 -Wall -Wextra tools/mksynth.c -o tools/mksynth
 
 $(SYNTH_GEN_OUTPUTS): tools/mksynth $(SYNTH_DEF_FILES)
 	mkdir -p src/gen
-	./tools/mksynth schema src/gen $(if $(wildcard $(CURDIR)/../skode),$(CURDIR)/../skode/src/skode/gen,src/gen) $(CURDIR)/VERSION
+	./tools/mksynth schema/synth src/gen $(if $(wildcard $(CURDIR)/../skode),$(CURDIR)/../skode/src/skode/gen,src/gen) $(CURDIR)/VERSION
 	@if command -v gleam >/dev/null 2>&1 && [ -d "$(CURDIR)/../skode" ]; then \
 		(cd $(CURDIR)/../skode && gleam format >/dev/null 2>&1 || true); \
 	fi
@@ -71,7 +71,7 @@ wasm-test:
 
 sync-skode: $(SYNTH_GEN_OUTPUTS) wasm
 	@echo "==> Synchronizing Gleam code in skode with skred..."
-	./tools/mksynth schema src/gen $(CURDIR)/../skode/src/skode/gen $(CURDIR)/VERSION
+	./tools/mksynth schema/synth src/gen $(CURDIR)/../skode/src/skode/gen $(CURDIR)/VERSION
 	@if command -v gleam >/dev/null 2>&1 && [ -d "$(CURDIR)/../skode" ]; then \
 		(cd $(CURDIR)/../skode && gleam format >/dev/null 2>&1); \
 	fi

@@ -941,5 +941,5 @@ int skode_exec_Y(skode_t *ctx, ands_t *s, const double *arg, int argc) {
 
 void skode_register_words_seq(skode_vocab_t *vocab) {
   (void)vocab;
-  /* All sequencer/recording words migrated to .def files in doc/opcodes/ */
+  /* All sequencer/recording words migrated to .def files in schema/opcodes/ */
 }

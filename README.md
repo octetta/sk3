@@ -35,12 +35,12 @@ make wasm-test   # Run headless Node.js verification test
 
 ## Repository Structure
 
-- `schema/`: Voice state and compound opcode schema specifications (`.def`).
-- `doc/opcodes/`: Opcode dictionary definitions.
+- `schema/synth/`: Synthesizer engine state and allocation schema specifications (`.def`).
+- `schema/opcodes/`: Opcode dictionary and dispatch schema specifications (`.def`).
+- `doc/`: Architecture guides and generated reference manual (`REFERENCE.md`).
 - `tools/`: Declarative code compilers (`mksynth.c`, `mkopcodes.c`).
 - `src/`: Core C DSP, audio, and language runtime implementations.
 - `src/gen/`: Generated C headers, dispatch tables, and equivalence harnesses.
-- `sk/`: Standard patch library.
-- `waves/`: Embedded wavetable definitions.
+- `waves/`: Essential wavetable sound recipes (`drums`, `dwg`, `esq1`).
 - `wasm/`: Emscripten build tools and headless testing harness.
 - `tests/`: Automated unit and contract test suites.

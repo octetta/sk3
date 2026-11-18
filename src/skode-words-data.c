@@ -1215,5 +1215,5 @@ int skode_exec_n_gtd(skode_t *ctx, ands_t *s, const double *arg, int argc) {
 
 void skode_register_words_data(skode_vocab_t *vocab) {
   (void)vocab;
-  /* All data/ksynth/macro words migrated to .def files in doc/opcodes/ */
+  /* All data/ksynth/macro words migrated to .def files in schema/opcodes/ */
 }

@@ -1,7 +1,7 @@
 # Skred / SKODE Opcode Specification DSL (`.def`)
 
-Release: **0.83.0**  
-Engine: **pulp / skred**
+Release: **1.0.0**  
+Engine: **skred / skode**
 
 This directory contains the modular opcode definitions that power SKODE's unified command dictionary and real-time execution engine.
 
@@ -9,15 +9,15 @@ This directory contains the modular opcode definitions that power SKODE's unifie
 
 ## Architecture Overview
 
-All SKODE commands, aliases, real-time audio voice parameters, and sequencer controls are defined as declarative `.def` files. During the build phase, [`tools/mkopcodes.c`](file:///home/stewartj/book/pulp/tools/mkopcodes.c) parses all `.def` files and generates:
+All SKODE commands, aliases, real-time audio voice parameters, and sequencer controls are defined as declarative `.def` files. During the build phase, [`tools/mkopcodes.c`](file:///home/stewartj/book/sk3/tools/mkopcodes.c) parses all `.def` files and generates:
 
-1. [`src/gen/skode_dict_gen.h`](file:///home/stewartj/book/pulp/src/gen/skode_dict_gen.h): Deterministic static dictionary lookup tables, clause signatures, argument predicate matchers, and opcode ID constants.
-2. [`src/gen/skred_opcodes_gen.c`](file:///home/stewartj/book/pulp/src/gen/skred_opcodes_gen.c): Real-time function dispatch table (`g_skode_realtime_ops[]`) and immediate clause dispatch wrappers.
+1. [`src/gen/skode_dict_gen.h`](file:///home/stewartj/book/sk3/src/gen/skode_dict_gen.h): Deterministic static dictionary lookup tables, clause signatures, argument predicate matchers, and opcode ID constants.
+2. [`src/gen/skred_opcodes_gen.c`](file:///home/stewartj/book/sk3/src/gen/skred_opcodes_gen.c): Real-time function dispatch table (`g_skode_realtime_ops[]`) and immediate clause dispatch wrappers.
 
 ```
-+------------------+         +--------------------+
-| doc/opcodes/**/*.def | ----> | tools/mkopcodes.c  |
-+------------------+         +--------------------+
++--------------------------+         +--------------------+
+| schema/opcodes/**/*.def  | ----> | tools/mkopcodes.c  |
++--------------------------+         +--------------------+
                                       |
                                       v
                  +----------------------------------------+
@@ -42,13 +42,13 @@ Opcodes are organized by functional group:
 
 | Group Folder | Identifier | Description |
 |:---|:---|:---|
-| `doc/opcodes/osc/` | `osc` | Oscillators, wave selection, phase, tune, detune |
-| `doc/opcodes/filter/` | `filter` | Cutoff frequency, resonance, filter modes, wavefolding |
-| `doc/opcodes/env/` | `env` | Envelopes (attack, decay, sustain, release, ADSR) |
-| `doc/opcodes/mod/` | `mod` | Modulators (LFO, delay, FM, AM, ring mod, hard sync) |
-| `doc/opcodes/voice/` | `voice` | Voice assignment, routing, amp, pan, voice state |
-| `doc/opcodes/seq/` | `seq` | Sequencer patterns, steps, repeats, tempo, control events |
-| `doc/opcodes/sys/` | `sys` | Diagnostics, file system, MIDI setup, audio hardware, help |
+| `schema/opcodes/osc/` | `osc` | Oscillators, wave selection, phase, tune, detune |
+| `schema/opcodes/filter/` | `filter` | Cutoff frequency, resonance, filter modes, wavefolding |
+| `schema/opcodes/env/` | `env` | Envelopes (attack, decay, sustain, release, ADSR) |
+| `schema/opcodes/mod/` | `mod` | Modulators (LFO, delay, FM, AM, ring mod, hard sync) |
+| `schema/opcodes/voice/` | `voice` | Voice assignment, routing, amp, pan, voice state |
+| `schema/opcodes/seq/` | `seq` | Sequencer patterns, steps, repeats, tempo, control events |
+| `schema/opcodes/sys/` | `sys` | Diagnostics, file system, MIDI setup, audio hardware, help |
 
 ---
 

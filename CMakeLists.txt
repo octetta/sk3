@@ -129,7 +129,7 @@ foreach(tgt api api_shared)
 endforeach()
 
 # mini-skred CLI and skred CLI
-add_executable(mini-skred src/mini-skred.c)
+add_executable(mini-skred src/main.c)
 target_link_libraries(mini-skred PRIVATE api)
 target_include_directories(mini-skred PRIVATE
     "${CMAKE_CURRENT_BINARY_DIR}"
@@ -137,7 +137,7 @@ target_include_directories(mini-skred PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/gen"
 )
 
-add_executable(skred src/mini-skred.c)
+add_executable(skred src/main.c)
 target_link_libraries(skred PRIVATE api)
 target_include_directories(skred PRIVATE
     "${CMAKE_CURRENT_BINARY_DIR}"

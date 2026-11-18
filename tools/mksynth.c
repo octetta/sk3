@@ -1,7 +1,7 @@
 /*
  * tools/mksynth.c - Single-Source Synthesizer State & Codegen Compiler
  *
- * Ingests declarative schema files from schema directory and generates:
+ * Ingests declarative schema files from schema/synth directory and generates:
  *   1. C Struct-of-Arrays (SoA) engine headers and allocation routines.
  *   2. C voice reset and copy operations.
  *   3. C automated boundary, reset, and alignment invariance tests.
@@ -1115,7 +1115,7 @@ static void emit_gleam_version(const char *filepath, const char *version_file) {
 }
 
 int main(int argc, char **argv) {
-    const char *schema_dir = (argc > 1) ? argv[1] : "schema";
+    const char *schema_dir = (argc > 1) ? argv[1] : "schema/synth";
     const char *out_c_dir  = (argc > 2) ? argv[2] : "src/gen";
     const char *gleam_dir    = (argc > 3) ? argv[3] : NULL;
     const char *version_file = (argc > 4) ? argv[4] : "VERSION";
