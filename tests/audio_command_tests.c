@@ -1,0 +1,210 @@
+#include <stdio.h>
+#include <string.h>
+#include <math.h>
+
+#include "api.h"
+#include "skode.h"
+#include "synth.h"
+#include "synth-types.h"
+
+static int failures;
+
+static void expect(int condition, const char *message) {
+  if (condition) return;
+  fprintf(stderr, "FAIL audio commands: %s\n", message);
+  failures++;
+}
+
+static void consume_skode(skode_t *ctx, const char *command) {
+  char copy[256];
+  snprintf(copy, sizeof(copy), "%s", command);
+  expect(skode_consume(copy, ctx) == 0, "direct Skode audio command failed");
+}
+
+int main(void) {
+  expect(skred_audio_command("v0 f440") == 0,
+         "non-audio command was intercepted");
+
+  expect(skred_audio_command("/a?") == 1,
+         "/a? was not handled");
+  expect(strstr(skred_audio_message(), "audio: stopped") != NULL,
+         "/a? did not report stopped state");
+  expect(strstr(skred_audio_message(), "channels:") != NULL,
+         "/a? did not report channel metrics");
+  expect(strstr(skred_audio_message(), "requested-callback-frames:") != NULL,
+         "/a? did not report callback frame metrics");
+  expect(strstr(skred_audio_message(), "device-buffer:") != NULL,
+         "/a? did not report effective device buffer metrics");
+  expect(strstr(skred_audio_message(), "capture-waves: w7..w14") != NULL,
+         "/a? did not report capture wave mapping");
+  expect(strstr(skred_audio_message(), "delay:") != NULL,
+         "/a? did not report delay status");
+  expect(strstr(skred_audio_message(), "perf:") != NULL,
+         "/a? did not report performance metrics");
+  expect(strstr(skred_audio_message(), "suspected-glitches:") != NULL,
+         "/a? did not report suspected glitch metrics");
+  expect(strstr(skred_audio_message(), "clipped-samples") != NULL,
+         "/a? did not report output integrity metrics");
+
+  skred_performance_metrics_t metrics;
+  expect(skred_performance_metrics(&metrics) == 0,
+         "performance metrics API rejected output pointer");
+  expect(metrics.callbacks == 0,
+         "performance metrics should start with zero callbacks");
+  expect(skred_performance_metrics(NULL) < 0,
+         "performance metrics API accepted null output pointer");
+  skred_performance_reset();
+
+  synth_sample_rate_set(48000);
+  expect(strstr(skred_audio_status(), "rate: 48000") != NULL,
+         "status did not report runtime sample rate");
+  synth_sample_rate_set(SKRED_DEFAULT_SAMPLE_RATE);
+
+  expect(skred_audio_command("/ain off") == 1,
+         "/ain off was not accepted");
+  expect(strstr(skred_audio_message(), "requested: [off]") != NULL,
+         "/ain off did not update requested state");
+
+  expect(skred_audio_command("/aout default") == 1,
+         "/aout default was not accepted");
+  expect(strstr(skred_audio_message(), "requested: [default]") != NULL,
+         "/aout default did not update requested state");
+
+  expect(skred_audio_command("/ain") < 0,
+         "missing /ain argument was accepted");
+  expect(strstr(skred_audio_message(), "usage: /ain") != NULL,
+         "missing /ain argument did not produce usage");
+
+  expect(skred_audio_command("/aout off") < 0,
+         "/aout off was accepted");
+  expect(skred_audio_command("/aout -3") < 0,
+         "invalid negative output selection was accepted");
+
+  skred_logger(1);
+  expect(skred_command("/a?") == 0,
+         "skred_command did not preserve successful command semantics");
+  expect(strstr(skred_log(), "audio: stopped") != NULL,
+         "skred_command did not mirror audio status into the Skode log");
+  size_t status_log_length = strlen(skred_log());
+  expect(status_log_length > 0 && skred_log()[status_log_length - 1] == '\n',
+         "mirrored audio status did not end with a newline");
+
+  expect(skred_command("/ain") == 0,
+         "invalid audio command escaped the unified command boundary");
+  expect(strstr(skred_log(), "usage: /ain") != NULL,
+         "audio command error was not mirrored into the Skode log");
+
+  expect(skred_command("log 1") == 0,
+         "non-audio command did not fall through to Skode");
+
+  skode_t audio_skode = SKODE_EMPTY();
+  skode_init(&audio_skode);
+  audio_skode.log_enable = 1;
+  consume_skode(&audio_skode, "/ai -2");
+  expect(strstr(audio_skode.log, "requested: [off]") != NULL,
+         "Skode /ai did not disable capture");
+  consume_skode(&audio_skode, "/ao -1");
+  expect(strstr(audio_skode.log, "requested: [default]") != NULL,
+         "Skode /ao did not select default output");
+  consume_skode(&audio_skode, "[aud]:/ai -2; aud");
+  expect(strstr(audio_skode.log, "requested: [off]") != NULL,
+         "immediate macro could not invoke Skode audio selection");
+  consume_skode(&audio_skode, "/a?");
+  expect(strstr(audio_skode.log, "audio: stopped") != NULL,
+         "Skode /a? did not report status");
+  skode_free(&audio_skode);
+
+  /* skred_command() owns a SKODE_EMPTY() context and depends on lazy parser
+     initialization. Exercise dictionary-backed atoms through that exact API
+     path so browser/WASM builds cannot silently lose the core voice words. */
+  synth_init(8);
+  wave_table_init(0);
+  voice_init();
+  expect(skred_command("v0a0f440l1") == 0,
+         "compact core command failed through unified command boundary");
+  expect(strstr(skred_log(), "unknown atom") == NULL,
+         "compact core command lost dictionary-backed atoms");
+  expect(sv.user_amp[0] == 0.0f && sv.freq[0] == 440.0f,
+         "compact core command did not update voice state");
+  synth_free();
+
+  /* Test n>d note-to-data conversion with rest '-' notation */
+  {
+    skode_t sk_ntod = SKODE_EMPTY();
+    skode_init(&sk_ntod);
+    skode_consume("[C3 - D3 - E3] n>d", &sk_ntod);
+    double *data = ands_data(sk_ntod.parse);
+    int len = ands_data_len(sk_ntod.parse);
+    expect(len == 5, "n>d with rests produced expected length");
+    expect(data && data[0] == 48.0, "n>d first note is C3 (48)");
+    expect(data && isnan(data[1]), "n>d second element is rest (NAN)");
+    expect(data && data[2] == 50.0, "n>d third note is D3 (50)");
+    expect(data && isnan(data[3]), "n>d fourth element is rest (NAN)");
+    expect(data && data[4] == 52.0, "n>d fifth note is E3 (52)");
+    skode_free(&sk_ntod);
+  }
+
+  synth_init(8);
+  wave_table_init(0);
+  voice_init();
+  synth_sample_rate_set(48000);
+  skode_t audio_skode2 = SKODE_EMPTY();
+  skode_init(&audio_skode2);
+  if (skode_load_name(&audio_skode2, "sk/2023.sk", 1) != 0) {
+    skode_load_name(&audio_skode2, "file:sk/2023.sk", 1);
+  }
+  skode_consume("v0l1 v1l1", &audio_skode2);
+  float max_val = 0.0f;
+  int non_zero_samples = 0;
+  for (int f = 0; f < 375; f++) {
+    float buf[256];
+    memset(buf, 0, sizeof(buf));
+    synth(&skred_global_engine, buf, NULL, 128, 2, NULL);
+    for (int i = 0; i < 256; i++) {
+      float a = buf[i] < 0 ? -buf[i] : buf[i];
+      if (a > 1e-5f) non_zero_samples++;
+      if (a > max_val) max_val = a;
+    }
+  }
+  float inc_440 = osc_get_phase_inc(&skred_global_engine,0, 440.0f);
+  float inc_220 = osc_get_phase_inc(&skred_global_engine,0, 220.0f);
+  expect(fabsf(inc_220 - (inc_440 * 0.5f)) < 1e-4f, "halving frequency halves phase increment for drum patch");
+  expect(max_val > 0.1f, "2023.sk renders strong audio amplitude");
+  skode_free(&audio_skode2);
+  wave_free();
+  synth_free();
+
+  static const char *demo_files[] = {
+    "sk/demo_polymetric.sk", "file:../sk/demo_polymetric.sk",
+    "sk/demo_ratchets.sk", "file:../sk/demo_ratchets.sk",
+    "sk/demo_dynamic_speed.sk", "file:../sk/demo_dynamic_speed.sk"
+  };
+  for (int d = 0; d < 3; d++) {
+    synth_init(8); wave_table_init(0); voice_init(); seq_init();
+    synth_sample_rate_set(48000);
+    skode_t sk_demo = SKODE_EMPTY();
+    skode_init(&sk_demo);
+    if (skode_load_name(&sk_demo, (char*)demo_files[d*2], 0) != 0) {
+      skode_load_name(&sk_demo, (char*)demo_files[d*2+1], 0);
+    }
+    skode_consume("v0l1 v1l1 v2l1 v3l1", &sk_demo);
+    float d_max = 0.0f;
+    for (int f = 0; f < 500; f++) {
+      float buf[256]; memset(buf, 0, sizeof(buf));
+      synth(&skred_global_engine, buf, NULL, 128, 2, NULL);
+      for (int i = 0; i < 256; i++) {
+        float a = buf[i] < 0 ? -buf[i] : buf[i];
+        if (a > d_max) d_max = a;
+      }
+    }
+    expect(d_max > 0.01f, "demo composition file renders audio");
+    skode_free(&sk_demo); wave_free(); synth_free();
+  }
+
+  if (failures) {
+    fprintf(stderr, "%d audio command test failure(s)\n", failures);
+    return 1;
+  }
+  printf("Audio command tests passed\n");
+  return 0;
+}

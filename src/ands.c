@@ -1,0 +1,1436 @@
+#include <ctype.h>
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdarg.h>
+
+#include "ands.h"
+
+/**
+ * ANDS GRAMMAR (EBNF-ish)
+ * 
+ * chunk      = (element)* (';' | EOT)
+ * element    = atom | number | string | array | variable | defer | comment
+ * atom       = [a-zA-Z!@%^&*_=:"'<>?/]+
+ * number     = [-]?[0-9]+('.'[0-9]+)?([eE][-+]?[0-9]+)? | '.' | '-' | 'e'
+ * string     = '{' [^}]* '}' ... migrating to [,] soon, but either work now
+ * array      = '(' (number (',' | ' ')*)* ')'
+ * variable   = '$' [0-9]{1,3}
+ * defer      = ('+' | '~') number chunk
+ * comment    = '#' [^\n;]* ('\n' | ';')
+ * separator  = ' ' | ',' | '\t' | '\n' | '\r'
+ * 
+ * EXECUTION MODEL:
+ * - Numbers accumulate in arg[] array
+ * - When atom completes, FUNCTION callback fires with accumulated arg[]
+ * - arg[] is cleared after callback returns 0
+ * - ';' or EOT triggers CHUNK_END event
+ * - Atom names are packed into 32-bit integers for fast switching
+ * 
+ * SPECIAL FEATURES:
+ * - Whitespace optional between atoms and numbers: "v0w1f440" works
+ * - Commas and spaces are interchangeable separators
+ * - Bare '.', '-', or 'e' produce NaN (for future "default value" feature)
+ * - Arguments can precede atoms (side effect): "440 f" works like "f440"
+ * - Variables $0-$127 for value storage and recall
+ */
+
+#define IS_NUMBER(c) (isdigit(c) || strchr("-.", c))
+#define IS_SEPARATOR(c) (isspace(c) || c == ',')
+#define IS_STRING(c) (c == '[')
+#define IS_STRING_END(c) (c == ']')
+#define IS_ARRAY(c) (c == '(')
+#define IS_ARRAY_END(c) (c == ')')
+#define IS_STREAM(c) (c == '&')
+#define IS_VARIABLE(c) (c == '$')
+#define IS_RETURN(c) (c == '@')
+#define IS_COMMENT(c) (c == '#')
+#define IS_CHUNK_END(c) (c == ';' || c == '\n' || c == '\r' || c == 0x04) // 0x04 ASCII EOT / end of xmit
+#define IS_DEFER(c) (c == '+' || c == '~')
+#define IS_ATOM(c) (isalpha(c) || strchr("!%^*_=:\"'<>?/\\|`", c))
+#define IS_NUMBER_EX(c) (isxdigit(c) || strchr("-.eExX_", c))
+
+static double ands_strtod(char *s) {
+  if (s[1] == '\0') {
+    if (s[0] == '-' || s[0] == 'e') return ANDS_SENTINEL_REST;
+    if (s[0] == '.' || s[0] == '_') return ANDS_SENTINEL_TIE;
+  }
+  if (strcmp(s, "--") == 0 || strcmp(s, "---") == 0) return ANDS_SENTINEL_REST;
+  if (strcmp(s, "..") == 0 || strcmp(s, "...") == 0 || strcmp(s, "__") == 0) return ANDS_SENTINEL_TIE;
+  return strtod(s, NULL);
+}
+
+static double ands_defer_time_clamp(double d) {
+  return d; // allow negative for tick-based defer
+}
+
+static int ands_var_parse(char **ptr, char *end) {
+  int value = 0;
+  int digits = 0;
+
+  while (*ptr < end && digits < 3 && isdigit(**ptr)) {
+    value = (value * 10) + (**ptr - '0');
+    (*ptr)++;
+    digits++;
+  }
+
+  return digits ? value : -1;
+}
+
+#define ARG_MAX (8)
+#define ATOM_MAX (31)
+#define ATOM_NIL (0x2d2d2d2d)
+#define VAR_MAX (ANDS_VAR_MAX)
+
+#define MACRO_MAX (64)
+#define MACRO_NAME_LEN (ANDS_MACRO_NAME_LEN)
+#define MACRO_BODY_LEN (ANDS_MACRO_BODY_LEN)
+#define MACRO_ARGS_MAX (8)
+#define MACRO_EXPAND_DEPTH_MAX (8)
+
+typedef struct {
+    char name[MACRO_NAME_LEN];
+    char body[MACRO_BODY_LEN];
+    int arg_count;
+    int status;
+    int used;
+} macro_t;
+
+// ============================================================================
+// UNIFIED BUFFER MANAGEMENT
+// ============================================================================
+
+typedef struct {
+    char *data;
+    int len;
+    int cap;
+} buffer_t;
+
+static void buffer_init(buffer_t *b, int cap) {
+    b->data = (char*)malloc(cap * sizeof(char));
+    b->len = 0;
+    b->cap = cap;
+    if (b->data) b->data[0] = '\0';
+}
+
+static void buffer_free(buffer_t *b) {
+    if (b->data) free(b->data);
+    b->data = NULL;
+    b->len = 0;
+    b->cap = 0;
+}
+
+static void buffer_clear(buffer_t *b) {
+    b->len = 0;
+    if (b->data) b->data[0] = '\0';
+}
+
+static void buffer_push(buffer_t *b, char c) {
+    if (b->data && b->len < b->cap - 1) {
+        b->data[b->len++] = c;
+        b->data[b->len] = '\0';
+    }
+}
+
+static char* buffer_str(buffer_t *b) {
+    return b->data;
+}
+
+#define NUM_BUF_LEN (128)
+#define STRING_BUF_LEN (65536)
+#define DATA_BUF_LEN (1024)
+
+// ============================================================================
+// MAIN SKODE STRUCTURE
+// ============================================================================
+
+#define STRING_BUF_MOD (2)
+
+typedef struct ands_s {
+    // Unified buffers
+    buffer_t num;
+    buffer_t string[STRING_BUF_MOD];
+    int string_idx;
+    int string_read_idx;
+    int string_fresh;
+    buffer_t atom;
+    buffer_t defer;
+    
+    // Data array
+    double *data;
+    int data_len;
+    int data_cap;
+    
+    // Defer state
+    double defer_num;
+    char defer_mode;
+    int defer_var;
+    
+    // Argument stack
+    double arg[ARG_MAX];
+    int arg_var[ARG_MAX];
+    int arg_len;
+    int arg_cap;
+    
+    // Atom state
+    atom_t atom_num;
+    char atom_name[ATOM_MAX + 1];
+    
+    // Parser state
+    int state;
+    
+    // Register storage. Parser-local storage is retained only as a fallback
+    // for standalone ANDS users that do not install a shared register bank.
+    double local_var[VAR_MAX];
+    double *global_var;
+    double *global_save;
+
+    // Return-value registers (@0..@9). Deliberately NOT swappable like
+    // global_var -- these represent this parser's own last-command output,
+    // not shared process-global state. Cleared before every atom dispatch;
+    // see action_finish_atom()/action_chunk_end().
+    double ret_value[ANDS_RETURN_MAX];
+    int ret_count;
+    int ret_error;
+    double ret_saved_value[ANDS_RETURN_MAX];
+    int ret_saved_count;
+    int ret_saved_error;
+    
+    // Callback
+    int (*fn)(struct ands_s *s, int info);
+    void *user;
+    ands_stream_pull_fn stream_pull;
+    
+    // Trace
+    int trace;
+
+} ands_t;
+
+static macro_t global_macros[MACRO_MAX];
+static int last_defined_macro_idx = -1;
+
+// ============================================================================
+// MACRO PREPROCESSOR
+// ============================================================================
+
+static int expand_buf_reserve(buffer_t *b, int extra) {
+    int need = b->len + extra + 1;
+    char *data;
+    int cap;
+
+    if (need <= b->cap) return 1;
+
+    cap = b->cap > 0 ? b->cap : 128;
+    while (cap < need) cap *= 2;
+
+    data = (char *)realloc(b->data, (size_t)cap);
+    if (!data) return 0;
+
+    b->data = data;
+    b->cap = cap;
+    return 1;
+}
+
+static int expand_buf_push(buffer_t *b, char c) {
+    if (!expand_buf_reserve(b, 1)) return 0;
+    b->data[b->len++] = c;
+    b->data[b->len] = '\0';
+    return 1;
+}
+
+static int expand_buf_append_n(buffer_t *b, const char *text, int len) {
+    if (len <= 0) return 1;
+    if (!expand_buf_reserve(b, len)) return 0;
+    memcpy(b->data + b->len, text, (size_t)len);
+    b->len += len;
+    b->data[b->len] = '\0';
+    return 1;
+}
+
+static int expand_buf_append(buffer_t *b, const char *text) {
+    return expand_buf_append_n(b, text, (int)strlen(text));
+}
+
+static int ands_macro_valid_name(const char *name, int len) {
+    if (len <= 0 || len > MACRO_NAME_LEN - 1) return 0;
+    for (int i = 0; i < len; i++) {
+        if (!IS_ATOM(name[i])) return 0;
+    }
+    return 1;
+}
+
+static int ands_find_macro(const char *name) {
+    for (int i = 0; i < MACRO_MAX; i++) {
+        if (global_macros[i].used &&
+            strcmp(global_macros[i].name, name) == 0) return i;
+    }
+    return -1;
+}
+
+int ands_macro_count(ands_t *s) {
+    int count = 0;
+
+    (void)s;
+    for (int i = 0; i < MACRO_MAX; i++) {
+        if (global_macros[i].used) count++;
+    }
+
+    return count;
+}
+
+int ands_macro_get(ands_t *s, int index, char *name, int name_len,
+                   char *body, int body_len, int *arg_count) {
+    int seen = 0;
+
+    (void)s;
+    if (index < 0) return 0;
+
+    for (int i = 0; i < MACRO_MAX; i++) {
+        if (!global_macros[i].used) continue;
+        if (seen++ != index) continue;
+
+        if (name && name_len > 0) {
+            snprintf(name, (size_t)name_len, "%s", global_macros[i].name);
+        }
+        if (body && body_len > 0) {
+            snprintf(body, (size_t)body_len, "%s", global_macros[i].body);
+        }
+        if (arg_count) *arg_count = global_macros[i].arg_count;
+        return 1;
+    }
+
+    return 0;
+}
+
+static int ands_macro_slot_from_index(int index) {
+    int seen = 0;
+    if (index < 0) return -1;
+    for (int i = 0; i < MACRO_MAX; i++) {
+        if (!global_macros[i].used) continue;
+        if (seen++ == index) return i;
+    }
+    return -1;
+}
+
+int ands_macro_find(ands_t *s, const char *name) {
+    (void)s;
+    if (!name) return -1;
+    return ands_find_macro(name);
+}
+
+int ands_last_macro_index(ands_t *s) {
+    int seen = 0;
+    (void)s;
+    if (last_defined_macro_idx < 0 ||
+        !global_macros[last_defined_macro_idx].used) return -1;
+    for (int i = 0; i < MACRO_MAX; i++) {
+        if (!global_macros[i].used) continue;
+        if (i == last_defined_macro_idx) return seen;
+        seen++;
+    }
+    return -1;
+}
+
+int ands_macro_status(ands_t *s, int index) {
+    int slot;
+    (void)s;
+    slot = ands_macro_slot_from_index(index);
+    return slot >= 0 ? global_macros[slot].status : ANDS_MACRO_UNCHECKED;
+}
+
+int ands_macro_set_status(ands_t *s, int index, int status) {
+    int slot;
+    (void)s;
+    slot = ands_macro_slot_from_index(index);
+    if (slot < 0) return 0;
+    global_macros[slot].status = status;
+    return 1;
+}
+
+int ands_macro_remove(ands_t *s, const char *name) {
+    int idx;
+
+    if (!name) return 0;
+    idx = ands_find_macro(name);
+    if (idx < 0) return 0;
+
+    last_defined_macro_idx = idx;
+    if (s && s->fn) s->fn(s, MACRO_REMOVING);
+    memset(&global_macros[idx], 0, sizeof(global_macros[idx]));
+    if (last_defined_macro_idx == idx) last_defined_macro_idx = -1;
+    return 1;
+}
+
+void ands_macro_clear(ands_t *s) {
+    if (s && s->fn) {
+        for (int i = 0; i < MACRO_MAX; i++) {
+            if (!global_macros[i].used) continue;
+            last_defined_macro_idx = i;
+            s->fn(s, MACRO_REMOVING);
+        }
+    }
+    memset(global_macros, 0, sizeof(global_macros));
+    last_defined_macro_idx = -1;
+}
+
+static int ands_macro_arg_count(const char *body) {
+    int highest = -1;
+
+    for (const char *p = body; *p; p++) {
+        int n = -1;
+        if (p[0] == '$' && p[1] == '$' && isdigit((unsigned char)p[2])) {
+            n = p[2] - '0';
+            p += 2;
+        }
+        /* '@' + digit was previously a legacy alias for $$N here. Removed:
+           '@' is now the return-value sigil (GET_RETURN/@N reads
+           ret_value[]), a distinct concept from macro-argument
+           placeholders, and the two meanings can no longer coexist. */
+        if (n >= 0) {
+            if (n < MACRO_ARGS_MAX && n > highest) highest = n;
+        }
+    }
+
+    return highest + 1;
+}
+
+static int ands_store_macro(ands_t *s, const char *name, const char *body, int body_len) {
+    int idx;
+
+    (void)s;
+    idx = ands_find_macro(name);
+
+    if (idx < 0) {
+        for (int i = 0; i < MACRO_MAX; i++) {
+            if (!global_macros[i].used) {
+                idx = i;
+                break;
+            }
+        }
+    }
+
+    if (idx < 0) return 0;
+
+    strncpy(global_macros[idx].name, name, MACRO_NAME_LEN - 1);
+    global_macros[idx].name[MACRO_NAME_LEN - 1] = '\0';
+
+    if (body_len >= MACRO_BODY_LEN) body_len = MACRO_BODY_LEN - 1;
+    memcpy(global_macros[idx].body, body, (size_t)body_len);
+    global_macros[idx].body[body_len] = '\0';
+    global_macros[idx].arg_count = ands_macro_arg_count(global_macros[idx].body);
+    global_macros[idx].status = ANDS_MACRO_UNCHECKED;
+    global_macros[idx].used = 1;
+    last_defined_macro_idx = idx;
+    return 1;
+}
+
+static char *ands_skip_separators(char *p, char *end) {
+    while (p < end && IS_SEPARATOR(*p)) p++;
+    return p;
+}
+
+static int ands_try_parse_macro_definition(ands_t *s, char **ptr, char *end) {
+    char *p = *ptr;
+    char *name_start;
+    char *name_end;
+    char *body_start;
+    char name[MACRO_NAME_LEN];
+    int name_len;
+    int body_len;
+
+    if (p >= end || *p != '[') return 0;
+
+    name_start = p + 1;
+    name_end = name_start;
+    while (name_end < end && *name_end != ']') name_end++;
+    if (name_end >= end || *name_end != ']') return 0;
+
+    name_len = (int)(name_end - name_start);
+    if (name_len >= MACRO_NAME_LEN) name_len = MACRO_NAME_LEN - 1;
+    if (!ands_macro_valid_name(name_start, name_len)) return 0;
+
+    p = ands_skip_separators(name_end + 1, end);
+    if (p >= end || *p != ':') return 0;
+
+    memcpy(name, name_start, (size_t)name_len);
+    name[name_len] = '\0';
+
+    body_start = p + 1;
+    p = body_start;
+    while (p < end && *p != ';') p++;
+    body_len = (int)(p - body_start);
+    if (ands_store_macro(s, name, body_start, body_len))
+        s->fn(s, MACRO_DEFINED);
+
+    if (p < end && *p == ';') p++;
+    *ptr = p;
+    return 1;
+}
+
+static char *ands_skip_bracketed(char *p, char *end, char close) {
+    while (p < end) {
+        char c = *p++;
+        if (c == close) break;
+    }
+    return p;
+}
+
+static int ands_collect_macro_arg(char **ptr, char *end, char *arg, int arg_len) {
+    char *p = ands_skip_separators(*ptr, end);
+    char *start = p;
+    int len;
+
+    if (p >= end || IS_CHUNK_END(*p) || IS_COMMENT(*p)) return 0;
+
+    if (IS_STRING(*p)) {
+        p = ands_skip_bracketed(p + 1, end, ']');
+    } else if (IS_ARRAY(*p)) {
+        p = ands_skip_bracketed(p + 1, end, ')');
+    } else {
+        while (p < end && !IS_SEPARATOR(*p) && !IS_CHUNK_END(*p)) p++;
+    }
+
+    len = (int)(p - start);
+    if (len >= arg_len) len = arg_len - 1;
+    memcpy(arg, start, (size_t)len);
+    arg[len] = '\0';
+    *ptr = p;
+    return 1;
+}
+
+static int ands_preprocess_macros(ands_t *s, const char *input, buffer_t *out, int depth);
+
+static int ands_expand_macro(ands_t *s, int macro_idx, char args[][MACRO_BODY_LEN],
+                             int num_args, buffer_t *out, int depth) {
+    buffer_t expanded;
+    char *body = global_macros[macro_idx].body;
+    int ok = 1;
+
+    buffer_init(&expanded, MACRO_BODY_LEN);
+    if (!expanded.data) return 0;
+
+    for (char *p = body; ok && *p; p++) {
+        if (p[0] == '$' && p[1] == '$' && isdigit((unsigned char)p[2])) {
+            int arg_idx = p[2] - '0';
+            if (arg_idx < num_args) ok = expand_buf_append(&expanded, args[arg_idx]);
+            p += 2;
+        }
+        /* '@' + digit was previously a legacy alias for $$N here. Removed:
+           '@' is now the return-value sigil, resolved fresh from
+           ret_value[] wherever it's typed (including inside an expanded
+           macro body) rather than substituted during macro expansion --
+           the two concepts are unrelated now, and a macro body containing
+           a literal '@N' passes through untouched to be handled by
+           GET_RETURN like any other occurrence. */
+        else {
+            ok = expand_buf_push(&expanded, *p);
+        }
+    }
+
+    if (ok) ok = ands_preprocess_macros(s, expanded.data, out, depth + 1);
+    buffer_free(&expanded);
+    return ok;
+}
+
+static int ands_preprocess_macros(ands_t *s, const char *input, buffer_t *out, int depth) {
+    char *ptr = (char *)input;
+    char *end = ptr + strlen(ptr);
+
+    if (depth > MACRO_EXPAND_DEPTH_MAX) return expand_buf_append(out, input);
+
+    while (ptr < end) {
+        char *start = ptr;
+
+        if (*ptr == '[' && ands_try_parse_macro_definition(s, &ptr, end)) {
+            continue;
+        }
+
+        if (IS_COMMENT(*ptr)) {
+            while (ptr < end && *ptr != '\n' && !IS_CHUNK_END(*ptr)) {
+                if (!expand_buf_push(out, *ptr++)) return 0;
+            }
+            continue;
+        }
+
+        if (IS_STRING(*ptr)) {
+            ptr = ands_skip_bracketed(ptr + 1, end, ']');
+            if (!expand_buf_append_n(out, start, (int)(ptr - start))) return 0;
+            continue;
+        }
+
+        if (IS_ARRAY(*ptr)) {
+            ptr = ands_skip_bracketed(ptr + 1, end, ')');
+            if (!expand_buf_append_n(out, start, (int)(ptr - start))) return 0;
+            continue;
+        }
+
+        if (IS_ATOM(*ptr)) {
+            char atom[MACRO_NAME_LEN];
+            char *arg_ptr;
+            char args[MACRO_ARGS_MAX][MACRO_BODY_LEN];
+            int atom_len = 0;
+            int atom_too_long = 0;
+            int idx;
+
+            while (ptr < end && IS_ATOM(*ptr)) {
+                if (atom_len < MACRO_NAME_LEN - 1) {
+                    atom[atom_len++] = *ptr;
+                } else {
+                    atom_too_long = 1;
+                }
+                ptr++;
+            }
+            atom[atom_len] = '\0';
+
+            idx = ands_find_macro(atom);
+            if (!atom_too_long && atom_len > 0 && atom_len < MACRO_NAME_LEN && idx >= 0) {
+                if (global_macros[idx].status == ANDS_MACRO_REALTIME) {
+                    if (!expand_buf_append_n(out, start, (int)(ptr - start))) return 0;
+                    continue;
+                }
+                int needed = global_macros[idx].arg_count;
+                int collected = 0;
+                arg_ptr = ptr;
+
+                for (; collected < needed; collected++) {
+                    if (!ands_collect_macro_arg(&arg_ptr, end, args[collected], MACRO_BODY_LEN)) break;
+                }
+
+                if (collected == needed &&
+                    ands_expand_macro(s, idx, args, collected, out, depth)) {
+                    ptr = arg_ptr;
+                    expand_buf_push(out, ' ');
+                    continue;
+                }
+            }
+
+            if (!expand_buf_append_n(out, start, (int)(ptr - start))) return 0;
+            continue;
+        }
+
+        if (!expand_buf_push(out, *ptr++)) return 0;
+    }
+
+    return 1;
+}
+
+// ============================================================================
+// ATOM ENCODING - Simpler implementation with documentation
+// ============================================================================
+
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
+#include <arpa/inet.h>
+#endif
+
+/**
+ * Pack atom string into 32-bit integer for fast switching.
+ * Example: "f" becomes 'f---' (0x662d2d2d)
+ * Uses network byte order for consistency.
+ */
+static void atom_finish(ands_t *s) {
+    uint32_t i = ATOM_NIL;  // Start with '----' (0x2d2d2d2d)
+    char *p = (char *)&i;
+    int len = s->atom.len < 4 ? s->atom.len : 4;
+    for (int n = 0; n < len; n++) {
+        p[n] = s->atom.data[n];
+    }
+    s->atom_num = ntohl(i);
+    if (s->atom.len > 0) {
+        int n = s->atom.len < ATOM_MAX ? s->atom.len : ATOM_MAX;
+        memcpy(s->atom_name, s->atom.data, n);
+        s->atom_name[n] = '\0';
+    } else {
+        s->atom_name[0] = '\0';
+    }
+}
+
+static void atom_reset(ands_t *s) {
+    s->atom_num = ATOM_NIL;
+    s->atom_name[0] = '\0';
+}
+
+char* atom_string(int i) {
+    static char str[5] = "****";
+    char *p = (char *)&i;
+    for (int j = 0; j < 4; j++) {
+        str[3-j] = p[j];
+    }
+    return str;
+}
+
+// ============================================================================
+// ACTION FUNCTIONS - Extracted for clarity
+// ============================================================================
+
+static void action_finish_number(ands_t *s) {
+    double val = ands_strtod(buffer_str(&s->num));
+    if (s->trace) printf("# ARG_PUSH %g\n", val);
+    if (s->arg_len < s->arg_cap) {
+        s->arg[s->arg_len] = val;
+        s->arg_var[s->arg_len] = -1;
+        s->arg_len++;
+    }
+    buffer_clear(&s->num);
+}
+
+static int action_finish_atom(ands_t *s) {
+    if (s->trace) printf("# ATOM %s\n", buffer_str(&s->atom));
+
+    if (s->atom_num != ATOM_NIL) {
+        ands_return_clear(s);
+        int ret = s->fn(s, FUNCTION);
+        atom_reset(s);
+        if (ret < 0) return ret;
+        if (ret == 0) {
+            s->arg_len = 0;  // Clear args
+        }
+        s->string_fresh = 0;
+    }
+
+    atom_finish(s);
+    buffer_clear(&s->atom);
+    return 0;
+}
+
+static void action_finish_defer(ands_t *s) {
+    if (s->trace) printf("# DEFER\n");
+    s->fn(s, DEFER);
+    buffer_clear(&s->defer);
+}
+
+static void action_finish_array(ands_t *s) {
+    // Push final number if any
+    if (s->num.len > 0) {
+        if (s->data && s->data_len < s->data_cap)
+            s->data[s->data_len++] = ands_strtod(buffer_str(&s->num));
+        buffer_clear(&s->num);
+    }
+}
+
+static int action_chunk_end(ands_t *s) {
+    // Handle leftover atom
+    if (s->atom_num != ATOM_NIL) {
+        if (s->trace) printf("# left-over ATOM\n");
+        ands_return_clear(s);
+        int ret = s->fn(s, FUNCTION);
+        atom_reset(s);
+        if (ret < 0) return ret;
+        s->string_fresh = 0;
+    }
+
+    // Handle leftover defer
+    if (s->defer.len > 0) {
+        if (s->trace) printf("# left-over DEFER\n");
+        int ret = s->fn(s, DEFER);
+        if (ret < 0) return ret;
+        buffer_clear(&s->defer);
+    }
+
+    if (s->trace) printf("# CHUNK_END\n");
+    int ret = s->fn(s, CHUNK_END);
+    if (ret < 0) return ret;
+    s->arg_len = 0;  // Clear args
+    return 0;
+}
+
+// ============================================================================
+// STATE MACHINE
+// ============================================================================
+
+int ands_consume(ands_t *s, char *line) {
+    buffer_t expanded;
+    char *parse_line = line;
+    char *ptr;
+    char *end;
+    int parse_err = 0;
+
+    buffer_init(&expanded, (int)strlen(line) + 1);
+    if (expanded.data && ands_preprocess_macros(s, line, &expanded, 0)) {
+        parse_line = expanded.data;
+    }
+
+    ptr = parse_line;
+    end = ptr + strlen(ptr);
+
+    while (1) {
+        if (ptr >= end) {
+            switch (s->state) {
+                case GET_ATOM:
+                    if ((parse_err = action_finish_atom(s)) < 0) goto consume_end;
+                    s->state = START;
+                    break;
+                case GET_NUMBER:
+                    action_finish_number(s);
+                    s->state = START;
+                    break;
+                default:
+                    break;
+            }
+            break;
+        }
+
+    reprocess:
+        switch (s->state) {
+            case START:
+                if (IS_NUMBER(*ptr)) {
+                    buffer_clear(&s->num);
+                    buffer_push(&s->num, *ptr);
+                    s->state = GET_NUMBER;
+                }
+                else if (IS_STRING(*ptr))    {
+                  buffer_clear(&s->string[s->string_idx]);
+                  s->state = GET_STRING;
+                }
+                else if (IS_ARRAY(*ptr))     {
+                  buffer_clear(&s->num);
+                  s->data_len = 0;
+                  s->state = GET_ARRAY;
+                }
+                else if (IS_VARIABLE(*ptr))  { s->state = GET_VARIABLE; }
+                else if (IS_STREAM(*ptr))    { s->state = GET_STREAM; }
+                else if (IS_RETURN(*ptr) && ptr + 1 < end &&
+                         isdigit((unsigned char)ptr[1])) {
+                  s->state = GET_RETURN;
+                }
+                else if (IS_RETURN(*ptr))    { /* reserved return sigil */ }
+                else if (IS_COMMENT(*ptr))   { s->state = GET_COMMENT; }
+                else if (IS_CHUNK_END(*ptr)) { if ((parse_err = action_chunk_end(s)) < 0) goto consume_end; s->state = START; }
+		else if (IS_SEPARATOR(*ptr)) { /* skip */ }
+                else if (IS_DEFER(*ptr))     { if ((parse_err = action_chunk_end(s)) < 0) goto consume_end; s->defer_mode = *ptr; s->state = GET_DEFER_NUMBER; }
+                else if (iscntrl(*ptr))      { /* skip control chars */ }
+                else {
+                    buffer_clear(&s->atom);
+                    buffer_push(&s->atom, *ptr);
+                    s->state = GET_ATOM;
+                }
+                break;
+
+            case GET_NUMBER:
+                if (IS_NUMBER(*ptr)) {
+                    buffer_push(&s->num, *ptr);
+                } else if (*ptr == '$') {
+                    printf("# VAR after number?\n");
+                } else {
+                    action_finish_number(s);
+                    s->state = START;
+                    goto reprocess;
+                }
+                break;
+
+            case GET_STRING:
+                if (IS_STRING_END(*ptr)) {
+                    // Flip buffers: reading from current, writing to next
+                    s->string_read_idx = s->string_idx;
+                    s->string_fresh = 1;
+                    s->fn(s, GOT_STRING);
+                    s->string_idx = (s->string_idx + 1) % STRING_BUF_MOD;
+                    s->state = START;
+                } else {
+                    buffer_push(&s->string[s->string_idx], *ptr);
+                }
+                break;
+
+            case GET_ARRAY:
+                if (IS_ARRAY_END(*ptr)) {
+                    action_finish_array(s);
+                    s->fn(s, GOT_ARRAY);
+                    s->state = START;
+                } else if (IS_NUMBER_EX(*ptr)) {
+                    buffer_push(&s->num, *ptr);
+                } else if (IS_VARIABLE(*ptr)) {
+                    if (s->num.len > 0) {
+                        if (s->data && s->data_len < s->data_cap)
+                            s->data[s->data_len++] = ands_strtod(buffer_str(&s->num));
+                        buffer_clear(&s->num);
+                    }
+                    ptr++;
+                    if (ptr < end && isdigit((unsigned char)*ptr)) {
+                        int variable = ands_var_parse(&ptr, end);
+                        double val = ands_get_local(s, variable);
+                        if (s->data && s->data_len < s->data_cap)
+                            s->data[s->data_len++] = val;
+                        ptr--;
+                    } else {
+                        ptr--;   /* bare '$': reprocess the next character */
+                    }
+                } else if (IS_STREAM(*ptr)) {
+                    if (s->num.len > 0) {
+                        if (s->data && s->data_len < s->data_cap)
+                            s->data[s->data_len++] = ands_strtod(buffer_str(&s->num));
+                        buffer_clear(&s->num);
+                    }
+                    ptr++;
+                    if (ptr < end && isdigit((unsigned char)*ptr)) {
+                        int stream = ands_var_parse(&ptr, end);
+                        double val = ands_stream_pull(s, stream);
+                        if (s->data && s->data_len < s->data_cap)
+                            s->data[s->data_len++] = val;
+                        ptr--;
+                    } else {
+                        ptr--;   /* bare '&': reprocess the next character */
+                    }
+                } else if (IS_SEPARATOR(*ptr)) {
+                    if (s->num.len > 0) {
+                        if (s->data && s->data_len < s->data_cap)
+                            s->data[s->data_len++] = ands_strtod(buffer_str(&s->num));
+                        buffer_clear(&s->num);
+                    }
+                }
+                break;
+
+            case GET_COMMENT:
+                if (IS_CHUNK_END(*ptr)) {
+                    if ((parse_err = action_chunk_end(s)) < 0) goto consume_end;
+                    s->state = START;
+                } else if (*ptr == '\n') {
+                    s->state = START;
+                }
+                break;
+
+            
+            
+
+            
+            
+
+            
+            case GET_STREAM:
+                if (isdigit(*ptr)) {
+                    int stream = ands_var_parse(&ptr, end);
+                    if (s->arg_len < s->arg_cap) {
+                        s->arg[s->arg_len] = 0.0;
+                        s->arg_var[s->arg_len] = stream | ANDS_STREAM_FLAG;
+                        s->arg_len++;
+                    }
+                    if (s->trace) printf("# GET_STREAM %d\n", stream);
+                    s->state = START;
+                    ptr--;
+                } else {
+                    if (s->trace) puts("# not a stream");
+                    s->state = START;
+                    goto reprocess;
+                }
+                break;
+
+            case GET_VARIABLE:
+                if (isdigit(*ptr)) {
+                    int variable = ands_var_parse(&ptr, end);
+                    double d = ands_get_local(s, variable);
+                    if (s->arg_len < s->arg_cap) {
+                        s->arg[s->arg_len] = d;
+                        s->arg_var[s->arg_len] = variable;
+                        s->arg_len++;
+                    }
+                    if (s->trace) printf("# GET_VARIABLE %d (%g)\n", variable, d);
+                    s->state = START;
+                    ptr--;
+                } else {
+                    if (s->trace) puts("# not a var");
+                    s->state = START;
+                    goto reprocess;
+                }
+                break;
+
+            case GET_RETURN:
+                if (isdigit(*ptr)) {
+                    int n = ands_var_parse(&ptr, end);
+                    /* Notify BEFORE consuming the value, mirroring
+                       GOT_STRING/GOT_ARRAY's "notify at the point the
+                       construct is fully recognized" placement. A
+                       compile-mode caller's s->fn sets
+                       SKODE_COMPILE_IMMEDIATE_ONLY on seeing this and lets
+                       parsing continue normally otherwise -- ands.c itself
+                       doesn't branch on the callback's return value here
+                       (unlike the FUNCTION case, which does), since @N's
+                       own behavior (push whatever ands_return_get()
+                       reports) is correct regardless of which mode the
+                       caller is in; only what happens to the RESULT differs,
+                       and that's the caller's business, not ands.c's. */
+                    s->fn(s, GOT_RETURN_REF);
+                    double d = ands_return_get(s, n);
+                    if (s->arg_len < s->arg_cap) {
+                        s->arg[s->arg_len] = d;
+                        /* Deliberately -1, NOT tagged like a $N variable
+                           reference: there is no compile-time deferral
+                           concept for a return value (nothing in a
+                           compiled opcode can "come back later" and read
+                           what a not-yet-run command produced), so this is
+                           always resolved to a plain literal at the moment
+                           it's read, never carried forward as a reference
+                           the way ands_arg_var() lets a $N reference be. */
+                        s->arg_var[s->arg_len] = -1;
+                        s->arg_len++;
+                    }
+                    if (s->trace) printf("# GET_RETURN %d (%g)\n", n, d);
+                    s->state = START;
+                    ptr--;
+                } else {
+                    if (s->trace) puts("# not a return reference");
+                    s->state = START;
+                    goto reprocess;
+                }
+                break;
+
+            case GET_DEFER_NUMBER:
+                /* Tolerate blanks between the sigil and its amount ("+ 4 ...",
+                 * "~ 1.5 f 440", as the guide documents). Only skip when a
+                 * number, $var or &stream follows, so "+ v0 a10" still means
+                 * a zero delay with body " v0 a10". Never cross a chunk end. */
+                if (s->num.len == 0 && IS_SEPARATOR(*ptr) && !IS_CHUNK_END(*ptr)) {
+                    char *q = ptr;
+                    while (q < end && IS_SEPARATOR(*q) && !IS_CHUNK_END(*q)) q++;
+                    if (q < end && (IS_NUMBER(*q) || IS_VARIABLE(*q) || IS_STREAM(*q))) {
+                        ptr = q - 1;
+                        break;
+                    }
+                }
+                if (IS_NUMBER(*ptr)) {
+                    buffer_push(&s->num, *ptr);
+                } else if (IS_VARIABLE(*ptr)) {
+                    ptr++;
+                    if (ptr < end && isdigit(*ptr)) {
+                        int variable = ands_var_parse(&ptr, end);
+                        s->defer_num = ands_defer_time_clamp(ands_get_local(s, variable));
+                        s->defer_var = variable;
+                        ptr--;
+                    } else {
+                        s->defer_num = 0.0;
+                        s->defer_var = -1;
+                        ptr--;   /* bare sigil: reprocess the next character */
+                    }
+                    buffer_clear(&s->num);
+                    s->state = GET_DEFER_STRING;
+                } else if (IS_STREAM(*ptr)) {
+                    ptr++;
+                    if (ptr < end && isdigit((unsigned char)*ptr)) {
+                        int stream = ands_var_parse(&ptr, end);
+                        s->defer_num = ands_defer_time_clamp(ands_stream_pull(s, stream));
+                        s->defer_var = stream | ANDS_STREAM_FLAG;
+                        ptr--;
+                    } else {
+                        s->defer_num = 0.0;
+                        s->defer_var = -1;
+                        ptr--;   /* bare sigil: reprocess the next character */
+                    }
+                    buffer_clear(&s->num);
+                    s->state = GET_DEFER_STRING;
+                } else {
+                    s->defer_num = ands_defer_time_clamp(ands_strtod(buffer_str(&s->num)));
+                    s->defer_var = -1;
+                    buffer_clear(&s->num);
+                    s->state = GET_DEFER_STRING;
+                    goto reprocess;
+                }
+                break;
+
+            case GET_DEFER_STRING:
+                if (IS_DEFER(*ptr)) {
+                    s->defer_mode = *ptr;
+                    action_finish_defer(s);
+                    s->state = GET_DEFER_NUMBER;
+                } else if (IS_CHUNK_END(*ptr)) {
+                    action_finish_defer(s);
+                    s->state = START;
+                } else {
+                    buffer_push(&s->defer, *ptr);
+                }
+                break;
+
+            case GET_ATOM:
+                if (IS_ATOM(*ptr)) {
+                    buffer_push(&s->atom, *ptr);
+                } else {
+                    if ((parse_err = action_finish_atom(s)) < 0) goto consume_end;
+                    s->state = START;
+                    goto reprocess;
+                }
+                break;
+
+            default:
+                if (s->trace) puts("# default -> START");
+                s->state = START;
+                break;
+        }
+        ptr++;
+    }
+
+    consume_end:
+    if (parse_err == 0) {
+        parse_err = action_chunk_end(s);
+    }
+    if (parse_err < 0) {
+        atom_reset(s);
+        s->arg_len = 0;
+        buffer_clear(&s->atom);
+        buffer_clear(&s->defer);
+        buffer_clear(&s->num);
+        s->string_fresh = 0;
+        s->defer_num = 0;
+        s->defer_mode = '?';
+        s->defer_var = -1;
+    }
+    s->state = START;
+    buffer_free(&expanded);
+    return parse_err;
+}
+
+// ============================================================================
+// PUBLIC API
+// ============================================================================
+
+ands_t *ands_new(int (*fn)(ands_t *s, int info), void *user) {
+    if (!fn) return NULL;
+    ands_t *s = (ands_t*)calloc(1, sizeof(ands_t));
+    if (!s) return NULL;
+
+    s->global_var = s->local_var;
+    s->global_save = s->local_var;
+    for (int i = 0; i < VAR_MAX; i++) {
+        s->local_var[i] = 0;
+    }
+
+    buffer_init(&s->num, NUM_BUF_LEN);
+    buffer_init(&s->string[0], STRING_BUF_LEN);
+    buffer_init(&s->string[1], STRING_BUF_LEN);
+    s->string_idx = 0;
+    s->string_read_idx = 0;
+    buffer_init(&s->atom, ATOM_MAX + 1);
+    buffer_init(&s->defer, STRING_BUF_LEN);
+
+    s->data_cap = DATA_BUF_LEN;
+    s->data_len = 0;
+    s->data = (double*)malloc(s->data_cap * sizeof(double));
+    if (!s->num.data || !s->string[0].data || !s->string[1].data ||
+        !s->atom.data || !s->defer.data || !s->data) {
+        ands_free(s);
+        return NULL;
+    }
+
+    s->defer_num = 0;
+    s->defer_mode = '?';
+    s->defer_var = -1;
+
+    s->ret_count = 0;
+    s->ret_error = 0;
+    s->ret_saved_count = 0;
+    s->ret_saved_error = 0;
+    for (int i = 0; i < ANDS_RETURN_MAX; i++) {
+        s->ret_value[i] = NAN;
+        s->ret_saved_value[i] = NAN;
+    }
+
+    s->arg_cap = ARG_MAX;
+    s->arg_len = 0;
+    for (int i = 0; i < ARG_MAX; i++) s->arg_var[i] = -1;
+
+    s->atom_num = ATOM_NIL;
+
+    s->fn = fn;
+    s->user = user;
+
+    s->state = START;
+    s->trace = 0;
+
+    return s;
+}
+
+void ands_free(ands_t *s) {
+    if (!s) return;
+    buffer_free(&s->num);
+    buffer_free(&s->string[0]);
+    buffer_free(&s->string[1]);
+    buffer_free(&s->atom);
+    buffer_free(&s->defer);
+
+    if (s->data) free(s->data);
+    s->data = NULL;
+    s->data_cap = 0;
+    s->data_len = 0;
+    free(s);
+}
+
+// Accessor functions
+uint32_t ands_atom_num(ands_t *s) { return s->atom_num; }
+int ands_arg_len(ands_t *s) { return s->arg_len; }
+double *ands_arg(ands_t *s) { return s->arg; }
+int ands_arg_var(ands_t *s, int n) {
+  return n >= 0 && n < s->arg_len ? s->arg_var[n] : -1;
+}
+void *ands_user(ands_t *s) { return s->user; }
+char *ands_string(ands_t *s) { return buffer_str(&s->string[s->string_read_idx]); }
+int ands_string_len(ands_t *s) { return s->string[s->string_read_idx].len; }
+int ands_string_fresh(ands_t *s) { return s->string_fresh; }
+void ands_trace_set(ands_t *s, int n) { s->trace = n; }
+double ands_defer_num(ands_t *s) { return s->defer_num; }
+int ands_defer_var(ands_t *s) { return s->defer_var; }
+char *ands_defer_string(ands_t *s) { return buffer_str(&s->defer); }
+char ands_defer_mode(ands_t *s) { return s->defer_mode; }
+char *ands_atom_string(ands_t *s) { return atom_string(s->atom_num); }
+const char *ands_atom_name(ands_t *s) {
+    if (!s) return "";
+    if (s->atom_name[0] != '\0') return s->atom_name;
+    return atom_string(s->atom_num);
+}
+double *ands_data(ands_t *s) { return s->data; }
+void ands_data_len_set(ands_t *s, int n) {
+  if (n >= 0 && n <= s->data_cap) s->data_len = n;
+}
+int ands_data_len(ands_t *s) { return s->data_len; }
+void ands_data_resize(ands_t *s, int len) {
+  if (!s || len <= 0) return;
+  double *data = (double *)calloc((size_t)len, sizeof(double));
+  if (!data) return;
+  if (s->data) {
+    free(s->data);
+  }
+  s->data = data;
+  s->data_len = 0;
+  s->data_cap = len;
+}
+int ands_data_cap(ands_t *s) { return s->data_cap; }
+
+void ands_arg_clear(ands_t *s) {
+    if (!s) return;
+    s->arg_len = 0;
+    for (int i = 0; i < ARG_MAX; i++) s->arg_var[i] = -1;
+}
+
+double ands_arg_push(ands_t *s, double n) {
+    if (s->arg_len < s->arg_cap) {
+        s->arg[s->arg_len] = n;
+        s->arg_var[s->arg_len] = -1;
+        s->arg_len++;
+    }
+    return n;
+}
+
+void ands_arg_len_set(ands_t *s, int n) {
+    if (!s || n < 0 || n > s->arg_cap) return;
+    for (int i = s->arg_len; i < n; i++) s->arg_var[i] = -1;
+    s->arg_len = n;
+}
+
+double ands_arg_drop(ands_t *s) {
+    int n = s->arg_len;
+    double x = 0;
+    if (n > 0) {
+        x = s->arg[0];
+        for (int i = 1; i < ARG_MAX; i++) {
+            s->arg[i-1] = s->arg[i];
+            s->arg_var[i-1] = s->arg_var[i];
+        }
+        s->arg_len--;
+    }
+    return x;
+}
+
+double ands_arg_swap(ands_t *s) {
+    if (s->arg_len > 1) {
+        double t = s->arg[0];
+        int tv = s->arg_var[0];
+        s->arg[0] = s->arg[1];
+        s->arg_var[0] = s->arg_var[1];
+        s->arg[1] = t;
+        s->arg_var[1] = tv;
+    }
+    return 0;
+}
+
+static void ands_arg_insert_front(ands_t *s, double value, int var) {
+    if (!s || s->arg_len >= s->arg_cap) return;
+    for (int i = s->arg_len; i > 0; i--) {
+        s->arg[i] = s->arg[i - 1];
+        s->arg_var[i] = s->arg_var[i - 1];
+    }
+    s->arg[0] = value;
+    s->arg_var[0] = var;
+    s->arg_len++;
+}
+
+double ands_arg_dup(ands_t *s) {
+    if (s && s->arg_len > 0) {
+        ands_arg_insert_front(s, s->arg[0], s->arg_var[0]);
+    }
+    return 0;
+}
+
+double ands_arg_over(ands_t *s) {
+    if (s && s->arg_len > 1) {
+        ands_arg_insert_front(s, s->arg[1], s->arg_var[1]);
+    }
+    return 0;
+}
+
+double ands_arg_rot(ands_t *s) {
+    if (s && s->arg_len > 2) {
+        double t = s->arg[0];
+        int tv = s->arg_var[0];
+        s->arg[0] = s->arg[1];
+        s->arg_var[0] = s->arg_var[1];
+        s->arg[1] = s->arg[2];
+        s->arg_var[1] = s->arg_var[2];
+        s->arg[2] = t;
+        s->arg_var[2] = tv;
+    }
+    return 0;
+}
+
+double ands_arg_push_many(ands_t *s, double *a, int n) {
+    for (int i = 0; i < n && s->arg_len < s->arg_cap; i++) {
+        s->arg[s->arg_len] = a[i];
+        s->arg_var[s->arg_len] = -1;
+        s->arg_len++;
+    }
+    return 0;
+}
+
+double ands_get_local(ands_t *s, int n) {
+  if (n >= 0 && n < VAR_MAX) {
+    return s->global_var[n];
+  }
+  return NAN;
+}
+
+void ands_set_local(ands_t *s, int n, double x) {
+    if (n >= 0 && n < VAR_MAX) {
+        s->global_var[n] = x;
+    }
+}
+
+void ands_set_global(ands_t *s, double *p) { s->global_var = p; s->global_save = p; }
+void ands_use_local(ands_t *s) { (void)s; }
+void ands_use_global(ands_t *s) {
+    if (s && s->global_save) s->global_var = s->global_save;
+}
+
+void ands_set_stream_pull(ands_t *s, ands_stream_pull_fn fn) {
+    if (s) s->stream_pull = fn;
+}
+
+double ands_stream_pull(ands_t *s, int n) {
+    if (s && s->stream_pull) return s->stream_pull(s->user, n);
+    return 0.0;
+}
+
+void ands_stream_set(ands_t *s, int n, double *data, int len) { (void)s; (void)n; (void)data; (void)len; }
+void ands_stream_mode(ands_t *s, int n, int mode) { (void)s; (void)n; (void)mode; }
+void ands_stream_pos(ands_t *s, int n, int pos) { (void)s; (void)n; (void)pos; }
+
+void ands_return_clear(ands_t *s) {
+    if (!s) return;
+    s->ret_saved_count = s->ret_count;
+    s->ret_saved_error = s->ret_error;
+    for (int i = 0; i < ANDS_RETURN_MAX; i++)
+        s->ret_saved_value[i] = s->ret_value[i];
+    s->ret_count = 0;
+    s->ret_error = 0;
+    /* Must actually clear the slots, not just reset count: ands_return_set()
+       can set count past several untouched
+       slots at once (count = max(count, n+1)), and if those slots still
+       held a stale value from several commands ago, reading one of the
+       gap indices would silently return old, unrelated data instead of
+       signaling "not set this time". NaN (not 0.0) specifically, so a gap
+       reads back unambiguously as "never set" rather than as a plausible-
+       looking 0.0 that could be mistaken for a real value. Ten doubles is
+       negligible next to the string/buffer work action_finish_atom()
+       already does per dispatch -- this was a real correctness bug, not
+       a justified optimization; caught by the direct-set gap test's read-a-
+       lower-slot case. */
+    for (int i = 0; i < ANDS_RETURN_MAX; i++) s->ret_value[i] = NAN;
+}
+
+void ands_return_push(ands_t *s, double value) {
+    if (!s) return;
+    if (s->ret_count < ANDS_RETURN_MAX) {
+        s->ret_value[s->ret_count] = value;
+        s->ret_count++;
+    }
+    /* Silently dropped past ANDS_RETURN_MAX, matching ands_arg_push_many()'s
+       existing "silently stop once the bounded buffer is full" convention
+       rather than introducing a new error-signaling path for it. */
+}
+
+void ands_return_set(ands_t *s, int n, double value) {
+    if (!s || n < 0 || n >= ANDS_RETURN_MAX) return;
+    s->ret_value[n] = value;
+    if (n + 1 > s->ret_count) s->ret_count = n + 1;
+}
+
+int ands_return_count(ands_t *s) {
+    return s ? s->ret_count : 0;
+}
+
+double ands_return_get(ands_t *s, int n) {
+    if (!s || n < 0 || n >= s->ret_count) return NAN;
+    return s->ret_value[n];
+}
+
+void ands_return_set_error(ands_t *s, int code) {
+    if (s) s->ret_error = code;
+}
+
+int ands_return_error(ands_t *s) {
+    return s ? s->ret_error : 0;
+}
+
+int ands_return_saved_count(ands_t *s) {
+    return s ? s->ret_saved_count : 0;
+}
+
+double ands_return_saved_get(ands_t *s, int n) {
+    if (!s || n < 0 || n >= s->ret_saved_count) return NAN;
+    return s->ret_saved_value[n];
+}
+
+int ands_return_saved_error(ands_t *s) {
+    return s ? s->ret_saved_error : 0;
+}
+
+void ands_return_restore_saved(ands_t *s) {
+    if (!s) return;
+    s->ret_count = s->ret_saved_count;
+    s->ret_error = s->ret_saved_error;
+    for (int i = 0; i < ANDS_RETURN_MAX; i++)
+        s->ret_value[i] = s->ret_saved_value[i];
+}
+
+void ands_local_to_global(ands_t *s, int n) {
+    (void)s;
+    (void)n;
+}
+
+void ands_global_to_local(ands_t *s, int n) {
+    (void)s;
+    (void)n;
+}
+
+#define STRING_PTR(s) s->string[s->string_idx % STRING_BUF_MOD].data
+
+char *ands_string_from_external(ands_t *s, char *src, int len) {
+  char *dst;
+  if (!s || !src) return NULL;
+  if (len < 0) len = 0;
+  if (len >= STRING_BUF_LEN) len = STRING_BUF_LEN - 1;
+  dst = STRING_PTR(s);
+  memcpy(dst, src, (size_t)len);
+  dst[len] = '\0';
+  s->string_read_idx = s->string_idx;
+  s->string_fresh = 1;
+  s->string_idx = (s->string_idx + 1) % STRING_BUF_MOD;
+  return dst;
+}
+
+char *ands_string_to_external(ands_t *s, char *dst, int len) {
+  if (!s || !dst || len <= 0) return dst;
+  snprintf(dst, (size_t)len, "%s", buffer_str(&s->string[s->string_read_idx]));
+  return dst;
+}
+
+
+
+
+

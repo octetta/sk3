@@ -1,0 +1,25 @@
+# Build directories
+build/
+build_*/
+out/
+dist/
+
+# Generated outputs
+src/gen/
+tools/mksynth
+tools/mkopcodes
+
+# Editor and OS
+.DS_Store
+*.swp
+*.bak
+*~
+.idea/
+.vscode/
+
+# Audio / temporary artifacts
+*.wav
+*.mp3
+*.log
+*-history.txt
+mini-skred-history.txt

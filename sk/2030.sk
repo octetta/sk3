@@ -1,0 +1,35 @@
+# 2030.sk: LinnDrum 80s Synthwave & Italo-Disco 16-Step Groove
+# -------------------------------------------------------------
+M 80
+
+# Voice Assignments:
+v0 w82 f440 a5          # Kick (Natural unpitched playback)
+v1 w83 f440 a10          # Snare
+v2 w85 f440 a10          # Open Hat
+v3 w89 f440 a5          # Mid Tom
+v4 w15 f440 a-7 t 0 .25 0 0 G5 H5#
+v5 w16 N0,5 a-7 t 0 .25 0 0 #
+
+/SS 0 (36 48)
+
+# 16-Step Pattern (Full 4/4 Bar @ 118 BPM)
+y0
+x0 [v0 l1 v4 n&0 l1]        # Beat 1 Kick + Bass C2
+x1 [v4 n&0 l.5]             # Chugging Octave C3
+x2 [v2 l.4 v4 n&0 l.8]      # Hat + Bass C2
+x3 [v4 n&0 l.5]             # Octave C3
+x4 [v0 l1 v1 l1]            # Beat 2 Kick + Linn Snare Crack
+x5 [v4 n&0 .5]              # Octave C3
+x6 [v0 l.8 v4 n&0 l.8]      # Kick + Bass C2
+x7 [v4 n&0 l.5]             # Octave C3
+x8 [v0 l1 v4 n&0 l1]        # Beat 3 Kick + Bass C2
+x9 [v4 n&0 l.5]             # Octave C3
+x10 [v0 l.8 v4 n&0 l.8]     # Kick + Bass C2
+x11 [v4 n&0 l.5]            # Octave C3
+x12 [v1 l1]                 # Beat 4 Snare Backbeat
+x13 [v3 l.8 z*2]            # Mid Tom Double-Tap Fill
+x14 [v0 l.8 v3l.8]          # Kick + Mid Tom
+x15 [v3 l.9 z*2]            # Tom Roll Turnaround
+
+# Start Pattern
+Z1

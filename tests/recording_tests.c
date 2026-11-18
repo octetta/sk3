@@ -1,0 +1,530 @@
+#include <math.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+#include "recorder.h"
+#include "skode.h"
+#include "synth.h"
+#include "synth-state.h"
+#include "synth-types.h"
+
+void seq_init(void);
+
+static int failures;
+
+static void fail(const char *test, const char *message) {
+  fprintf(stderr, "FAIL %s: %s\n", test, message);
+  failures++;
+}
+
+static void test_track_routing(void) {
+  const char *test = "track routing";
+  enum { FRAMES = 128 };
+  float output[FRAMES * AUDIO_CHANNELS] = {0};
+  float recorded[FRAMES * RECORD_CHANNELS] = {0};
+  synth_record_bus_t bus = {recorded, RECORD_CHANNELS};
+
+  synth_init(4);
+  wave_table_init(0);
+  voice_init();
+
+  wave_set(0, WAVE_TABLE_SINE);
+  freq_set(0, 440.0f);
+  amp_set(0, 0.0f);
+  pan_set(0, -1.0f);
+  synth_record_track_set(0, 1);
+  envelope_velocity(0, 1.0f);
+
+  wave_set(1, WAVE_TABLE_SINE);
+  freq_set(1, 660.0f);
+  amp_set(1, 0.0f);
+  pan_set(1, 1.0f);
+  synth_record_track_set(1, 2);
+  envelope_velocity(1, 1.0f);
+
+  synth(&skred_global_engine, output, NULL, FRAMES, AUDIO_CHANNELS, &bus);
+
+  int track1_nonzero = 0;
+  int track2_nonzero = 0;
+  for (int frame = 0; frame < FRAMES; frame++) {
+    int output_index = frame * AUDIO_CHANNELS;
+    int record_index = frame * RECORD_CHANNELS;
+    if (recorded[record_index] != output[output_index] ||
+        recorded[record_index + 1] != output[output_index + 1]) {
+      fail(test, "master track does not match device output");
+      break;
+    }
+    if (fabsf(recorded[record_index + 2]) > 1e-7f ||
+        fabsf(recorded[record_index + 3]) > 1e-7f) {
+      track1_nonzero = 1;
+    }
+    if (fabsf(recorded[record_index + 4]) > 1e-7f ||
+        fabsf(recorded[record_index + 5]) > 1e-7f) {
+      track2_nonzero = 1;
+    }
+    for (int channel = 6; channel < RECORD_CHANNELS; channel++) {
+      if (recorded[record_index + channel] != 0.0f) {
+        fail(test, "unassigned track contains audio");
+        frame = FRAMES;
+        break;
+      }
+    }
+  }
+
+  if (!track1_nonzero) fail(test, "track 1 contains no audio");
+  if (!track2_nonzero) fail(test, "track 2 contains no audio");
+
+  memset(output, 0, sizeof(output));
+  memset(recorded, 0, sizeof(recorded));
+  synth_record_track_set(0, 3);
+  synth(&skred_global_engine, output, NULL, FRAMES, AUDIO_CHANNELS, &bus);
+
+  int old_track_nonzero = 0;
+  int new_track_nonzero = 0;
+  for (int frame = 0; frame < FRAMES; frame++) {
+    int record_index = frame * RECORD_CHANNELS;
+    if (fabsf(recorded[record_index + 2]) > 1e-7f ||
+        fabsf(recorded[record_index + 3]) > 1e-7f) {
+      old_track_nonzero = 1;
+    }
+    if (fabsf(recorded[record_index + 6]) > 1e-7f ||
+        fabsf(recorded[record_index + 7]) > 1e-7f) {
+      new_track_nonzero = 1;
+    }
+  }
+  if (old_track_nonzero) fail(test, "old track remained active after callback boundary");
+  if (!new_track_nonzero) fail(test, "new track was not active on next callback");
+
+  synth_free();
+}
+
+static void test_muted_voice_remains_on_stem(void) {
+  const char *test = "muted voice remains on stem";
+  enum { FRAMES = 512 };
+  float output[FRAMES * AUDIO_CHANNELS] = {0};
+  float recorded[FRAMES * RECORD_CHANNELS] = {0};
+  synth_record_bus_t bus = {recorded, RECORD_CHANNELS};
+  skode_t ctx = SKODE_EMPTY();
+
+  synth_init(1);
+  wave_table_init(0);
+  voice_init();
+  skode_init(&ctx);
+
+  wave_set(0, WAVE_TABLE_SINE);
+  freq_set(0, 440.0f);
+  amp_set(0, 0.0f);
+  pan_set(0, 0.0f);
+  synth_record_track_set(0, 1);
+  delay_send_set(&skred_global_engine,0, 1.0f);
+  delay_params_set(&skred_global_engine,1, 0, 0, 0, 0, 0, 15);
+  envelope_velocity(0, 1.0f);
+
+  char mute[] = "v0 m1";
+  if (skode_consume(mute, &ctx) != 0 || sv.disconnect[0] != 1)
+    fail(test, "m1 did not mute the voice");
+
+  synth(&skred_global_engine, output, NULL, FRAMES, AUDIO_CHANNELS, &bus);
+
+  int stem_nonzero = 0;
+  for (int frame = 0; frame < FRAMES; frame++) {
+    int output_index = frame * AUDIO_CHANNELS;
+    int record_index = frame * RECORD_CHANNELS;
+    if (fabsf(output[output_index]) > 1e-7f ||
+        fabsf(output[output_index + 1]) > 1e-7f ||
+        fabsf(recorded[record_index]) > 1e-7f ||
+        fabsf(recorded[record_index + 1]) > 1e-7f) {
+      fail(test, "muted voice leaked into the master");
+      break;
+    }
+    if (fabsf(recorded[record_index + 2]) > 1e-7f ||
+        fabsf(recorded[record_index + 3]) > 1e-7f) {
+      stem_nonzero = 1;
+    }
+    for (int channel = 4; channel < RECORD_CHANNELS; channel++) {
+      if (fabsf(recorded[record_index + channel]) > 1e-7f) {
+        fail(test, "muted voice leaked into an unassigned stem");
+        frame = FRAMES;
+        break;
+      }
+    }
+  }
+  if (!stem_nonzero) fail(test, "muted voice was missing from its stem");
+
+  skode_free(&ctx);
+  synth_free();
+}
+
+static void test_multichannel_device_track_routing(void) {
+  const char *test = "multichannel device track routing";
+  enum { FRAMES = 128 };
+  float output[FRAMES * RECORD_CHANNELS] = {0};
+  float recorded[FRAMES * RECORD_CHANNELS] = {0};
+  synth_record_bus_t bus = {recorded, RECORD_CHANNELS};
+
+  synth_init(8);
+  wave_table_init(0);
+  voice_init();
+
+  for (int voice = 0; voice < RECORD_TRACK_MAX; voice++) {
+    wave_set(voice, WAVE_TABLE_SINE);
+    freq_set(voice, 330.0f + (float)voice * 110.0f);
+    amp_set(voice, 0.0f);
+    pan_set(voice, voice % 2 ? 1.0f : -1.0f);
+    synth_record_track_set(voice, voice + 1);
+    envelope_velocity(voice, 1.0f);
+  }
+
+  synth(&skred_global_engine, output, NULL, FRAMES, RECORD_CHANNELS, &bus);
+
+  int track_nonzero[RECORD_TRACK_COUNT] = {0};
+  for (int frame = 0; frame < FRAMES; frame++) {
+    int frame_index = frame * RECORD_CHANNELS;
+    for (int channel = 0; channel < RECORD_CHANNELS; channel++) {
+      if (output[frame_index + channel] != recorded[frame_index + channel]) {
+        fail(test, "device output does not match recorder channel layout");
+        frame = FRAMES;
+        break;
+      }
+      if (channel >= AUDIO_CHANNELS &&
+          (fabsf(output[frame_index + channel]) > 1e-7f)) {
+        int track = channel / AUDIO_CHANNELS;
+        if (track >= 1 && track <= RECORD_TRACK_MAX) {
+          track_nonzero[track] = 1;
+        }
+      }
+    }
+  }
+
+  for (int track = 1; track <= RECORD_TRACK_MAX; track++) {
+    if (!track_nonzero[track]) {
+      char message[64];
+      snprintf(message, sizeof(message), "track %d device pair is silent", track);
+      fail(test, message);
+    }
+  }
+
+  float odd_output[FRAMES * 5] = {0};
+  synth(&skred_global_engine, odd_output, NULL, FRAMES, 5, NULL);
+  int leftover_nonzero = 0;
+  for (int frame = 0; frame < FRAMES; frame++) {
+    int frame_index = frame * 5;
+    if (fabsf(odd_output[frame_index + 4]) > 1e-7f) {
+      leftover_nonzero = 1;
+      break;
+    }
+  }
+  if (leftover_nonzero) fail(test, "odd leftover channel contains audio");
+
+  synth_free();
+}
+
+static void test_sub_block_record_offsets(void) {
+  const char *test = "sub-block record offsets";
+  enum { FRAMES = 128, SPLIT = 37 };
+  float output[FRAMES * AUDIO_CHANNELS] = {0};
+  float recorded[FRAMES * RECORD_CHANNELS] = {0};
+
+  synth_init(4);
+  wave_table_init(0);
+  voice_init();
+  wave_set(0, WAVE_TABLE_SINE);
+  freq_set(0, 440.0f);
+  amp_set(0, 0.0f);
+  envelope_velocity(0, 1.0f);
+
+  synth_record_bus_t first = {recorded, RECORD_CHANNELS};
+  synth(&skred_global_engine, output, NULL, SPLIT, AUDIO_CHANNELS, &first);
+
+  synth_record_bus_t second = {
+    recorded + ((size_t)SPLIT * RECORD_CHANNELS),
+    RECORD_CHANNELS
+  };
+  synth(&skred_global_engine, output + (SPLIT * AUDIO_CHANNELS), NULL, FRAMES - SPLIT,
+        AUDIO_CHANNELS, &second);
+
+  for (int frame = 0; frame < FRAMES; frame++) {
+    int output_index = frame * AUDIO_CHANNELS;
+    int record_index = frame * RECORD_CHANNELS;
+    if (recorded[record_index] != output[output_index] ||
+        recorded[record_index + 1] != output[output_index + 1]) {
+      fail(test, "segmented master track does not match device output");
+      break;
+    }
+  }
+
+  synth_free();
+}
+
+static uint16_t read_u16_le(const unsigned char *p) {
+  return (uint16_t)(p[0] | ((uint16_t)p[1] << 8));
+}
+
+static uint32_t read_u32_le(const unsigned char *p) {
+  return (uint32_t)p[0] |
+         ((uint32_t)p[1] << 8) |
+         ((uint32_t)p[2] << 16) |
+         ((uint32_t)p[3] << 24);
+}
+
+static void test_ring_writer(void) {
+  const char *test = "ring writer";
+  char filename[128];
+  snprintf(filename, sizeof(filename), "/tmp/pulp-recording-%ld.wav",
+           (long)getpid());
+
+  if (recorder_init(64, MAIN_SAMPLE_RATE) != 0) {
+    fail(test, "recorder_init failed");
+    return;
+  }
+  if (recorder_start(filename, 0.0) != 0) {
+    fail(test, "recorder_start failed");
+    recorder_uninit();
+    return;
+  }
+
+  const int blocks = 4;
+  const int frames_per_block = 32;
+  for (int block = 0; block < blocks; block++) {
+    synth_record_bus_t *bus = recorder_begin_block(frames_per_block);
+    if (!bus) {
+      fail(test, "recorder_begin_block returned NULL");
+      break;
+    }
+    for (int frame = 0; frame < frames_per_block; frame++) {
+      for (int channel = 0; channel < RECORD_CHANNELS; channel++) {
+        bus->frames[frame * RECORD_CHANNELS + channel] =
+          (float)(block + channel) / 32.0f;
+      }
+    }
+    recorder_end_block(frames_per_block);
+  }
+
+  if (recorder_stop() != 0) fail(test, "recorder_stop failed");
+  if (recorder_frames_written() != (uint64_t)(blocks * frames_per_block)) {
+    fail(test, "unexpected written frame count");
+  }
+  if (recorder_dropped_frames() != 0) {
+    fail(test, "frames were dropped");
+  }
+  recorder_uninit();
+
+  FILE *file = fopen(filename, "rb");
+  if (!file) {
+    fail(test, "recorded WAV was not created");
+    return;
+  }
+  unsigned char header[44];
+  size_t size = fread(header, 1, sizeof(header), file);
+  fclose(file);
+  unlink(filename);
+
+  if (size != sizeof(header) ||
+      memcmp(header, "RIFF", 4) != 0 ||
+      memcmp(header + 8, "WAVE", 4) != 0) {
+    fail(test, "invalid WAV header");
+    return;
+  }
+  if (read_u16_le(header + 22) != RECORD_CHANNELS) {
+    fail(test, "WAV channel count is not 10");
+  }
+  if (read_u32_le(header + 24) != (uint32_t)MAIN_SAMPLE_RATE) {
+    fail(test, "WAV sample rate mismatch");
+  }
+}
+
+static void test_duration_limit_and_restart(void) {
+  const char *test = "duration limit and restart";
+  char filename[128];
+  snprintf(filename, sizeof(filename), "/tmp/pulp-recording-limit-%ld.wav",
+           (long)getpid());
+
+  if (recorder_init(64, MAIN_SAMPLE_RATE) != 0 ||
+      recorder_start(filename, 50.0 / MAIN_SAMPLE_RATE) != 0) {
+    fail(test, "recorder setup failed");
+    recorder_uninit();
+    return;
+  }
+
+  for (int block = 0; block < 2; block++) {
+    synth_record_bus_t *bus = recorder_begin_block(32);
+    if (!bus) {
+      fail(test, "recorder stopped before duration limit");
+      break;
+    }
+    memset(bus->frames, 0, 32 * RECORD_CHANNELS * sizeof(float));
+    recorder_end_block(32);
+  }
+
+  if (recorder_stop() != 0) fail(test, "limited recorder stop failed");
+  if (recorder_frames_written() != 50) {
+    fail(test, "duration limit did not stop at the exact frame");
+  }
+
+  if (recorder_start(filename, 0.0) != 0) {
+    fail(test, "recorder restart failed");
+  } else {
+    synth_record_bus_t *bus = recorder_begin_block(8);
+    if (!bus) {
+      fail(test, "restart did not accept audio");
+    } else {
+      memset(bus->frames, 0, 8 * RECORD_CHANNELS * sizeof(float));
+      recorder_end_block(8);
+    }
+    if (recorder_stop() != 0 || recorder_frames_written() != 8) {
+      fail(test, "restart frame count mismatch");
+    }
+  }
+  recorder_uninit();
+  unlink(filename);
+}
+
+static void test_skode_recording_commands(void) {
+  const char *test = "skode recording commands";
+  char filename[128];
+  char command[160];
+  snprintf(filename, sizeof(filename), "/tmp/pulp-skode-recording-%ld.wav",
+           (long)getpid());
+
+  if (recorder_init(64, MAIN_SAMPLE_RATE) != 0) {
+    fail(test, "recorder_init failed");
+    return;
+  }
+
+  skode_t ctx = SKODE_EMPTY();
+  skode_init(&ctx);
+  ctx.log_enable = 1;
+
+  snprintf(command, sizeof(command), "[%s]/rg", filename);
+  if (skode_consume(command, &ctx) != 0 ||
+      recorder_state() != RECORDER_RECORDING) {
+    fail(test, "[filename]/rg did not start recording");
+  }
+
+  char status[] = "/r?";
+  if (skode_consume(status, &ctx) != 0 ||
+      strstr(ctx.log, "# recorder state=recording") == NULL) {
+    fail(test, "/r? did not report recording status");
+  }
+
+  char stop[] = "/rs";
+  if (skode_consume(stop, &ctx) != 0 ||
+      recorder_state() != RECORDER_STOPPED) {
+    fail(test, "/rs did not stop recording");
+  }
+
+  snprintf(command, sizeof(command), "[%s]/rg0.001", filename);
+  if (skode_consume(command, &ctx) != 0 ||
+      recorder_state() != RECORDER_RECORDING) {
+    fail(test, "[filename]/rg0.001 did not start limited recording");
+  } else {
+    synth_record_bus_t *bus = recorder_begin_block(64);
+    if (!bus) {
+      fail(test, "limited recording did not accept audio");
+    } else {
+      memset(bus->frames, 0, 64 * RECORD_CHANNELS * sizeof(float));
+      recorder_end_block(64);
+    }
+    recorder_stop();
+    if (recorder_frames_written() !=
+        (uint64_t)(0.001 * MAIN_SAMPLE_RATE)) {
+      fail(test, "/rg duration was not applied");
+    }
+  }
+
+  snprintf(command, sizeof(command), "[%s]/rw", filename);
+  if (skode_consume(command, &ctx) != 0 ||
+      recorder_state() != RECORDER_RECORDING ||
+      recorder_channels() != 2) {
+    fail(test, "[filename]/rw did not start stereo recording");
+  }
+  skode_consume(stop, &ctx);
+
+  snprintf(command, sizeof(command), "[%s]/rg0,2", filename);
+  if (skode_consume(command, &ctx) != 0 ||
+      recorder_state() != RECORDER_RECORDING ||
+      recorder_channels() != 2) {
+    fail(test, "[filename]/rg0,2 did not start stereo recording");
+  }
+  skode_consume(stop, &ctx);
+
+  recorder_uninit();
+  unlink(filename);
+}
+
+static void test_stereo_recording(void) {
+  const char *test = "stereo recording";
+  char filename[128];
+  snprintf(filename, sizeof(filename), "/tmp/pulp-recording-stereo-%ld.wav",
+           (long)getpid());
+
+  if (recorder_init(64, MAIN_SAMPLE_RATE) != 0 ||
+      recorder_start_channels(filename, 0.0, 2) != 0) {
+    fail(test, "recorder_start_channels stereo failed");
+    recorder_uninit();
+    return;
+  }
+
+  synth_record_bus_t *bus = recorder_begin_block(32);
+  if (!bus) {
+    fail(test, "recorder_begin_block failed");
+  } else {
+    for (int frame = 0; frame < 32; frame++) {
+      bus->frames[frame * RECORD_CHANNELS + 0] = 0.5f;
+      bus->frames[frame * RECORD_CHANNELS + 1] = -0.5f;
+      for (int ch = 2; ch < RECORD_CHANNELS; ch++) {
+        bus->frames[frame * RECORD_CHANNELS + ch] = 0.9f;
+      }
+    }
+    recorder_end_block(32);
+  }
+
+  if (recorder_stop() != 0) {
+    fail(test, "recorder_stop failed");
+  }
+  recorder_uninit();
+
+  FILE *file = fopen(filename, "rb");
+  if (!file) {
+    fail(test, "recorded WAV was not created");
+    return;
+  }
+  unsigned char header[44];
+  size_t size = fread(header, 1, sizeof(header), file);
+  fclose(file);
+  unlink(filename);
+
+  if (size != sizeof(header) ||
+      memcmp(header, "RIFF", 4) != 0 ||
+      memcmp(header + 8, "WAVE", 4) != 0) {
+    fail(test, "invalid WAV header");
+    return;
+  }
+  if (read_u16_le(header + 22) != 2) {
+    fail(test, "WAV channel count is not 2 (stereo)");
+  }
+  if (read_u32_le(header + 24) != (uint32_t)MAIN_SAMPLE_RATE) {
+    fail(test, "WAV sample rate mismatch");
+  }
+}
+
+int main(void) {
+  test_track_routing();
+  test_muted_voice_remains_on_stem();
+  test_multichannel_device_track_routing();
+  test_sub_block_record_offsets();
+  test_ring_writer();
+  test_duration_limit_and_restart();
+  test_stereo_recording();
+  test_skode_recording_commands();
+
+  if (failures) {
+    fprintf(stderr, "%d recording test failure(s)\n", failures);
+    return 1;
+  }
+  printf("Recording tests passed\n");
+  return 0;
+}

@@ -1,0 +1,1219 @@
+#include "skode-internal.h"
+
+#include <ctype.h>
+
+#include <math.h>
+static int word_exec_m_gtf(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  (void)self; (void)arg; (void)argc; (void)s;
+  double *data = ands_data(ctx->parse);
+  int len = ands_data_len(ctx->parse);
+  if (data) {
+    for (int i = 0; i < len; i++) {
+      data[i] = pow(2.0, (data[i] - 69.0) / 12.0) * 440.0;
+    }
+  }
+  return 0;
+}
+static int word_exec_n_gtd(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  (void)self; (void)arg; (void)argc;
+  const char *str = ands_string(ctx->parse);
+  if (!str) return 0;
+
+  double notes[1024];
+  int note_count = 0;
+  
+  const char *p = str;
+  while (*p && note_count < 1024) {
+    while (*p && (isspace((unsigned char)*p) || *p == ',')) p++;
+    if (!*p) break;
+    
+    int is_slur = 0;
+    if ((*p == '~' || *p == '/' || *p == '\\') &&
+        toupper((unsigned char)*(p + 1)) >= 'A' &&
+        toupper((unsigned char)*(p + 1)) <= 'G') {
+      is_slur = 1;
+      p++;
+    }
+
+    char c = toupper((unsigned char)*p);
+    if (c >= 'A' && c <= 'G') {
+      int note_idx = 0;
+      switch (c) {
+          case 'C': note_idx = 0; break;
+          case 'D': note_idx = 2; break;
+          case 'E': note_idx = 4; break;
+          case 'F': note_idx = 5; break;
+          case 'G': note_idx = 7; break;
+          case 'A': note_idx = 9; break;
+          case 'B': note_idx = 11; break;
+      }
+      p++;
+      if (*p == '#' || *p == '+') { note_idx++; p++; }
+      else if (*p == 'b' || *p == '-') { note_idx--; p++; }
+      
+      int octave = 0;
+      int sign = 1;
+      if (*p == '-') { sign = -1; p++; }
+      while (isdigit((unsigned char)*p)) {
+        octave = octave * 10 + (*p - '0');
+        p++;
+      }
+      octave *= sign;
+      
+      double note_num = (octave + 1) * 12 + note_idx;
+      notes[note_count++] = is_slur ? -note_num : note_num;
+    } else if (*p == '.' || *p == '_') {
+      notes[note_count++] = ANDS_SENTINEL_TIE;
+      p++;
+      while (*p && !isspace((unsigned char)*p) && *p != ',') p++;
+    } else if (*p == '-' || *p == '~' || c == 'R') {
+      if (*p == '-' && isdigit((unsigned char)*(p + 1))) {
+        char *endp = NULL;
+        double val = strtod(p, &endp);
+        if (endp && endp > p) {
+          notes[note_count++] = val;
+          p = endp;
+        } else {
+          p++;
+        }
+      } else {
+        notes[note_count++] = ANDS_SENTINEL_REST;
+        p++;
+        while (*p && !isspace((unsigned char)*p) && *p != ',') p++;
+      }
+    } else if (isdigit((unsigned char)*p)) {
+      char *endp = NULL;
+      double val = strtod(p, &endp);
+      if (endp && endp > p) {
+        notes[note_count++] = val;
+        p = endp;
+      } else {
+        p++;
+      }
+    } else {
+      // skip invalid token
+      while (*p && !isspace((unsigned char)*p) && *p != ',') p++;
+    }
+  }
+
+  if (note_count > ands_data_cap(ctx->parse)) {
+    ands_data_resize(ctx->parse, note_count);
+  }
+  
+  double *data = ands_data(ctx->parse);
+  if (data) {
+    for (int i = 0; i < note_count; i++) {
+      data[i] = notes[i];
+    }
+    ands_data_len_set(ctx->parse, note_count);
+  }
+
+  return 0;
+}
+
+static int word_exec_D(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      if (argc) {
+        if (x > ands_data_cap(ctx->parse)) ands_data_resize(ctx->parse, x);
+      } else {
+        ctx->printf(ctx, "# D[%d]\n", ands_data_cap(ctx->parse));
+      }
+      return 0;
+}
+
+static int word_exec__qd(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      {
+        double *data = ands_data(ctx->parse);
+        int data_len = ands_data_len(ctx->parse);
+        skode_double_dump(ctx, data, data_len);
+      }
+      return 0;
+}
+
+static int word_exec__slashD(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      if (argc) {
+        // free and re-allocate...
+        if (x > 0) ands_data_resize(ctx->parse, x);
+      }
+      ctx->printf(ctx, "# /D data %p cap %d |%d|\n",
+        ands_data(ctx->parse),
+        ands_data_cap(ctx->parse),
+        ands_data_len(ctx->parse));
+      return 0;
+}
+
+#ifdef KSYNTH
+static int word_exec__slashks(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      {
+        char *file = ands_string(ctx->parse);
+        int verbose = 0;
+        if (argc) skode_double_to_int(arg[0], &verbose);
+        if (strlen(file)) {
+          ksynth_load_name(ctx, file, verbose);
+        }
+      }
+      return 0;
+}
+
+static int word_exec__slashk(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      if (argc) {
+        int verbose = 0;
+        if (argc > 1) skode_double_to_int(arg[1], &verbose);
+        ksynth_load(ctx, x, verbose);
+      }
+      return 0;
+}
+
+static int word_exec_ks(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+
+      {
+        int len = 0;
+        char *cmd = ands_string(ctx->parse);
+        if (cmd) len = strlen(cmd);
+        if (ctx->trace) {
+          ctx->printf(ctx, "cmd:[%s] len:%d\n", cmd, len);
+        }
+        // if (len) skode_ks_eval(ctx, cmd, len);
+        if (len) ksynth_loader(ctx, cmd, (size_t)len, "[inline ks]", ctx->trace);
+      }
+      return 0;
+}
+
+static int word_exec_k_bang(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      {
+        int len = 0;
+        char *cmd = ands_string(ctx->parse);
+        if (cmd) len = strlen(cmd);
+        if (ctx->trace) {
+          ctx->printf(ctx, "cmd:[%s] len:%d\n", cmd, len);
+        }
+        //if (len) skode_ks_eval(ctx, cmd, len);
+        if (len) ksynth_loader(ctx, cmd, (size_t)len, "[inline k!]", ctx->trace);
+      }
+      return 0;
+}
+
+static int word_exec_kw(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      {
+        (void)x;
+      }
+      return 0;
+}
+
+static int word_exec_kw_gt(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      {
+        (void)x;
+        skode_ks_result_to_data(ctx);
+      }
+      return 0;
+}
+
+static int word_exec_k_q(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      {
+        K result = (K)ctx->ks_result;
+        if (result && !k_is_func(result))
+          skode_double_dump(ctx, result->f, (size_t)result->n);
+      }
+      return 0;
+}
+
+static int word_exec_k_gtd(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      {
+        skode_ks_result_to_data(ctx);
+      }
+      return 0;
+}
+
+static int word_exec_k_gtw(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      {
+        int wave_slot = EXT_SAMPLE_000;
+        int one_shot = 0;
+        float rate = (float)MAIN_SAMPLE_RATE;
+        float offset = 0.0f;
+        if (argc && !skode_double_to_int(arg[0], &wave_slot)) return 0;
+        if (argc > 1) rate = arg[1];
+        if (argc > 2) skode_double_to_int(arg[2], &one_shot);
+        if (argc > 3) offset = arg[3];
+        if (skode_ks_result_to_data(ctx))
+          data_load(ctx, wave_slot, one_shot, rate, offset);
+      }
+      return 0;
+}
+#else
+static int word_exec__slashks(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  (void)self; (void)ctx; (void)s; (void)arg; (void)argc;
+  return -1;
+}
+static int word_exec__slashk(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  (void)self; (void)ctx; (void)s; (void)arg; (void)argc;
+  return -1;
+}
+static int word_exec_ks(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  (void)self; (void)ctx; (void)s; (void)arg; (void)argc;
+  return -1;
+}
+static int word_exec_k_bang(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  (void)self; (void)ctx; (void)s; (void)arg; (void)argc;
+  return -1;
+}
+static int word_exec_kw(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  (void)self; (void)ctx; (void)s; (void)arg; (void)argc;
+  return -1;
+}
+static int word_exec_kw_gt(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  (void)self; (void)ctx; (void)s; (void)arg; (void)argc;
+  return -1;
+}
+static int word_exec_k_q(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  (void)self; (void)ctx; (void)s; (void)arg; (void)argc;
+  return -1;
+}
+static int word_exec_k_gtd(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  (void)self; (void)ctx; (void)s; (void)arg; (void)argc;
+  return -1;
+}
+static int word_exec_k_gtw(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  (void)self; (void)ctx; (void)s; (void)arg; (void)argc;
+  return -1;
+}
+#endif
+
+static int word_exec__eqd(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      if (argc > 1 && x_valid) {
+        int y;
+        double *data = ands_data(ctx->parse);
+        int data_len = ands_data_len(ctx->parse);
+        if (skode_double_to_int(arg[1], &y) &&
+            x >= 0 && x < 128 && y >= 0 && y < data_len) {
+          // x is the dest var y is the d index
+          ands_set_local(ctx->parse, x, data[y]);
+        }
+      }
+      return 0;
+}
+
+static int word_exec_d_bang(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  (void)self; (void)atom; (void)voice;
+  if (argc > 1) {
+    double val = arg[0];
+    int index = -1;
+    if (skode_double_to_int(arg[1], &index)) {
+      double *data = ands_data(ctx->parse);
+      int data_len = ands_data_len(ctx->parse);
+      int data_cap = ands_data_cap(ctx->parse);
+      if (index >= 0 && index < data_cap) {
+        if (index >= data_len) {
+          for (int i = data_len; i <= index; i++) {
+            data[i] = 0.0;
+          }
+          ands_data_len_set(ctx->parse, index + 1);
+        }
+        data[index] = val;
+      }
+    }
+  }
+  return 0;
+}
+
+static int word_exec_d_star(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      if (argc) {
+        double *data = ands_data(ctx->parse);
+        int data_len = ands_data_len(ctx->parse);
+        if (x>=0 && x < data_len) {
+          double val = data[x];
+          ctx->printf(ctx, "# %g\n", val);
+          ands_arg_clear(s);
+          ands_arg_push(s, val);
+          return 1;
+        }
+      }
+      return 0;
+}
+
+static int word_exec_d_gtr(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      {
+        double *data = ands_data(ctx->parse);
+        int data_len = ands_data_len(ctx->parse);
+        if (!data || data_len <= 0) return 0;
+        int sample_state = atomic_load_int(&sampling.state);
+        if (sample_state == SAMPLE_STATE_ARMED ||
+            sample_state == SAMPLE_STATE_RECORDING) {
+          ctx->printf(ctx, "# recording buffer busy\n");
+          return 0;
+        }
+        if (data_len > sampling.capacity) skode_sample_alloc(data_len);
+        if (!sampling.where || data_len > sampling.capacity) {
+          ctx->printf(ctx, "# recording buffer allocation failed\n");
+          return 0;
+        }
+        for (int i=0; i<data_len; i++) sampling.where[i] = (float)data[i];
+        sampling.len = data_len;
+        sampling.channels = 1;
+        sampling.offset = 0;
+        sampling.trim = 0;
+        atomic_store_int(&sampling.state, SAMPLE_STATE_COMPLETE);
+      }
+      return 0;
+}
+
+static int word_exec_r_gtd(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      {
+        int channel = -1;
+        if (argc > 1) {
+          ctx->printf(ctx, "# usage: r>d [channel]\n");
+          return 0;
+        }
+        if (argc == 1 && !skode_double_to_int(arg[0], &channel)) return 0;
+        if (atomic_load_int(&sampling.state) != SAMPLE_STATE_COMPLETE) {
+          ctx->printf(ctx, "# recording buffer is not complete\n");
+          return 0;
+        }
+        if (!sampling.where || sampling.len > sampling.capacity ||
+            sampling.offset < 0 || sampling.trim < 0 ||
+            sampling.offset > sampling.len ||
+            sampling.trim > sampling.len - sampling.offset) {
+          ctx->printf(ctx, "# invalid recording bounds\n");
+          return 0;
+        }
+        int channels = sampling.channels == 2 ? 2 : 1;
+        if (channel < -1 || channel >= channels) {
+          ctx->printf(ctx, "# recording channel must be -1..%d\n",
+                      channels - 1);
+          return 0;
+        }
+        int data_len = sampling.len - sampling.offset - sampling.trim;
+        if (data_len <= 0) {
+          ctx->printf(ctx, "# recording buffer is empty\n");
+          return 0;
+        }
+        if (data_len > ands_data_cap(ctx->parse))
+          ands_data_resize(ctx->parse, data_len);
+        double *data = ands_data(ctx->parse);
+        if (!data || data_len > ands_data_cap(ctx->parse)) {
+          ctx->printf(ctx, "# data array allocation failed\n");
+          return 0;
+        }
+        for (int i = 0; i < data_len; i++) {
+          size_t frame =
+            (size_t)(sampling.offset + i) * (size_t)channels;
+          if (channels == 1) {
+            data[i] = sampling.where[frame];
+          } else if (channel >= 0) {
+            data[i] = sampling.where[frame + (size_t)channel];
+          } else {
+            data[i] = 0.5 * (sampling.where[frame] +
+                             sampling.where[frame + 1]);
+          }
+        }
+        ands_data_len_set(ctx->parse, data_len);
+      }
+      return 0;
+}
+
+#ifdef KSYNTH
+static int word_exec_d_gtk(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      if (argc) {
+        int variable;
+        if (skode_double_to_int(arg[0], &variable)) {
+          skode_ks_bind_values(ctx, variable, ands_data(ctx->parse),
+                               (size_t)ands_data_len(ctx->parse));
+        }
+      }
+      return 0;
+}
+
+static int word_exec_w_gtk(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      if (argc > 1) {
+        int wave;
+        int variable;
+        if (!skode_double_to_int(arg[0], &wave) ||
+            !skode_double_to_int(arg[1], &variable) ||
+            !skode_wave_valid(wave) || !sw.data[wave] || sw.size[wave] <= 0) {
+          ctx->printf(ctx, "# invalid wavetable for w>k\n");
+          return 0;
+        }
+        size_t len = (size_t)sw.size[wave];
+        if (len > 1000000 || len > SIZE_MAX / sizeof(double)) {
+          ctx->printf(ctx, "# ksynth vector too large: %zu\n", len);
+          return 0;
+        }
+        double *values = malloc(len * sizeof(double));
+        if (!values) {
+          ctx->printf(ctx, "# allocation failed\n");
+          return 0;
+        }
+        for (size_t i = 0; i < len; i++) values[i] = sw.data[wave][i];
+        skode_ks_bind_values(ctx, variable, values, len);
+        free(values);
+      }
+      return 0;
+}
+#else
+static int word_exec_d_gtk(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  (void)self; (void)ctx; (void)s; (void)arg; (void)argc;
+  return -1;
+}
+
+static int word_exec_w_gtk(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  (void)self; (void)ctx; (void)s; (void)arg; (void)argc;
+  return -1;
+}
+#endif
+
+static int word_exec_s_q(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      if (argc && x_valid) {
+        if (x >= 0 && x < SKODE_STRING_SLOT_MAX)
+          ctx->printf(ctx, "# s%d [%s]\n", x, ctx->string_slot[x]);
+      } else {
+        for (int i = 0; i < SKODE_STRING_SLOT_MAX; i++) {
+          if (ctx->string_slot[i][0])
+            ctx->printf(ctx, "# s%d [%s]\n", i, ctx->string_slot[i]);
+        }
+      }
+      return 0;
+}
+
+static int word_exec__qm(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      skode_macros_show(ctx, 0);
+      return 0;
+}
+
+static int word_exec__slashd(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      {
+        int wave_slot = EXT_SAMPLE_000;
+        int one_shot = 0;
+        float rate = (float)MAIN_SAMPLE_RATE;
+        float offset = 0.0;
+        if (argc && !skode_double_to_int(arg[0], &wave_slot)) return 0;
+        if (argc > 1) rate = arg[1];
+        if (argc > 2) skode_double_to_int(arg[2], &one_shot);
+        if (argc > 3) offset = arg[3];
+        data_load(ctx, wave_slot, one_shot, rate, offset);
+      }
+      return 0;
+}
+
+static int word_exec__slashm(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      {
+        const char *name = ands_string_fresh(ctx->parse) ? ands_string(ctx->parse) : "";
+        if (name && name[0]) {
+          int removed = ands_macro_remove(ctx->parse, name);
+          ctx->printf(ctx, "# macro [%s] %s\n", name, removed ? "removed" : "not found");
+        } else {
+          ctx->printf(ctx, "# /m requires [name]\n");
+        }
+      }
+      return 0;
+}
+
+static int word_exec__slashm_bang(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      ands_macro_clear(ctx->parse);
+      ctx->printf(ctx, "# macros cleared\n");
+      return 0;
+}
+
+static int word_exec__lts(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      if (argc && x_valid && x >= 0 && x < SKODE_STRING_SLOT_MAX) {
+        ands_string_from_external(ctx->parse, ctx->string_slot[x],
+                                  strlen(ctx->string_slot[x]));
+      }
+      return 0;
+}
+
+static int word_exec_s_gt(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      if (argc && x_valid && x >= 0 && x < SKODE_STRING_SLOT_MAX) {
+        skode_copy_string(ctx->string_slot[x], SKODE_STRING_SLOT_LEN,
+                          ands_string(ctx->parse));
+      }
+      return 0;
+}
+
+static int word_exec_s_pct(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      {
+        char formatted[SKODE_STRING_SLOT_LEN];
+        skode_format_string_args(formatted, sizeof(formatted),
+                                 ands_string(ctx->parse), arg, argc);
+        ands_string_from_external(ctx->parse, formatted, strlen(formatted));
+        return 1;
+      }
+}
+
+#define SKODE_MAP_MAX_ITERATIONS 256
+
+void skode_format_map_value(char *dst, size_t dst_size, const char *fmt, double val) {
+  size_t used = 0;
+  if (!dst || dst_size == 0) return;
+  dst[0] = '\0';
+  if (!fmt) return;
+
+  for (const char *p = fmt; *p && used + 1 < dst_size; p++) {
+    if (*p == '%') {
+      if (p[1] == '%') {
+        dst[used++] = '%';
+        dst[used] = '\0';
+        p++;
+      } else if (p[1] == '0' && isdigit((unsigned char)p[2]) && (p[3] == 'd' || p[3] == 'i')) {
+        int width = p[2] - '0';
+        char num[32];
+        char fspec[8];
+        snprintf(fspec, sizeof(fspec), "%%0%dd", width);
+        int n = snprintf(num, sizeof(num), fspec, (int)round(val));
+        if (n > 0) {
+          size_t copy = (size_t)n;
+          if (copy > dst_size - used - 1) copy = dst_size - used - 1;
+          memcpy(dst + used, num, copy);
+          used += copy;
+          dst[used] = '\0';
+        }
+        p += 3;
+      } else if (p[1] == 'd' || p[1] == 'i') {
+        char num[32];
+        int n = snprintf(num, sizeof(num), "%d", (int)round(val));
+        if (n > 0) {
+          size_t copy = (size_t)n;
+          if (copy > dst_size - used - 1) copy = dst_size - used - 1;
+          memcpy(dst + used, num, copy);
+          used += copy;
+          dst[used] = '\0';
+        }
+        p++;
+      } else if (p[1] == 'g') {
+        char num[32];
+        int n = snprintf(num, sizeof(num), "%.8g", val);
+        if (n > 0) {
+          size_t copy = (size_t)n;
+          if (copy > dst_size - used - 1) copy = dst_size - used - 1;
+          memcpy(dst + used, num, copy);
+          used += copy;
+          dst[used] = '\0';
+        }
+        p++;
+      } else if (p[1] == 'f') {
+        char num[32];
+        int n = snprintf(num, sizeof(num), "%.4f", val);
+        if (n > 0) {
+          size_t copy = (size_t)n;
+          if (copy > dst_size - used - 1) copy = dst_size - used - 1;
+          memcpy(dst + used, num, copy);
+          used += copy;
+          dst[used] = '\0';
+        }
+        p++;
+      } else {
+        dst[used++] = *p;
+        dst[used] = '\0';
+      }
+    } else if (*p == '@' && p[1] == '0') {
+      char num[32];
+      int n = snprintf(num, sizeof(num), "%.8g", val);
+      if (n > 0) {
+        size_t copy = (size_t)n;
+        if (copy > dst_size - used - 1) copy = dst_size - used - 1;
+        memcpy(dst + used, num, copy);
+        used += copy;
+        dst[used] = '\0';
+      }
+      p++;
+    } else {
+      dst[used++] = *p;
+      dst[used] = '\0';
+    }
+  }
+}
+
+static int word_exec_map_bang(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  (void)self; (void)s;
+  const char *template = ands_string(ctx->parse);
+  if (!ctx || argc < 1) return 0;
+  if (!template || template[0] == '\0') return 0;
+
+  double start = 0.0;
+  double end = 0.0;
+  double step = 1.0;
+
+  if (argc == 1) {
+    if (arg[0] > 0.0) {
+      start = 0.0;
+      end = arg[0] - 1.0;
+      step = 1.0;
+    } else {
+      start = 0.0;
+      end = arg[0];
+      step = (start <= end) ? 1.0 : -1.0;
+    }
+  } else {
+    start = arg[0];
+    end = arg[1];
+    if (argc >= 3) {
+      step = arg[2];
+    } else {
+      step = (start <= end) ? 1.0 : -1.0;
+    }
+  }
+
+  if (fabs(step) < 1e-12) {
+    step = (start <= end) ? 1.0 : -1.0;
+  }
+
+  double span = end - start;
+  if ((step > 0.0 && span < 0.0) || (step < 0.0 && span > 0.0)) {
+    return 0;
+  }
+
+  int num_steps = (int)floor((fabs(span) + fabs(step) * 1e-6) / fabs(step)) + 1;
+  if (num_steps <= 0) return 0;
+  if (num_steps > SKODE_MAP_MAX_ITERATIONS) num_steps = SKODE_MAP_MAX_ITERATIONS;
+
+  extern void skode_consume_macro(skode_t *ctx, const char *line);
+
+  char template_copy[2048];
+  snprintf(template_copy, sizeof(template_copy), "%s", template);
+
+  for (int i = 0; i < num_steps; i++) {
+    double val = start + (double)i * step;
+    if (i == num_steps - 1 && fabs(val - end) < fabs(step) * 0.01) {
+      val = end;
+    }
+    char cmd[2048];
+    skode_format_map_value(cmd, sizeof(cmd), template_copy, val);
+    skode_consume_macro(ctx, cmd);
+  }
+
+  return 0;
+}
+
+static int word_exec__lte(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      if (argc && skode_extra_valid(x)) {
+        char macro[STRING_BUF_LEN];
+        if (skode_extra_copy(x, macro, sizeof(macro)) == 0)
+          ands_string_from_external(ctx->parse, macro, strlen(macro));
+      }
+      return 0;
+}
+
+static int word_exec_e_gt(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      if (argc && skode_extra_valid(x)) {
+        char *s = ands_string(ctx->parse);
+        simple_mutex_lock(&skode_extra_mutex);
+        skode_copy_string(EXTRA_PTR(x), STRING_BUF_LEN, s);
+        simple_mutex_unlock(&skode_extra_mutex);
+      }
+      return 0;
+}
+
+static int word_exec_e_bang(const skode_word_t *self, skode_t *ctx, ands_t *s_in, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s_in);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      {
+        char macro[STRING_BUF_LEN] = "";
+        const char *s = "";
+        if (argc == 0) {
+          s = ands_string(ctx->parse);
+        } else if (skode_extra_copy(x, macro, sizeof(macro)) == 0) {
+          s = macro;
+        }
+        if (s[0] != '\0') {
+          event_program_t program;
+          if (skode_compile_program_ex(s, &program, ctx->vocab) == SKODE_COMPILE_OK) {
+            uint64_t now = SAMPLE_COUNT_GET();
+            int tag = 0;
+            skode_queue_program(&program, voice, now, tag);
+          } else {
+            // Execution of immediate commands in a numbered macro fallback.
+            // Delegate to a helper that safely swaps the parser to avoid re-entrancy 
+            // corruption, while keeping the execution fully within the parent context.
+            extern void skode_consume_macro(skode_t *ctx, const char *line);
+            skode_consume_macro(ctx, s);
+          }
+        }
+      }
+      return 0;
+}
+
+static int word_exec_e_q(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      simple_mutex_lock(&skode_extra_mutex);
+      if (argc) {
+        if (skode_extra_valid(x)) ctx->printf(ctx, "# [%s] e>%d\n", EXTRA_PTR(x), x);
+      } else {
+        for (int i=0; i<STRING_BUF_IDX_MAX; i++) {
+          if (strlen(EXTRA_PTR(i)))
+            ctx->printf(ctx, "# [%s] e>%d\n", EXTRA_PTR(i), i);
+        }
+      }
+      simple_mutex_unlock(&skode_extra_mutex);
+      return 0;
+}
+
+static int word_exec_W_star(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      if (argc > 1 && x_valid && skode_wave_valid(x)) {
+        int wave = x;
+        int param;
+        if (!skode_double_to_int(arg[1], &param)) return 0;
+        double val = 0.0;
+        switch (param) {
+          case 0: // wavetable size
+            val = sw.size[wave];
+            break;
+          case 1: // wavetable rate
+            val = sw.rate[wave];
+            break;
+          case 2: // wavetable size / rate
+            val = (float)sw.size[wave] / sw.rate[wave];
+            break;
+          case 3: // loop start boundary
+            val = sw.loop_start[wave];
+            break;
+          case 4: // loop end boundary
+            val = sw.loop_end[wave];
+            break;
+          default:
+            argc = 0; // hack to do-nothing on unknown parameter
+            break;
+        }
+        if (argc > 2) {
+          int variable;
+          if (skode_double_to_int(arg[2], &variable))
+            ands_set_local(ctx->parse, variable, val);
+        } else if (argc) {
+          ctx->printf(ctx, "# W* %d %d -> %g\n", wave, param, val);
+          ands_arg_clear(s);
+          ands_arg_push(s, val);
+          return 1;
+        }
+      }
+      return 0;
+}
+
+static int word_exec_v_star(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      if (argc) {
+        double val = 0.0;
+        switch (x) {
+          case 0: // wavetable index
+            val = sv.wave_table_index[voice];
+            break;
+          case 1: // amplitide
+            val = sv.user_amp[voice];
+            break;
+          case 2: // freq
+            val = sv.freq[voice];
+            break;
+          default:
+            argc = 0; // hack to do-nothing on unknown parameter
+            break;
+        }
+        if (argc > 1) {
+          int y;
+          if (skode_double_to_int(arg[1], &y))
+            ands_set_local(ctx->parse, y, val);
+        } else if (argc) {
+          ctx->printf(ctx, "# v* %d -> %g\n", x, val);
+          ands_arg_clear(s);
+          ands_arg_push(s, val);
+          return 1;
+        }
+      }
+      return 0;
+}
+
+static int word_exec__star_eq(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      if (argc > 2) {
+        double val = arg[1] * arg[2];
+        ands_set_local(ctx->parse, x, val);
+        ands_arg_clear(s);
+        ands_arg_push(s, val);
+        return 1;
+      }
+      return 0;
+}
+
+static int word_exec__slash_eq(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      if (argc > 2 && arg[2] != 0.0) {
+        double val = arg[1] / arg[2];
+        ands_set_local(ctx->parse, x, val);
+        ands_arg_clear(s);
+        ands_arg_push(s, val);
+        return 1;
+      }
+      return 0;
+}
+
+static int word_exec_a_eq(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      if (argc > 2) {
+        double val = arg[1] + arg[2];
+        ands_set_local(ctx->parse, x, val);
+        ands_arg_clear(s);
+        ands_arg_push(s, val);
+        return 1;
+      }
+      return 0;
+}
+
+static int word_exec_s_eq(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      if (argc > 2) {
+        double val = arg[1] - arg[2];
+        ands_set_local(ctx->parse, x, val);
+        ands_arg_clear(s);
+        ands_arg_push(s, val);
+        return 1;
+      }
+      return 0;
+}
+
+static int word_exec__eq(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  int x = 0;
+  int x_valid = argc > 0 && skode_double_to_int(arg[0], &x);
+  (void)x_valid;
+  (void)voice;
+  (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
+      if (argc > 1) {
+        ands_set_local(ctx->parse, x, arg[1]);
+        ands_arg_clear(s);
+        ands_arg_push(s, arg[1]);
+        return 1;
+      }
+      else if (argc == 1) {
+        double f = ands_get_local(ctx->parse, x);
+        ctx->printf(ctx, "# $%d %g\n", x, f);
+        ands_arg_clear(s);
+        ands_arg_push(s, f);
+        return 1;
+      }
+      else {
+        for (int i=0; i<ANDS_VAR_MAX; i++) {
+          double f = ands_get_local(ctx->parse, i);
+          if (f != 0.0) ctx->printf(ctx, "# $%d %g\n", i, f);
+        }
+      }
+      return 0;
+}
+
+int skode_exec_ksynth_load_name(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  return word_exec__slashks(NULL, ctx, s, (double*)arg, argc);
+}
+int skode_exec_ksynth_load(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  return word_exec__slashk(NULL, ctx, s, (double*)arg, argc);
+}
+int skode_exec_ks(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  return word_exec_ks(NULL, ctx, s, (double*)arg, argc);
+}
+int skode_exec_k_bang(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  return word_exec_k_bang(NULL, ctx, s, (double*)arg, argc);
+}
+int skode_exec_kw(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  return word_exec_kw(NULL, ctx, s, (double*)arg, argc);
+}
+int skode_exec_kw_gt(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  return word_exec_kw_gt(NULL, ctx, s, (double*)arg, argc);
+}
+int skode_exec_k_q(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  return word_exec_k_q(NULL, ctx, s, (double*)arg, argc);
+}
+int skode_exec_k_gtd(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  return word_exec_k_gtd(NULL, ctx, s, (double*)arg, argc);
+}
+int skode_exec_k_gtw(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  return word_exec_k_gtw(NULL, ctx, s, (double*)arg, argc);
+}
+int skode_exec_d_gtk(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  return word_exec_d_gtk(NULL, ctx, s, (double*)arg, argc);
+}
+int skode_exec_w_gtk(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  return word_exec_w_gtk(NULL, ctx, s, (double*)arg, argc);
+}
+int skode_exec_eqd(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  return word_exec__eqd(NULL, ctx, s, (double*)arg, argc);
+}
+int skode_exec_eq(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  return word_exec__eq(NULL, ctx, s, (double*)arg, argc);
+}
+int skode_exec_s_q(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  return word_exec_s_q(NULL, ctx, s, (double*)arg, argc);
+}
+int skode_exec_qm(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  return word_exec__qm(NULL, ctx, s, (double*)arg, argc);
+}
+int skode_exec_slashd(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  return word_exec__slashd(NULL, ctx, s, (double*)arg, argc);
+}
+int skode_exec_slashm(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  return word_exec__slashm(NULL, ctx, s, (double*)arg, argc);
+}
+int skode_exec_slashm_bang(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  return word_exec__slashm_bang(NULL, ctx, s, (double*)arg, argc);
+}
+int skode_exec_lts(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  return word_exec__lts(NULL, ctx, s, (double*)arg, argc);
+}
+int skode_exec_s_gt(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  return word_exec_s_gt(NULL, ctx, s, (double*)arg, argc);
+}
+int skode_exec_s_pct(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  return word_exec_s_pct(NULL, ctx, s, (double*)arg, argc);
+}
+int skode_exec_map_bang(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  return word_exec_map_bang(NULL, ctx, s, (double*)arg, argc);
+}
+int skode_exec_v_star(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  return word_exec_v_star(NULL, ctx, s, (double*)arg, argc);
+}
+int skode_exec_n_gtd(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  return word_exec_n_gtd(NULL, ctx, s, (double*)arg, argc);
+}
+
+void skode_register_words_data(skode_vocab_t *vocab) {
+  (void)vocab;
+  /* All data/ksynth/macro words migrated to .def files in doc/opcodes/ */
+}

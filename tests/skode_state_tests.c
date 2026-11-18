@@ -1,0 +1,4085 @@
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include "ands.h"
+#include "api.h"
+#include "control-events.h"
+#include "midi.h"
+#include "skode.h"
+#include "skode-dict.h"
+#include "seq.h"
+#include "skode-internal.h"
+#include "synth.h"
+#include "synth-state.h"
+#include "miniz_zip.h"
+#ifdef SKRED_TEST_KSYNTH
+#include "vendor/ksynth/ksynth.h"
+#endif
+
+static int failures = 0;
+
+extern int wave_load_string(skode_t *ctx, char *name, int wave_index,
+                            int ch, int normalize);
+extern int wave_load(skode_t *ctx, int file_num, int wave_index,
+                     int ch, int normalize);
+extern int rec_load(skode_t *ctx, int wave_slot, int one_shot, int channel, int verbose);
+extern synth_sample_t sampling;
+
+static void fail(const char *test, const char *msg) {
+  fprintf(stderr, "FAIL %s: %s\n", test, msg);
+  failures++;
+}
+
+static void expect_int(const char *test, int got, int want, const char *label) {
+  if (got != want) {
+    char msg[160];
+    snprintf(msg, sizeof(msg), "%s expected %d, got %d", label, want, got);
+    fail(test, msg);
+  }
+}
+
+static void expect_float(const char *test, float got, float want, float eps, const char *label) {
+  if (fabsf(got - want) > eps) {
+    char msg[160];
+    snprintf(msg, sizeof(msg), "%s expected %.8g, got %.8g", label, want, got);
+    fail(test, msg);
+  }
+}
+
+static void expect_u64(const char *test, uint64_t got, uint64_t want, const char *label) {
+  if (got != want) {
+    char msg[160];
+    snprintf(msg, sizeof(msg), "%s expected %llu, got %llu", label,
+      (unsigned long long)want, (unsigned long long)got);
+    fail(test, msg);
+  }
+}
+
+static void expect_substr(const char *test, const char *haystack,
+                          const char *needle, const char *label) {
+  if (!haystack || !needle || !strstr(haystack, needle)) {
+    char msg[160];
+    snprintf(msg, sizeof(msg), "%s missing [%s]", label, needle ? needle : "");
+    fail(test, msg);
+  }
+}
+
+static skode_t new_ctx(void) {
+  skode_t ctx = SKODE_EMPTY();
+  skode_init(&ctx);
+  return ctx;
+}
+
+static void consume(const char *test, skode_t *ctx, const char *line) {
+  char buf[512];
+  snprintf(buf, sizeof(buf), "%s", line);
+  int r = skode_consume(buf, ctx);
+  if (r != 0) {
+    char msg[160];
+    snprintf(msg, sizeof(msg), "skode_consume returned %d for [%s]", r, line);
+    fail(test, msg);
+  }
+}
+
+static void reset_log(skode_t *ctx) {
+  ctx->log[0] = '\0';
+  ctx->log_len = 0;
+  ctx->log_head = 0;
+  ctx->log_count = 0;
+  ctx->log_dropped = 0;
+  ctx->log_pending[0] = '\0';
+  ctx->log_pending_len = 0;
+}
+
+static void write_u16le(FILE *f, unsigned value) {
+  fputc((int)(value & 0xffu), f);
+  fputc((int)((value >> 8) & 0xffu), f);
+}
+
+static void write_u32le(FILE *f, uint32_t value) {
+  fputc((int)(value & 0xffu), f);
+  fputc((int)((value >> 8) & 0xffu), f);
+  fputc((int)((value >> 16) & 0xffu), f);
+  fputc((int)((value >> 24) & 0xffu), f);
+}
+
+static void write_tag(FILE *f, const char *tag) {
+  fwrite(tag, 1, 4, f);
+}
+
+static int write_smpl_test_wav(const char *path, uint32_t frames,
+                               uint32_t loop_start, uint32_t loop_end,
+                               uint32_t loop_type, uint32_t play_count) {
+  const uint32_t data_bytes = frames * 2;
+  const uint32_t smpl_bytes = 36 + 24;
+  const uint32_t riff_size = 4 + (8 + 16) + (8 + data_bytes) + (8 + smpl_bytes);
+  FILE *f = fopen(path, "wb");
+  if (!f) return -1;
+
+  write_tag(f, "RIFF");
+  write_u32le(f, riff_size);
+  write_tag(f, "WAVE");
+
+  write_tag(f, "fmt ");
+  write_u32le(f, 16);
+  write_u16le(f, 1);
+  write_u16le(f, 1);
+  write_u32le(f, MAIN_SAMPLE_RATE);
+  write_u32le(f, MAIN_SAMPLE_RATE * 2);
+  write_u16le(f, 2);
+  write_u16le(f, 16);
+
+  write_tag(f, "data");
+  write_u32le(f, data_bytes);
+  for (uint32_t i = 0; i < frames; i++) {
+    write_u16le(f, (unsigned)(i * 1000u));
+  }
+
+  write_tag(f, "smpl");
+  write_u32le(f, smpl_bytes);
+  write_u32le(f, 0);
+  write_u32le(f, 0);
+  write_u32le(f, 1000000000u / MAIN_SAMPLE_RATE);
+  write_u32le(f, 69);
+  write_u32le(f, 0);
+  write_u32le(f, 0);
+  write_u32le(f, 0);
+  write_u32le(f, 1);
+  write_u32le(f, 0);
+  write_u32le(f, 0);
+  write_u32le(f, loop_type);
+  write_u32le(f, loop_start);
+  write_u32le(f, loop_end);
+  write_u32le(f, 0);
+  write_u32le(f, play_count);
+
+  if (fclose(f) != 0) return -1;
+  return 0;
+}
+
+static void *read_whole_file(const char *path, size_t *size) {
+  FILE *f = fopen(path, "rb");
+  void *data = NULL;
+  long len;
+  if (size) *size = 0;
+  if (!f) return NULL;
+  if (fseek(f, 0, SEEK_END) != 0) {
+    fclose(f);
+    return NULL;
+  }
+  len = ftell(f);
+  if (len < 0 || fseek(f, 0, SEEK_SET) != 0) {
+    fclose(f);
+    return NULL;
+  }
+  data = malloc((size_t)len);
+  if (!data) {
+    fclose(f);
+    return NULL;
+  }
+  if (fread(data, 1, (size_t)len, f) != (size_t)len) {
+    free(data);
+    data = NULL;
+  } else if (size) {
+    *size = (size_t)len;
+  }
+  fclose(f);
+  return data;
+}
+
+typedef struct {
+  int count;
+  event_t event;
+} event_capture_t;
+
+typedef struct {
+  int count;
+  uint64_t timestamp[8];
+  int tag[8];
+  event_t event[8];
+} repeat_capture_t;
+
+static int capture_event(int unused, uint64_t timestamp, uint64_t id, int tag,
+                         const event_t *event, void *user) {
+  (void)unused;
+  (void)timestamp;
+  (void)id;
+  (void)tag;
+  event_capture_t *capture = user;
+  capture->count++;
+  capture->event = *event;
+  return 0;
+}
+
+static int capture_repeat(int unused, uint64_t timestamp, uint64_t id, int tag,
+                          const event_t *event, void *user) {
+  (void)unused;
+  (void)id;
+  repeat_capture_t *capture = user;
+  if (capture->count < 8) {
+    int n = capture->count;
+    capture->timestamp[n] = timestamp;
+    capture->tag[n] = tag;
+    capture->event[n] = *event;
+  }
+  capture->count++;
+  return 0;
+}
+
+static skode_t *queued_event_ctx;
+static int test_pattern_voice[PATTERNS_MAX];
+static int pattern_callback_count;
+static int foreign_call_count;
+static skred_foreign_call_t foreign_last_call;
+static double foreign_arg[8];
+static double foreign_data[8];
+static char foreign_string[128];
+
+static void execute_queued_event(const event_t *event) {
+  if (skode_execute_event(event, queued_event_ctx) != 0) {
+    fail("opcode events", "queued event execution failed");
+  }
+}
+
+static void execute_pattern_program(int pattern, int step,
+    const event_program_t *program) {
+  if (pattern < 0 || pattern >= PATTERNS_MAX ||
+      skode_execute_program_state(program, &test_pattern_voice[pattern],
+        SAMPLE_COUNT_GET(), -1, pattern, step) != 0) {
+    fail("opcode events", "pattern program execution failed");
+  }
+}
+
+static void count_pattern_program(int pattern, int step,
+    const event_program_t *program) {
+  (void)pattern;
+  (void)step;
+  (void)program;
+  pattern_callback_count++;
+}
+
+static int capture_foreign_call(const skred_foreign_call_t *call, void *user) {
+  (void)user;
+  foreign_call_count++;
+  foreign_last_call = *call;
+  for (int i = 0; i < call->argc && i < 8; i++) foreign_arg[i] = call->arg[i];
+  for (int i = 0; i < call->data_len && i < 8; i++) foreign_data[i] = call->data[i];
+  snprintf(foreign_string, sizeof(foreign_string), "%s",
+           call->string ? call->string : "");
+  foreign_last_call.arg = foreign_arg;
+  foreign_last_call.data = foreign_data;
+  foreign_last_call.string = foreign_string;
+  return 0;
+}
+
+static void ignore_queued_event(const event_t *event) {
+  (void)event;
+}
+
+static void test_voice_core_commands(void) {
+  const char *test = "voice core commands";
+  skode_t ctx = new_ctx();
+  consume(test, &ctx, "v3 w1 f220 a-6 p0.5 m1 b1 BC3");
+
+  expect_int(test, ctx.voice, 3, "ctx.voice");
+  expect_int(test, sv.wave_table_index[3], 1, "wave_table_index");
+  expect_float(test, sv.freq[3], 220.0f, 0.0001f, "freq");
+  expect_float(test, sv.user_amp[3], -6.0f, 0.0001f, "user_amp");
+  expect_float(test, sv.pan[3], 0.5f, 0.0001f, "pan");
+  expect_float(test, sv.pan_left[3], 0.25f, 0.0001f, "pan_left");
+  expect_float(test, sv.pan_right[3], 0.75f, 0.0001f, "pan_right");
+  expect_int(test, sv.disconnect[3], 1, "disconnect");
+  expect_int(test, sv.direction[3], 1, "direction");
+  expect_int(test, sv.loop_enabled[3], 1, "loop_enabled");
+  expect_int(test, sv.loop_count[3], 3, "loop_count");
+}
+
+static void test_invalid_voice_does_not_move_selection(void) {
+  const char *test = "invalid voice";
+  skode_t ctx = new_ctx();
+  consume(test, &ctx, "v2");
+  consume(test, &ctx, "v999");
+  expect_int(test, ctx.voice, 2, "ctx.voice");
+}
+
+static void test_text_and_show_logging(void) {
+  const char *test = "text and logging";
+  skode_t ctx = new_ctx();
+  ctx.log_enable = 1;
+  consume(test, &ctx, "v1 [lead beep] vt ; [scratch text] ?s");
+
+  expect_int(test, ctx.voice, 1, "ctx.voice");
+  if (strncmp(sv.text[1], "lead beep", TEXT_MAX) != 0) {
+    fail(test, "voice text mismatch");
+  }
+  if (strstr(ctx.log, "# [scratch text]") == NULL) {
+    fail(test, "expected ?s output in log");
+  }
+}
+
+static void test_data_array_logging(void) {
+  const char *test = "data array logging";
+  skode_t ctx = new_ctx();
+  ctx.log_enable = 1;
+  consume(test, &ctx, "(1 2.5 -3) ?d");
+
+  expect_int(test, ands_data_len(ctx.parse), 3, "data length");
+  expect_float(test, (float)ands_data(ctx.parse)[0], 1.0f, 0.0001f, "data[0]");
+  expect_float(test, (float)ands_data(ctx.parse)[1], 2.5f, 0.0001f, "data[1]");
+  expect_float(test, (float)ands_data(ctx.parse)[2], -3.0f, 0.0001f, "data[2]");
+  if (strstr(ctx.log, "( 1 2.5 -3 )") == NULL) {
+    fail(test, "expected ?d output in log");
+  }
+}
+
+static void test_record_to_data(void) {
+  const char *test = "record to data";
+  static float recording_data[8] = {
+    1.0f, 3.0f,
+    10.0f, 14.0f,
+    -4.0f, 2.0f,
+    8.0f, 12.0f
+  };
+  skode_t ctx = new_ctx();
+  extern synth_sample_t sampling;
+
+  sampling.where = recording_data;
+  sampling.len = 4;
+  sampling.capacity = 4;
+  sampling.channels = 2;
+  sampling.offset = 1;
+  sampling.trim = 1;
+  atomic_store_int(&sampling.state, SAMPLE_STATE_COMPLETE);
+
+  consume(test, &ctx, "r>d");
+  expect_int(test, ands_data_len(ctx.parse), 2, "downmix data length");
+  expect_float(test, (float)ands_data(ctx.parse)[0], 12.0f, 0.0001f,
+               "downmix first frame");
+  expect_float(test, (float)ands_data(ctx.parse)[1], -1.0f, 0.0001f,
+               "downmix second frame");
+
+  consume(test, &ctx, "r>d0");
+  expect_float(test, (float)ands_data(ctx.parse)[0], 10.0f, 0.0001f,
+               "left first frame");
+  expect_float(test, (float)ands_data(ctx.parse)[1], -4.0f, 0.0001f,
+               "left second frame");
+
+  consume(test, &ctx, "r>d1");
+  expect_float(test, (float)ands_data(ctx.parse)[0], 14.0f, 0.0001f,
+               "right first frame");
+  expect_float(test, (float)ands_data(ctx.parse)[1], 2.0f, 0.0001f,
+               "right second frame");
+
+  ctx.log_enable = 1;
+  reset_log(&ctx);
+  consume(test, &ctx, "r>d2");
+  expect_substr(test, ctx.log, "# recording channel must be -1..1",
+                "invalid channel diagnostic");
+
+  sampling.where = NULL;
+  sampling.len = 0;
+  sampling.capacity = 0;
+  sampling.channels = 1;
+  sampling.offset = 0;
+  sampling.trim = 0;
+  atomic_store_int(&sampling.state, SAMPLE_STATE_IDLE);
+}
+
+static void test_command_help(void) {
+  const char *test = "command help";
+  skode_t ctx = new_ctx();
+  ctx.log_enable = 1;
+
+  consume(test, &ctx, "/h");
+  expect_substr(test, ctx.log, "# help categories", "help categories");
+  expect_substr(test, ctx.log, "filter", "help filter category");
+
+  reset_log(&ctx);
+  consume(test, &ctx, "[filter] /h");
+  expect_substr(test, ctx.log, "# help filter", "string category help");
+  expect_substr(test, ctx.log, "wavefold", "string category command");
+
+  reset_log(&ctx);
+  consume(test, &ctx, "[wavefold] /h");
+  expect_substr(test, ctx.log, "# help wavefold [filter]", "command help");
+  expect_substr(test, ctx.log, "set voice wavefold / filter drive amount", "command summary");
+
+  reset_log(&ctx);
+  consume(test, &ctx, "[wf] /h");
+  expect_substr(test, ctx.log, "# help wf [filter]", "alias help");
+  expect_substr(test, ctx.log, "set voice wavefold / filter drive amount", "alias summary");
+
+  reset_log(&ctx);
+  consume(test, &ctx, "[env] /h");
+  expect_substr(test, ctx.log, "# help env", "env help category");
+  expect_substr(test, ctx.log, "envelope", "env envelope command");
+  expect_substr(test, ctx.log, "t", "env t command");
+
+  reset_log(&ctx);
+  consume(test, &ctx, "[wait] /h");
+  expect_substr(test, ctx.log, "# help wait [sys]", "wait command help");
+  expect_substr(test, ctx.log, "sleep for ms", "wait summary");
+
+  reset_log(&ctx);
+  consume(test, &ctx, "[/ao] /h");
+  expect_substr(test, ctx.log, "# help /ao [sys]", "audio output command help");
+  expect_substr(test, ctx.log, "select audio output device", "audio output summary");
+
+  reset_log(&ctx);
+  consume(test, &ctx, "[w] /h");
+  expect_substr(test, ctx.log, "# help w [osc]", "w command help");
+  expect_substr(test, ctx.log, "3 clauses", "w clauses count");
+  expect_substr(test, ctx.log, "clause 1", "w clause 1");
+  if (strstr(ctx.log, "other matches") != NULL) {
+    fail(test, "unwanted other matches found when exact match exists");
+  }
+  if (strstr(ctx.log, ".def:0") != NULL) {
+    fail(test, "unwanted :0 line number found in doc output");
+  }
+
+  reset_log(&ctx);
+  consume(test, &ctx, "[s] /h");
+  expect_substr(test, ctx.log, "# help s [mod]", "s command help");
+  expect_substr(test, ctx.log, "parameter smoothing", "s summary");
+  if (strstr(ctx.log, "other matches") != NULL) {
+    fail(test, "unwanted other matches found for [s]");
+  }
+
+  reset_log(&ctx);
+  consume(test, &ctx, "[trim] /h");
+  expect_substr(test, ctx.log, "# help [trim]", "trim matches header");
+  expect_substr(test, ctx.log, "rec_auto_trim", "trim matches command");
+
+#ifdef SKRED_TEST_FM
+  reset_log(&ctx);
+  consume(test, &ctx, "[FB] /h");
+  expect_substr(test, ctx.log, "# help FB [mod]", "FM feedback command help");
+  expect_substr(test, ctx.log, "oscillator frequency feedback amount", "FM feedback summary");
+#endif
+}
+
+static void test_named_wave_destination(void) {
+  const char *test = "named wave destination";
+  skode_t ctx = new_ctx();
+  char command[512];
+  snprintf(command, sizeof(command), "[%s/wav/11.wav] /ws200",
+           SKRED_TEST_SOURCE_DIR);
+  consume(test, &ctx, command);
+
+  if (!sw.data[200]) fail(test, "wave 200 was not populated");
+  if (sw.size[200] <= 0) fail(test, "wave 200 has no samples");
+  if (sw.name[200][0] == '\0') fail(test, "wave 200 label is empty");
+  expect_int(test, sw.readonly[200], 0, "wave 200 readonly");
+}
+
+static void test_midi_and_links(void) {
+  const char *test = "midi and links";
+  skode_t ctx = new_ctx();
+  consume(test, &ctx, "v0 G1 H2 L0.25 N12 5 n60");
+
+  expect_int(test, (int)sv.link_midi[0][0], 1, "link_midi_0");
+  expect_int(test, (int)sv.link_velo[0][0], 2, "link_velo_0");
+  expect_float(test, sv.link_trig[0], 0.25f, 0.0001f, "link_trig");
+  expect_u64(test, sv.link_trig_samp[0], MAIN_SAMPLE_RATE / 4, "link_trig_samp");
+  expect_float(test, sv.midi_transpose[0], 12.0f, 0.0001f, "midi_transpose");
+  expect_float(test, sv.midi_cents[0], 5.0f, 0.0001f, "midi_cents");
+  expect_float(test, sv.last_midi_note[0], 60.0f, 0.0001f, "last_midi_note voice 0");
+  expect_float(test, sv.last_midi_note[1], 60.0f, 0.0001f, "last_midi_note linked voice");
+}
+
+static void test_trigger_delay_lifecycle(void) {
+  const char *test = "trigger delay lifecycle";
+  skode_t ctx = new_ctx();
+
+  consume(test, &ctx, "v0 L0.5");
+  voice_copy(0, 1);
+  expect_float(test, sv.link_trig[1], 0.5f, 0.0001f, "copied link_trig");
+  expect_u64(test, sv.link_trig_samp[1], MAIN_SAMPLE_RATE / 2, "copied link_trig_samp");
+
+  wave_reset(0);
+  expect_float(test, sv.link_trig[0], -1.0f, 0.0001f, "reset link_trig");
+  expect_u64(test, sv.link_trig_samp[0], 0, "reset link_trig_samp");
+
+  consume(test, &ctx, "v1 L-1");
+  expect_float(test, sv.link_trig[1], -1.0f, 0.0001f, "disabled link_trig");
+  expect_u64(test, sv.link_trig_samp[1], 0, "disabled link_trig_samp");
+
+  consume(test, &ctx, "v0 H999 l1");
+}
+
+static void test_envelope_configuration_is_deferred(void) {
+  const char *test = "deferred envelope configuration";
+  if (!skode_opcode_supported(SKODE_OP_ENVELOPE) ||
+      !skode_opcode_supported(SKODE_OP_FILTER_ENVELOPE)) {
+    return;
+  }
+
+  skode_t ctx = new_ctx();
+  char before[2048];
+  char after[2048];
+  uint64_t saved_sample_count = SAMPLE_COUNT_GET();
+
+  consume(test, &ctx, "v0 t.1,.2,.3,.4 kt.5,.6,.7,.8 l.75");
+  voice_format(0, before, sizeof(before), 1);
+  if (strstr(before, "amp_env_active:1") == NULL ||
+      strstr(before, "amp_env_runtime:4410,8820,0.3,17640") == NULL ||
+      strstr(before, "filter_env_active:1") == NULL ||
+      strstr(before, "filter_env_runtime:22050,26460,0.7,35280") == NULL) {
+    fail(test, "initial runtime envelope snapshot mismatch");
+  }
+
+  consume(test, &ctx, "t1,2,.9,4 kt0,0,1,0");
+  voice_format(0, after, sizeof(after), 1);
+  if (strstr(after, "t1,2,0.9,4") == NULL ||
+      strstr(after, "kt 0 0 1 0") == NULL ||
+      strstr(after, "amp_env_active:1") == NULL ||
+      strstr(after, "amp_env_runtime:4410,8820,0.3,17640") == NULL ||
+      strstr(after, "filter_env_active:1") == NULL ||
+      strstr(after, "filter_env_runtime:22050,26460,0.7,35280") == NULL) {
+    fail(test, "configuration disturbed active envelope");
+  }
+
+  SAMPLE_COUNT_PUT(saved_sample_count + 10);
+  consume(test, &ctx, "l0");
+  voice_format(0, after, sizeof(after), 1);
+  char expected_release[80];
+  snprintf(expected_release, sizeof(expected_release), "filter_env_release:%llu",
+           (unsigned long long)(saved_sample_count + 10));
+  if (strstr(after, expected_release) == NULL) {
+    fail(test, "disabled filter envelope did not receive release");
+  }
+
+  consume(test, &ctx, "l1");
+  voice_format(0, after, sizeof(after), 1);
+  if (strstr(after, "amp_env_runtime:44100,88200,0.9,176400") == NULL) {
+    fail(test, "new amplitude envelope was not applied on retrigger");
+  }
+
+  SAMPLE_COUNT_PUT(saved_sample_count);
+  wave_reset(0);
+}
+
+static void test_envelope_future_timestamps(void) {
+  const char *test = "envelope future timestamps";
+
+  envelope_t envelope;
+  envelope_init_e(&envelope, .5f, .5f, 0.0f, .5f);
+  envelope.is_active = 1;
+  envelope.velocity = 1.0f;
+  envelope.sample_start = 1024;
+  envelope.sample_release = UINT64_MAX;
+
+  expect_float(test, envelope_step_e(&envelope, 1000), 0.0f, 0.0f,
+               "future trigger remains at attack start");
+
+  envelope_init_e(&envelope, 0.0f, 0.0f, 1.0f, .5f);
+  envelope.is_active = 1;
+  envelope.velocity = 1.0f;
+  envelope.current_amplitude = 0.75f;
+  envelope.amplitude_at_release = 0.75f;
+  envelope.sample_start = 0;
+  envelope.sample_release = 1024;
+  expect_float(test, envelope_step_e(&envelope, 1000), 1.0f, 0.0001f,
+               "future release remains at release start");
+}
+
+static void configure_loop_test_voice(int voice, int direction) {
+  static float table[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+  wave_reset(voice);
+  sv.table[voice] = table;
+  sv.table_size[voice] = 8;
+  sv.table_rate[voice] = MAIN_SAMPLE_RATE;
+  sv.table_size_rate[voice] = 8.0f / MAIN_SAMPLE_RATE;
+  sv.wave_range_start[voice] = 0;
+  sv.wave_range_end[voice] = 8;
+  sv.wave_range_start_f[voice] = 0.0f;
+  sv.wave_range_end_f[voice] = 8.0f;
+  sv.wave_range_override[voice] = 0;
+  sv.loop_start[voice] = 2;
+  sv.loop_end[voice] = 5;
+  sv.loop_start_f[voice] = 2.0f;
+  sv.loop_end_f[voice] = 5.0f;
+  sv.loop_length[voice] = 3;
+  sv.loop_valid[voice] = 1;
+  sv.one_shot[voice] = 1;
+  sv.direction[voice] = direction;
+  sv.interpolate[voice] = 0;
+  sv.finished[voice] = 1;
+}
+
+static void test_cycle_playback_classification(void) {
+  const char *test = "cycle playback classification";
+  const int fast_voice = 0;
+  const int general_voice = 1;
+
+  wave_reset(fast_voice);
+  wave_reset(general_voice);
+  expect_int(test, sv.playback_class[fast_voice],
+             OSC_PLAYBACK_CYCLE_SIMPLE, "default cycle class");
+
+  wave_dir(fast_voice, 1);
+  expect_int(test, sv.playback_class[fast_voice], OSC_PLAYBACK_GENERAL,
+             "backward direction class");
+  wave_dir(fast_voice, 0);
+  expect_int(test, sv.playback_class[fast_voice],
+             OSC_PLAYBACK_CYCLE_SIMPLE, "forward direction class");
+
+  voice_wave_range_set(fast_voice, 1, sv.table_size[fast_voice]);
+  expect_int(test, sv.playback_class[fast_voice], OSC_PLAYBACK_GENERAL,
+             "partial range class");
+  voice_wave_range_reset(fast_voice);
+  expect_int(test, sv.playback_class[fast_voice],
+             OSC_PLAYBACK_CYCLE_SIMPLE, "full range class");
+
+  wave_loop(fast_voice, 1);
+  expect_int(test, sv.playback_class[fast_voice], OSC_PLAYBACK_GENERAL,
+             "active loop class");
+  wave_loop(fast_voice, 0);
+  expect_int(test, sv.playback_class[fast_voice],
+             OSC_PLAYBACK_CYCLE_SIMPLE, "disabled loop class");
+
+  sv.interpolate[fast_voice] = 1;
+  sv.interpolate[general_voice] = 1;
+  const float span = (float)sv.table_size[fast_voice];
+  const float increments[] = {
+    1.25f, span + 1.5f, -2.75f, span * 2.0f + 1808.125f
+  };
+  for (size_t i = 0; i < sizeof(increments) / sizeof(increments[0]); i++) {
+    sv.phase[fast_voice] = (double)span - 1.25;
+    sv.phase[general_voice] = (double)span - 1.25;
+    sv.finished[fast_voice] = 0;
+    sv.finished[general_voice] = 0;
+    osc_reclassify(&skred_global_engine,fast_voice);
+    sv.playback_class[general_voice] = OSC_PLAYBACK_GENERAL;
+    float fast = osc_next(&skred_global_engine,fast_voice, increments[i]);
+    float general = osc_next(&skred_global_engine,general_voice, increments[i]);
+    expect_float(test, fast, general, 0.0001f, "sample equivalence");
+    expect_float(test, (float)sv.phase[fast_voice],
+                 (float)sv.phase[general_voice], 0.0001f,
+                 "phase equivalence");
+  }
+}
+
+static void test_bounded_one_shot_loops(void) {
+  const char *test = "bounded one-shot loops";
+  skode_t ctx = new_ctx();
+  const int voice = 5;
+  event_program_t program;
+  float output[AUDIO_CHANNELS] = {0};
+  skred_control_event_t events[4];
+
+  expect_int(test, skode_compile_program("v5 BC4", &program),
+             SKODE_COMPILE_OK, "compile BC program");
+  expect_int(test, skode_execute_program(&program, 0, SAMPLE_COUNT_GET(), 0),
+             0, "execute BC program");
+  expect_int(test, sv.loop_count[voice], 4, "scheduled BC count");
+
+  configure_loop_test_voice(voice, 0);
+  consume(test, &ctx, "v5 BC2 l1");
+  expect_int(test, sv.loop_enabled[voice], 1, "BC enables looping");
+  expect_int(test, sv.loop_count[voice], 2, "configured loop count");
+  expect_int(test, sv.loop_remaining[voice], 2, "triggered loop count");
+  consume(test, &ctx, "BC0");
+  expect_int(test, sv.loop_count[voice], 0, "updated next loop count");
+  expect_int(test, sv.loop_bounded[voice], 1, "active bounded snapshot");
+
+  for (int i = 0; i < 5; i++) osc_next(&skred_global_engine,voice, 1.0f);
+  expect_float(test, sv.phase[voice], 2.0f, 0.0001f, "first wrap phase");
+  expect_int(test, sv.loop_remaining[voice], 1, "first wrap remaining");
+
+  for (int i = 0; i < 3; i++) osc_next(&skred_global_engine,voice, 1.0f);
+  expect_float(test, sv.phase[voice], 2.0f, 0.0001f, "second wrap phase");
+  expect_int(test, sv.loop_remaining[voice], 0, "second wrap remaining");
+
+  for (int i = 0; i < 3; i++) osc_next(&skred_global_engine,voice, 1.0f);
+  expect_float(test, sv.phase[voice], 5.0f, 0.0001f, "loop exit phase");
+  expect_int(test, sv.loop_active[voice], 0, "loop exhausted");
+  expect_int(test, sv.loop_ended[voice], 1, "loop exhaustion event");
+  expect_int(test, sv.finished[voice], 0, "tail remains active");
+  expect_int(test, sv.loop_release_tail[voice], 1,
+             "bounded loop exits into sample tail");
+
+  osc_next(&skred_global_engine,voice, 1.0f);
+  osc_next(&skred_global_engine,voice, 1.0f);
+  osc_next(&skred_global_engine,voice, 1.0f);
+  expect_int(test, sv.finished[voice], 1, "tail completion");
+
+  consume(test, &ctx, "BC0 l1");
+  sv.phase[voice] = 4.0f;
+  consume(test, &ctx, "l0");
+  expect_int(test, sv.loop_stop_requested[voice], 1,
+             "unbounded release stop request");
+  expect_u64(test, sv.amp_envelope[voice].sample_release, UINT64_MAX,
+             "one-shot loop release keeps amp envelope held");
+  osc_next(&skred_global_engine,voice, 1.0f);
+  expect_int(test, sv.loop_active[voice], 0, "unbounded release loop exit");
+  expect_float(test, sv.phase[voice], 5.0f, 0.0001f,
+               "unbounded release exit phase");
+  expect_int(test, sv.finished[voice], 0,
+             "unbounded release tail remains active");
+  expect_float(test, amp_envelope_step(voice, SAMPLE_COUNT_GET()), 1.0f,
+               0.0001f, "unbounded release tail remains audible");
+  expect_u64(test, sv.amp_envelope[voice].sample_release, UINT64_MAX,
+             "loop exit keeps amp envelope held for tail");
+
+  configure_loop_test_voice(voice, 1);
+  consume(test, &ctx, "BC0 l1");
+  sv.phase[voice] = 2.0f;
+  consume(test, &ctx, "l0");
+  expect_int(test, sv.loop_stop_requested[voice], 1,
+             "backward unbounded release stop request");
+  osc_next(&skred_global_engine,voice, 1.0f);
+  expect_int(test, sv.loop_active[voice], 0,
+             "backward unbounded release loop exit");
+  expect_float(test, sv.phase[voice], 1.0f, 0.0001f,
+               "backward unbounded release exit phase");
+
+  configure_loop_test_voice(voice, 0);
+  consume(test, &ctx, "BC1 l1");
+  sv.phase[voice] = 4.0f;
+  consume(test, &ctx, "l0");
+  expect_int(test, sv.loop_stop_requested[voice], 1,
+             "bounded release stop request");
+  osc_next(&skred_global_engine,voice, 1.0f);
+  expect_int(test, sv.loop_active[voice], 0, "bounded release loop exit");
+  expect_float(test, sv.phase[voice], 5.0f, 0.0001f,
+               "bounded release exit phase");
+
+  consume(test, &ctx, "BC1 l1");
+  sv.phase[voice] = 4.0f;
+  osc_next(&skred_global_engine,voice, 1.0f);
+  expect_int(test, sv.loop_remaining[voice], 0,
+             "bounded toggle setup remaining");
+  consume(test, &ctx, "BC0 B0 B1");
+  expect_int(test, sv.loop_bounded[voice], 0,
+             "B1 refreshes unbounded loop snapshot");
+  sv.phase[voice] = 4.0f;
+  osc_next(&skred_global_engine,voice, 1.0f);
+  expect_int(test, sv.loop_active[voice], 1,
+             "B1 unbounded loop stays active");
+  expect_float(test, sv.phase[voice], 2.0f, 0.0001f,
+               "B1 unbounded loop wraps");
+
+  configure_loop_test_voice(voice, 1);
+  consume(test, &ctx, "BC1 l1");
+  sv.phase[voice] = 2.0f;
+  osc_next(&skred_global_engine,voice, 1.0f);
+  expect_float(test, sv.phase[voice], 4.0f, 0.0001f,
+               "backward wrap phase");
+  expect_int(test, sv.loop_remaining[voice], 0, "backward wrap remaining");
+  sv.phase[voice] = 2.0f;
+  osc_next(&skred_global_engine,voice, 1.0f);
+  expect_float(test, sv.phase[voice], 1.0f, 0.0001f,
+               "backward exit phase");
+  expect_int(test, sv.loop_active[voice], 0, "backward loop exhausted");
+
+  configure_loop_test_voice(voice, 0);
+  consume(test, &ctx, "v5 a0 vc1 BC1 l1");
+  expect_int(test, skred_control_event_clear(), 1,
+             "clear trigger before loop exhaustion event");
+  sv.phase[voice] = 4.0f;
+  sv.phase_inc[voice] = 1.0f;
+  sv.loop_remaining[voice] = 0;
+  synth(&skred_global_engine, output, NULL, 1, AUDIO_CHANNELS, NULL);
+  expect_int(test, skred_control_event_poll(events, 4), 1,
+             "loop exhaustion release event count");
+  expect_int(test, (int)events[0].type, SKRED_CONTROL_EVENT_VOICE_RELEASE,
+             "loop exhaustion release event type");
+  expect_int(test, events[0].voice, voice,
+             "loop exhaustion release event voice");
+
+  configure_loop_test_voice(voice, 0);
+  consume(test, &ctx, "v5 a0 vc1 BC0 l1");
+  expect_int(test, skred_control_event_clear(), 1,
+             "clear trigger before l0 release event");
+  sv.phase[voice] = 4.0f;
+  sv.phase_inc[voice] = 1.0f;
+  consume(test, &ctx, "l0");
+  expect_int(test, skred_control_event_poll(events, 4), 1,
+             "l0 immediate release event count");
+  expect_int(test, (int)events[0].type, SKRED_CONTROL_EVENT_VOICE_RELEASE,
+             "l0 immediate release event type");
+  synth(&skred_global_engine, output, NULL, 1, AUDIO_CHANNELS, NULL);
+  expect_int(test, skred_control_event_poll(events, 4), 0,
+             "l0 boundary release event is not duplicated");
+
+  configure_loop_test_voice(voice, 0);
+  consume(test, &ctx, "BC1 l1");
+  osc_next(&skred_global_engine,voice, 10.0f);
+  expect_float(test, sv.phase[voice], 7.0f, 0.0001f,
+               "multi-boundary exit phase");
+  expect_int(test, sv.loop_remaining[voice], 0,
+             "multi-boundary remaining");
+  expect_int(test, sv.loop_active[voice], 0, "multi-boundary loop exhausted");
+
+  configure_loop_test_voice(voice, 0);
+  consume(test, &ctx, "b2 BC0 l1");
+  sv.phase[voice] = 4.0f;
+  osc_next(&skred_global_engine,voice, 1.0f);
+  expect_float(test, sv.phase[voice], 5.0f, 0.0001f,
+               "ping-pong forward boundary phase");
+  expect_int(test, sv.pingpong_reverse[voice], 1,
+             "ping-pong reverses at loop end");
+  osc_next(&skred_global_engine,voice, 1.0f);
+  expect_float(test, sv.phase[voice], 4.0f, 0.0001f,
+               "ping-pong backward phase");
+  sv.phase[voice] = 2.0f;
+  osc_next(&skred_global_engine,voice, 1.0f);
+  expect_float(test, sv.phase[voice], 3.0f, 0.0001f,
+               "ping-pong reverses at loop start");
+  expect_int(test, sv.pingpong_reverse[voice], 0,
+             "ping-pong forward after loop start");
+
+  configure_loop_test_voice(voice, 0);
+  consume(test, &ctx, "b2 BC2 l1");
+  sv.phase[voice] = 4.0f;
+  osc_next(&skred_global_engine,voice, 1.0f);
+  expect_int(test, sv.loop_remaining[voice], 1,
+             "ping-pong first traversal remaining");
+  sv.phase[voice] = 2.0f;
+  osc_next(&skred_global_engine,voice, 1.0f);
+  expect_int(test, sv.loop_remaining[voice], 0,
+             "ping-pong second traversal remaining");
+  sv.phase[voice] = 4.0f;
+  osc_next(&skred_global_engine,voice, 1.0f);
+  expect_int(test, sv.loop_active[voice], 0,
+             "ping-pong third traversal exits loop");
+  expect_int(test, sv.loop_ended[voice], 1,
+             "ping-pong bounded loop release event");
+
+  wave_loop_count(voice, 3);
+  voice_copy(voice, 4);
+  expect_int(test, sv.loop_count[4], 3, "copied loop count");
+  configure_loop_test_voice(voice, 0);
+  consume(test, &ctx, "v5 BC2 B0");
+  voice_copy(voice, 4);
+  expect_int(test, sv.loop_enabled[4], 0,
+             "copy preserves disabled one-shot loop");
+  expect_int(test, sv.loop_active[4], 0,
+             "copy preserves inactive one-shot loop");
+  expect_int(test, sv.loop_count[4], 2,
+             "copy preserves next bounded loop count");
+  wave_reset(4);
+  expect_int(test, sv.loop_count[4], 0, "reset loop count");
+
+  wave_reset(voice);
+}
+
+static void test_wave_loop_points(void) {
+  const char *test = "wave loop points";
+  static float wave_data[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+  char formatted[512];
+  skode_t ctx = new_ctx();
+  const int wave = 300;
+  const int voice = 6;
+
+  sw.data[wave] = wave_data;
+  sw.size[wave] = 10;
+  sw.rate[wave] = MAIN_SAMPLE_RATE;
+  sw.one_shot[wave] = 1;
+  sw.loop_enabled[wave] = 1;
+  sw.loop_start[wave] = 0;
+  sw.loop_end[wave] = 10;
+  sw.readonly[wave] = 0;
+  sw.is_heap[wave] = 0;
+
+  consume(test, &ctx, "v6 w300");
+  expect_int(test, sv.loop_start[voice], 0, "initial voice loop start");
+  expect_int(test, sv.loop_end[voice], 10, "initial voice loop end");
+  expect_int(test, sv.loop_override[voice], 0, "initial voice loop override");
+
+  consume(test, &ctx, "WL300,3,8");
+  expect_int(test, sw.loop_start[wave], 3, "wave loop start");
+  expect_int(test, sw.loop_end[wave], 8, "wave loop end");
+  expect_int(test, sv.loop_start[voice], 3, "voice loop start updated");
+  expect_int(test, sv.loop_end[voice], 8, "voice loop end updated");
+  expect_int(test, sv.loop_valid[voice], 1, "voice loop valid");
+  expect_int(test, sv.loop_length[voice], 5, "voice loop length");
+
+  consume(test, &ctx, "W*300,3");
+  expect_float(test, (float)ands_arg(ctx.parse)[0], 3.0f, 0.0001f,
+               "W* loop start");
+  consume(test, &ctx, "W*300,4");
+  expect_float(test, (float)ands_arg(ctx.parse)[0], 8.0f, 0.0001f,
+               "W* loop end");
+
+  consume(test, &ctx, "WL300,8,3");
+  expect_int(test, sw.loop_start[wave], 3, "invalid WL keeps start");
+  expect_int(test, sw.loop_end[wave], 8, "invalid WL keeps end");
+
+  ctx.log_enable = 1;
+  ctx.log[0] = '\0';
+  ctx.log_len = 0;
+  consume(test, &ctx, "GS1");
+  expect_substr(test, ctx.log, "WL300,3,8",
+                "GS1 includes wave loop points");
+  ctx.log_enable = 0;
+
+  ctx.log_enable = 1;
+  ctx.log[0] = '\0';
+  ctx.log_len = 0;
+  consume(test, &ctx, "W300,8,2");
+  expect_substr(test, ctx.log, "mode one-shot",
+                "wave display includes playback mode");
+  expect_substr(test, ctx.log, "loop 3..8 |5|",
+                "wave display includes loop points");
+  expect_substr(test, ctx.log, "loop [3..8)",
+                "wave display includes loop marker legend");
+  expect_substr(test, ctx.log, "baseline",
+                "wave display includes baseline duration");
+  ctx.log_enable = 0;
+
+  extern synth_sample_t sampling;
+  static float rec_data[10] = {0, 0, 1, 2, 3, 4, 5, 0, 0, 0};
+  sampling.where = rec_data;
+  sampling.len = 10;
+  sampling.capacity = 10;
+  sampling.channels = 1;
+  sampling.offset = 2;
+  sampling.trim = 3;
+  atomic_store_int(&sampling.state, SAMPLE_STATE_COMPLETE);
+  ctx.log_enable = 1;
+  ctx.log[0] = '\0';
+  ctx.log_len = 0;
+  consume(test, &ctx, "W-,8,2");
+  expect_substr(test, ctx.log, "# found start 2 end 7 |5|",
+                "record display includes found start/end");
+  expect_substr(test, ctx.log, "+offset 2 -trim 3 = |5|",
+                "record display keeps offset/trim summary");
+  ctx.log_enable = 0;
+  sampling.where = NULL;
+  sampling.len = 0;
+  sampling.capacity = 0;
+  sampling.offset = 0;
+  sampling.trim = 0;
+
+  consume(test, &ctx, "VL2,7");
+  expect_int(test, sv.loop_start[voice], 2, "voice loop override start");
+  expect_int(test, sv.loop_end[voice], 7, "voice loop override end");
+  expect_int(test, sv.loop_override[voice], 1, "voice loop override enabled");
+
+  ctx.log_enable = 1;
+  ctx.log[0] = '\0';
+  ctx.log_len = 0;
+  consume(test, &ctx, "VW8,2");
+  expect_substr(test, ctx.log, "voice 6 wave 300",
+                "VW shows current voice and wave");
+  expect_substr(test, ctx.log, "loop [2..7)",
+                "VW uses voice loop override markers");
+  ctx.log_enable = 0;
+
+  consume(test, &ctx, "B1 BC0 l1");
+  expect_int(test, sv.loop_active[voice], 1, "VL trigger loop active");
+  for (int i = 0; i < 7; i++) osc_next(&skred_global_engine,voice, 1.0f);
+  expect_float(test, sv.phase[voice], 2.0f, 0.0001f,
+               "VL affects l1 loop wrap");
+  consume(test, &ctx, "l0");
+  for (int i = 0; i < 5; i++) osc_next(&skred_global_engine,voice, 1.0f);
+  expect_float(test, sv.phase[voice], 7.0f, 0.0001f,
+               "VL release exits at override end");
+  expect_int(test, sv.loop_active[voice], 0,
+             "VL release clears active loop");
+  sv.finished[voice] = 1;
+  sv.loop_active[voice] = 0;
+  sv.loop_stop_requested[voice] = 0;
+  voice_format(voice, formatted, sizeof(formatted), 0);
+  if (strstr(formatted, "VL2,7") == NULL)
+    fail(test, "voice loop override missing from voice format");
+
+  consume(test, &ctx, "VS2,8");
+  expect_int(test, sv.wave_range_start[voice], 2, "voice range override start");
+  expect_int(test, sv.wave_range_end[voice], 8, "voice range override end");
+  expect_int(test, sv.wave_range_override[voice], 1, "voice range override enabled");
+  voice_format(voice, formatted, sizeof(formatted), 0);
+  if (strstr(formatted, "VS2,8") == NULL)
+    fail(test, "voice range override missing from voice format");
+
+  consume(test, &ctx, "WL300,4,9");
+  expect_int(test, sw.loop_start[wave], 4, "updated wave loop start");
+  expect_int(test, sw.loop_end[wave], 9, "updated wave loop end");
+  expect_int(test, sv.loop_start[voice], 2, "WL preserves override start");
+  expect_int(test, sv.loop_end[voice], 7, "WL preserves override end");
+
+  voice_copy(voice, 7);
+  expect_int(test, sv.wave_range_start[7], 2, "copy preserves range start");
+  expect_int(test, sv.wave_range_end[7], 8, "copy preserves range end");
+  expect_int(test, sv.wave_range_override[7], 1, "copy preserves range flag");
+  expect_int(test, sv.loop_start[7], 2, "copy preserves override start");
+  expect_int(test, sv.loop_end[7], 7, "copy preserves override end");
+  expect_int(test, sv.loop_override[7], 1, "copy preserves override flag");
+
+  consume(test, &ctx, "VL");
+  expect_int(test, sv.loop_start[voice], 2, "VL reset falls back to range start");
+  expect_int(test, sv.loop_end[voice], 8, "VL reset falls back to range end");
+  expect_int(test, sv.loop_override[voice], 0, "VL reset override flag");
+
+  consume(test, &ctx, "VS");
+  expect_int(test, sv.wave_range_start[voice], 0, "VS reset start");
+  expect_int(test, sv.wave_range_end[voice], 10, "VS reset end");
+  expect_int(test, sv.wave_range_override[voice], 0, "VS reset override flag");
+  consume(test, &ctx, "VL");
+  expect_int(test, sv.loop_start[voice], 4, "VL reset wave default start");
+  expect_int(test, sv.loop_end[voice], 9, "VL reset wave default end");
+
+  consume(test, &ctx, "WL300,1,6");
+  expect_int(test, sv.loop_start[voice], 1, "WL updates reset voice start");
+  expect_int(test, sv.loop_end[voice], 6, "WL updates reset voice end");
+
+  consume(test, &ctx, "VL7,2");
+  expect_int(test, sv.loop_start[voice], 1, "invalid VL keeps start");
+  expect_int(test, sv.loop_end[voice], 6, "invalid VL keeps end");
+
+  consume(test, &ctx, "VL5");
+  expect_int(test, sv.loop_start[voice], 1, "partial VL keeps start");
+  expect_int(test, sv.loop_end[voice], 6, "partial VL keeps end");
+
+  consume(test, &ctx, "VS3,8");
+  expect_int(test, sv.wave_range_start[voice], 3, "VS narrows start");
+  expect_int(test, sv.wave_range_end[voice], 8, "VS narrows end");
+  expect_int(test, sv.loop_start[voice], 3, "VS rehomes out-of-range loop start");
+  expect_int(test, sv.loop_end[voice], 8, "VS rehomes out-of-range loop end");
+  consume(test, &ctx, "VL1,6");
+  expect_int(test, sv.loop_start[voice], 3, "out-of-range VL keeps start");
+  expect_int(test, sv.loop_end[voice], 8, "out-of-range VL keeps end");
+
+  ctx.log_enable = 1;
+  ctx.log[0] = '\0';
+  ctx.log_len = 0;
+  consume(test, &ctx, "VL1,9");
+  expect_substr(test, ctx.log, "VL rejected for v6",
+                "out-of-range VL explains rejection");
+  expect_substr(test, ctx.log, "within VS 3..8",
+                "VL rejection includes active voice range");
+
+  consume(test, &ctx,
+          "[BOB] : v6 VS 0 10 VL 8 10 B1 ; BOB");
+  expect_int(test, sv.wave_range_start[voice], 0,
+             "macro updates voice range start");
+  expect_int(test, sv.wave_range_end[voice], 10,
+             "macro updates voice range end");
+  expect_int(test, sv.loop_start[voice], 8,
+             "macro updates voice loop start");
+  expect_int(test, sv.loop_end[voice], 10,
+             "macro updates voice loop end");
+  expect_int(test, sv.loop_enabled[voice], 1,
+             "macro enables voice loop");
+  ctx.log_enable = 0;
+
+  wave_reset(voice);
+  wave_reset(7);
+  sw.data[wave] = NULL;
+  sw.size[wave] = 0;
+}
+
+static void test_named_wav_exports(void) {
+  const char *test = "named WAV exports";
+  const int wave = 300;
+  static float wave_data[4] = {-0.25f, 0.5f, -0.75f, 0.125f};
+  static float recording_data[8] = {
+    -0.25f, 0.25f,
+     0.50f, -0.50f,
+    -1.00f, 0.25f,
+     0.125f, -0.125f
+  };
+  char wave_filename[128];
+  char recording_filename[128];
+  char command[192];
+  wav_t header;
+  int frames = 0;
+  float *decoded;
+  skode_t ctx = new_ctx();
+  extern synth_sample_t sampling;
+
+  snprintf(wave_filename, sizeof(wave_filename),
+           "/tmp/pulp-wave-export-%ld.wav", (long)getpid());
+  snprintf(recording_filename, sizeof(recording_filename),
+           "/tmp/pulp-recording-export-%ld.wav", (long)getpid());
+  unlink(wave_filename);
+  unlink(recording_filename);
+
+  sw.data[wave] = wave_data;
+  sw.size[wave] = 4;
+  sw.rate[wave] = 22050.0f;
+  sw.readonly[wave] = 0;
+  sw.is_heap[wave] = 0;
+
+  snprintf(command, sizeof(command), "[%s] w>w%d", wave_filename, wave);
+  consume(test, &ctx, command);
+  decoded = mw_get(wave_filename, &frames, &header, 0);
+  if (!decoded) {
+    fail(test, "w>w did not create a readable WAV file");
+  } else {
+    expect_int(test, frames, 4, "w>w frame count");
+    expect_int(test, (int)header.SamplesRate, 22050, "w>w stored sample rate");
+    expect_float(test, decoded[0], wave_data[0], 0.0001f,
+                 "w>w preserves sample amplitude");
+    mw_free(decoded);
+  }
+
+  sampling.where = recording_data;
+  sampling.len = 4;
+  sampling.capacity = 4;
+  sampling.channels = 2;
+  sampling.offset = 0;
+  sampling.trim = 0;
+  atomic_store_int(&sampling.state, SAMPLE_STATE_COMPLETE);
+  snprintf(command, sizeof(command), "[%s] >r", recording_filename);
+  consume(test, &ctx, command);
+  decoded = mw_get(recording_filename, &frames, &header, 0);
+  if (!decoded) {
+    fail(test, ">r did not create a readable named WAV file");
+  } else {
+    expect_int(test, frames, 4, ">r frame count");
+    expect_int(test, (int)header.Channels, 2, ">r stereo channel count");
+    expect_int(test, (int)header.SamplesRate, MAIN_SAMPLE_RATE,
+               ">r main sample rate");
+    expect_float(test, decoded[2], -0.95f, 0.0001f,
+                 ">r normalizes recording");
+    mw_free(decoded);
+  }
+
+  consume(test, &ctx, "/r301,1,0");
+  expect_int(test, sw.size[301], 4, "/r stereo channel frame count");
+  expect_float(test, sw.data[301][0], -0.25f, 0.0001f,
+               "/r selected left channel");
+  expect_float(test, sw.midi_note[301], 69.0f, 0.0001f,
+               "/r one-shot natural-rate root note");
+  wave_free_one(301);
+
+  ctx.log_enable = 1;
+  reset_log(&ctx);
+  consume(test, &ctx, ">r");
+  expect_substr(test, ctx.log, "# >r requires [filename]",
+                ">r missing filename diagnostic");
+
+  unlink(wave_filename);
+  unlink(recording_filename);
+  sw.data[wave] = NULL;
+  sw.size[wave] = 0;
+}
+
+static void test_wave_load_smpl_loop(void) {
+  const char *test = "wave load smpl loop";
+  char path[128];
+  skode_t ctx = new_ctx();
+  const int wave = 301;
+
+  snprintf(path, sizeof(path), "/tmp/skode_smpl_loop_%ld.wav", (long)getpid());
+  if (write_smpl_test_wav(path, 10, 2, 7, 0, 3) != 0) {
+    fail(test, "could not write test wav");
+    return;
+  }
+
+  ctx.log_enable = 1;
+  if (wave_load_string(&ctx, path, wave, -1, 1) != 0) {
+    fail(test, "wave_load_string failed");
+    unlink(path);
+    return;
+  }
+
+  expect_int(test, sw.size[wave], 10, "loaded frame count");
+  expect_int(test, sw.loop_enabled[wave], 1, "smpl enables wave loop");
+  expect_int(test, sw.loop_start[wave], 2, "smpl loop start");
+  expect_int(test, sw.loop_end[wave], 8, "smpl loop end is exclusive");
+  expect_float(test, sw.direction[wave], 0.0f, 0.0001f, "smpl forward direction");
+  expect_substr(test, ctx.log, "# smpl loop 2..8 type:0 play:3",
+                "smpl load log");
+
+  consume(test, &ctx, "v2 w301");
+  expect_int(test, sv.loop_enabled[2], 1, "voice inherits smpl loop enabled");
+  expect_int(test, sv.loop_start[2], 2, "voice inherits smpl loop start");
+  expect_int(test, sv.loop_end[2], 8, "voice inherits smpl loop end");
+
+  wave_free_one(wave);
+  wave_reset(2);
+  ctx.log_len = 0;
+  if (write_smpl_test_wav(path, 10, 2, 7, 1, 0) != 0) {
+    fail(test, "could not write ping-pong test wav");
+    unlink(path);
+    return;
+  }
+  if (wave_load_string(&ctx, path, wave, -1, 1) != 0) {
+    fail(test, "ping-pong wave_load_string failed");
+    unlink(path);
+    return;
+  }
+  expect_float(test, sw.direction[wave], 2.0f, 0.0001f,
+               "smpl ping-pong direction");
+  consume(test, &ctx, "v2 w301");
+  expect_int(test, sv.direction[2], 2, "voice inherits smpl ping-pong");
+
+  wave_free_one(wave);
+  wave_reset(2);
+  ctx.log_len = 0;
+  if (write_smpl_test_wav(path, 10, 2, 7, 2, 0) != 0) {
+    fail(test, "could not write backward test wav");
+    unlink(path);
+    return;
+  }
+  if (wave_load_string(&ctx, path, wave, -1, 1) != 0) {
+    fail(test, "backward wave_load_string failed");
+    unlink(path);
+    return;
+  }
+  expect_float(test, sw.direction[wave], 1.0f, 0.0001f,
+               "smpl backward direction");
+
+  wave_reset(2);
+  wave_free_one(wave);
+  unlink(path);
+}
+
+static void test_record_find_trim_command(void) {
+  const char *test = "record find trim";
+  static float rec_data[16] = {
+    0.0f, 0.0002f, 0.02f, 0.0001f, 0.0f,
+    0.12f, 0.13f, 0.14f, 0.15f,
+    0.0002f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f
+  };
+  skode_t ctx = new_ctx();
+  extern synth_sample_t sampling;
+
+  sampling.where = rec_data;
+  sampling.len = 16;
+  sampling.capacity = 16;
+  sampling.channels = 1;
+  sampling.offset = 0;
+  sampling.trim = 0;
+  atomic_store_int(&sampling.state, SAMPLE_STATE_COMPLETE);
+
+  consume(test, &ctx, "w<>");
+  expect_int(test, sampling.offset, 5,
+             "default trim ignores noise and one-sample spike");
+  expect_int(test, sampling.trim, 6,
+             "default trim finds trailing silence");
+
+  sampling.offset = 0;
+  sampling.trim = 0;
+  consume(test, &ctx, "w<>.001,.001,1");
+  expect_int(test, sampling.offset, 4, "margin expands found start");
+  expect_int(test, sampling.trim, 6, "margin keeps zero-crossed end");
+
+  sampling.where = NULL;
+  sampling.len = 0;
+  sampling.capacity = 0;
+  sampling.offset = 0;
+  sampling.trim = 0;
+}
+
+static void test_record_voice_selection(void) {
+  const char *test = "record source selection";
+  skode_t ctx = new_ctx();
+  extern synth_sample_t sampling;
+
+  atomic_store_int(&sampling.state, SAMPLE_STATE_IDLE);
+  sampling.source = SAMPLE_SOURCE_DRY;
+  sampling.source_voice = -1;
+  consume(test, &ctx, "<r .001");
+  expect_int(test, sampling.source, SAMPLE_SOURCE_DRY,
+             "default records dry mix");
+  expect_int(test, atomic_load_int(&sampling.state), SAMPLE_STATE_ARMED,
+             "default recording armed");
+  expect_int(test, sampling.channels, 1, "dry recording is mono");
+
+  atomic_store_int(&sampling.state, SAMPLE_STATE_IDLE);
+  consume(test, &ctx, "<r .001,1,3");
+  expect_int(test, sampling.source, SAMPLE_SOURCE_VOICE,
+             "voice source selected");
+  expect_int(test, sampling.source_voice, 3, "source voice selected");
+  expect_int(test, atomic_load_int(&sampling.state), SAMPLE_STATE_ARMED,
+             "voice recording armed");
+
+  atomic_store_int(&sampling.state, SAMPLE_STATE_IDLE);
+  consume(test, &ctx, "<r .001,2");
+  expect_int(test, sampling.source, SAMPLE_SOURCE_MASTER,
+             "master source selected");
+  expect_int(test, sampling.channels, 2, "master recording is stereo");
+  {
+    float output[44 * AUDIO_CHANNELS] = {0};
+    synth(&skred_global_engine, output, NULL, 44, AUDIO_CHANNELS, NULL);
+    for (int i = 0; i < 44 * AUDIO_CHANNELS; i++) {
+      expect_float(test, sampling.where[i], output[i], 0.000001f,
+                   "master recording matches stereo output");
+    }
+  }
+  expect_int(test, atomic_load_int(&sampling.state), SAMPLE_STATE_COMPLETE,
+             "master recording completes on final frame");
+  expect_int(test, sampling.len, 44, "master recording exact frame count");
+
+  atomic_store_int(&sampling.state, SAMPLE_STATE_IDLE);
+  ctx.log_enable = 1;
+  ctx.log[0] = '\0';
+  ctx.log_len = 0;
+  consume(test, &ctx, "<r .001,1,99");
+  expect_int(test, atomic_load_int(&sampling.state), SAMPLE_STATE_IDLE,
+             "invalid voice not armed");
+  expect_substr(test, ctx.log, "usage: <r seconds,1,voice",
+                "invalid voice reports usage");
+}
+
+static void test_multichannel_capture_waves(void) {
+  const char *test = "multichannel capture waves";
+  skode_t ctx = new_ctx();
+  float input[WAVE_TABLE_CAPTURE_CHANNELS];
+  float output[AUDIO_CHANNELS];
+
+  for (int voice = 0; voice < synth_config.voice_max; voice++) {
+    wave_reset(voice);
+    sv.finished[voice] = 1;
+  }
+  delay_clear(&skred_global_engine);
+  amp_set(0, 0.0f);
+  pan_set(0, -1.0f);
+  consume(test, &ctx, "v0 s0");
+  sv.finished[0] = 0;
+  sv.use_amp_envelope[0] = 0;
+  sv.smoother_gain[0] = 1.0f;
+  volume_final = 1.0f;
+  volume_smoother_gain = 1.0f;
+
+  for (int channel = 0; channel < WAVE_TABLE_CAPTURE_CHANNELS; channel++) {
+    for (int i = 0; i < WAVE_TABLE_CAPTURE_CHANNELS; i++) input[i] = 0.0f;
+    input[channel] = (float)(channel + 1) / 10.0f;
+    output[0] = output[1] = 0.0f;
+    wave_set(0, WAVE_TABLE_CAPTURE_FIRST + channel);
+    sv.finished[0] = 0;
+    synth_capture(&skred_global_engine, output, input, 1, AUDIO_CHANNELS,
+                  WAVE_TABLE_CAPTURE_CHANNELS, NULL);
+    float expected = input[channel] - 0.148148148f * input[channel] * input[channel] * input[channel];
+    expect_float(test, output[0], expected, 0.0001f,
+                 "capture wave selects matching input channel");
+  }
+
+  output[0] = output[1] = 1.0f;
+  wave_set(0, WAVE_TABLE_CAP_8);
+  sv.finished[0] = 0;
+  synth_capture(&skred_global_engine, output, input, 1, AUDIO_CHANNELS, 2, NULL);
+  expect_float(test, output[0], 0.0f, 0.0001f,
+               "unavailable capture channel is silent");
+}
+
+static void test_bounded_loop_preserves_tail_envelopes(void) {
+  const char *test = "bounded loop tail envelopes";
+  if (!skode_opcode_supported(SKODE_OP_ENVELOPE) ||
+      !skode_opcode_supported(SKODE_OP_FILTER_ENVELOPE)) {
+    return;
+  }
+
+  skode_t ctx = new_ctx();
+  const int voice = 6;
+  const uint64_t saved_sample_count = SAMPLE_COUNT_GET();
+  float output[AUDIO_CHANNELS] = {0};
+  char formatted[2048];
+
+  configure_loop_test_voice(voice, 0);
+  consume(test, &ctx,
+          "v6 a0 BC1 t0,0,1,.5 kt0,0,1,.5 kd100 l1");
+  sv.phase[voice] = 4.0f;
+  sv.phase_inc[voice] = 1.0f;
+  sv.loop_remaining[voice] = 0;
+  SAMPLE_COUNT_PUT(saved_sample_count + 100);
+  synth(&skred_global_engine, output, NULL, 1, AUDIO_CHANNELS, NULL);
+
+  voice_format(voice, formatted, sizeof(formatted), 1);
+  if (strstr(formatted, "amp_env_release:18446744073709551615") == NULL ||
+      strstr(formatted, "filter_env_release:18446744073709551615") == NULL) {
+    fail(test, "loop exhaustion released envelopes before sample tail");
+  }
+  expect_int(test, sv.finished[voice], 0, "bounded loop tail remains active");
+
+  SAMPLE_COUNT_PUT(saved_sample_count);
+  wave_reset(voice);
+}
+
+static void test_one_shot_asr_mode(void) {
+  const char *test = "one-shot ASR mode";
+
+  skode_t ctx = new_ctx();
+  const int voice = 5;
+  const uint64_t saved_sample_count = SAMPLE_COUNT_GET();
+
+  configure_loop_test_voice(voice, 0);
+  sv.loop_enabled[voice] = 0;
+  sv.loop_active[voice] = 0;
+  sv.phase_inc[voice] = 1.0f;
+  consume(test, &ctx, "v5 tm1");
+  envelope_set(voice, 0.0f, 0.0f, 1.0f, 3.0f / MAIN_SAMPLE_RATE);
+  SAMPLE_COUNT_PUT(1000);
+  envelope_velocity(voice, 1.0f);
+  expect_u64(test, sv.amp_envelope[voice].sample_release, 1005,
+             "non-looping one-shot release");
+
+  configure_loop_test_voice(voice, 0);
+  sv.phase_inc[voice] = 1.0f;
+  consume(test, &ctx, "v5 BC2 tm1");
+  envelope_set(voice, 0.0f, 0.0f, 1.0f, 3.0f / MAIN_SAMPLE_RATE);
+  SAMPLE_COUNT_PUT(2000);
+  envelope_velocity(voice, 1.0f);
+  expect_u64(test, sv.amp_envelope[voice].sample_release, 2008,
+             "counted one-shot release includes loop repeats");
+
+  consume(test, &ctx, "BC0 B1");
+  SAMPLE_COUNT_PUT(3000);
+  envelope_velocity(voice, 1.0f);
+  expect_u64(test, sv.amp_envelope[voice].sample_release, UINT64_MAX,
+             "unbounded one-shot keeps held envelope");
+
+  SAMPLE_COUNT_PUT(saved_sample_count);
+  wave_reset(voice);
+}
+
+static void test_opcode_events(void) {
+  const char *test = "opcode events";
+  skode_t ctx = new_ctx();
+  seq_kill_all();
+
+  consume(test, &ctx, "v0 L0.25 l0.75");
+  expect_int(test, seq_queued(), 1, "queued opcode count");
+
+  event_capture_t capture = {0};
+  seq_foreach(capture_event, &capture);
+  expect_int(test, capture.count, 1, "captured event count");
+  expect_int(test, capture.event.voice, 0, "event voice");
+  expect_int(test, capture.event.opcode.code,
+             SKODE_OP_ENVELOPE_VELOCITY, "event opcode");
+  expect_int(test, capture.event.opcode.argc, 1, "opcode argc");
+  expect_float(test, (float)capture.event.opcode.arg[0], 0.75f,
+               0.0001f, "opcode velocity");
+
+  event_t invalid = capture.event;
+  invalid.voice = 1000000;
+  expect_int(test, skode_execute_event(&invalid, &ctx), -1,
+             "invalid opcode voice");
+  invalid = capture.event;
+  invalid.opcode.arg[0] = NAN;
+  expect_int(test, skode_execute_event(&invalid, &ctx), -1,
+             "non-finite opcode argument");
+  invalid = capture.event;
+  invalid.voice_var = UINT8_MAX;
+  expect_int(test, skode_execute_event(&invalid, &ctx), -1,
+             "invalid variable voice");
+
+  event_program_t program;
+  expect_int(test, skode_compile_program("v2 a-12 p0.25", &program),
+             SKODE_COMPILE_OK, "compile scalar program");
+  expect_int(test, program.count, 3, "compiled operation count");
+  expect_int(test, skode_execute_program(&program, 0, SAMPLE_COUNT_GET(), 0),
+             0, "compiled program execution");
+  expect_float(test, sv.user_amp[2], -12.0f, 0.0001f, "compiled amp value");
+  expect_float(test, sv.pan[2], 0.25f, 0.0001f, "compiled pan value");
+  program.count = SEQ_PROGRAM_OP_MAX + 1;
+  expect_int(test, skode_execute_program(&program, 0, SAMPLE_COUNT_GET(), 0),
+             -1, "oversized program rejection");
+  program.count = 0;
+  expect_int(test, skode_execute_program(&program, 0, SAMPLE_COUNT_GET(), 0),
+             0, "empty program no-op");
+
+  expect_int(test, skode_compile_program("[name] vt", &program),
+             SKODE_COMPILE_IMMEDIATE_ONLY,
+             "string command fallback");
+  expect_int(test, skode_compile_program("(1 2 3) d>r", &program),
+             SKODE_COMPILE_IMMEDIATE_ONLY,
+             "array command rejection");
+  consume(test, &ctx, "[v2 a-11] e>120");
+  expect_int(test, skode_compile_program("e!120 p0.25", &program),
+             SKODE_COMPILE_OK, "compile external macro");
+  expect_int(test, program.count, 3, "external macro operation count");
+  expect_int(test, skode_execute_program(&program, 0, SAMPLE_COUNT_GET(), 0),
+             0, "execute external macro");
+  expect_float(test, sv.user_amp[2], -11.0f, 0.0001f,
+               "external macro amplitude");
+  expect_float(test, sv.pan[2], 0.25f, 0.0001f,
+               "command after external macro");
+
+  if (strstr(skred_features(), "SEQ ") != NULL) {
+    consume(test, &ctx, "[v6 a-4] e>115");
+    seq_kill_all();
+    consume(test, &ctx, "eR115,3,.01,42");
+    consume(test, &ctx, "[v6 a-1] e>115");
+    repeat_capture_t repeats = {0};
+    seq_foreach(capture_repeat, &repeats);
+    expect_int(test, repeats.count, 3, "real-time macro repeat count");
+    uint64_t real_time_dt = (uint64_t)(0.01 * MAIN_SAMPLE_RATE);
+    for (int i = 0; i < 3; i++) {
+      expect_int(test, repeats.tag[i], 42, "real-time macro repeat tag");
+      expect_int(test, repeats.event[i].voice, 6,
+                 "real-time macro repeat voice");
+      expect_float(test, repeats.event[i].opcode.arg[0], -4.0f, 0.0001f,
+                   "real-time macro repeat snapshot");
+      if (i > 0) {
+        expect_u64(test, repeats.timestamp[i] - repeats.timestamp[i - 1],
+                   real_time_dt, "real-time macro repeat spacing");
+      }
+    }
+    seq_kill_all();
+
+    expect_int(test, tempo_set(120.0f), 0, "macro repeat tempo");
+    consume(test, &ctx, "[a-3] e>114");
+    consume(test, &ctx, "eRR114,2,.25,7");
+    memset(&repeats, 0, sizeof(repeats));
+    seq_foreach(capture_repeat, &repeats);
+    expect_int(test, repeats.count, 2, "tempo macro repeat count");
+    expect_int(test, repeats.tag[0], 7, "tempo macro repeat first tag");
+    expect_int(test, repeats.tag[1], 7, "tempo macro repeat second tag");
+    expect_u64(test, repeats.timestamp[1] - repeats.timestamp[0],
+               (uint64_t)(0.125 * MAIN_SAMPLE_RATE),
+               "tempo macro repeat spacing");
+    seq_kill_all();
+  }
+
+  consume(test, &ctx, "[e!120 n64] e>121");
+  expect_int(test, skode_compile_program("e!121", &program),
+             SKODE_COMPILE_OK, "compile nested external macro");
+  expect_int(test, program.count, 3, "nested external macro operation count");
+  expect_int(test, skode_execute_program(&program, 0, SAMPLE_COUNT_GET(), 0),
+             0, "execute nested external macro");
+  expect_float(test, sv.last_midi_note[2], 64.0f, 0.0001f,
+               "nested external macro note");
+
+  expect_int(test, skode_compile_program("e!120", &program),
+             SKODE_COMPILE_OK, "compile macro snapshot");
+  expect_int(test, seq_step_set(11, 0, "e!120", &program), 0,
+             "store macro snapshot in pattern");
+  consume(test, &ctx, "[v2 a-2] e>120");
+  int macro_pattern_voice = 0;
+  expect_int(test, skode_execute_program_state(&(*seq_step_program(11, 0)),
+             &macro_pattern_voice, SAMPLE_COUNT_GET(), 0, -1, -1), 0,
+             "execute pattern macro snapshot");
+  expect_float(test, sv.user_amp[2], -11.0f, 0.0001f,
+               "pattern macro snapshot amplitude");
+
+  consume(test, &ctx, "[v7 a-5] e>122");
+  seq_kill_all();
+  expect_int(test, skode_compile_program("~0.01 e!122", &program),
+             SKODE_COMPILE_OK, "compile deferred external macro");
+  expect_int(test, skode_execute_program(&program, 0, SAMPLE_COUNT_GET(), 0),
+             0, "queue deferred external macro");
+  consume(test, &ctx, "[v7 a-1] e>122");
+  memset(&capture, 0, sizeof(capture));
+  seq_foreach(capture_event, &capture);
+  expect_int(test, capture.count, 1, "deferred macro queued event count");
+  expect_int(test, capture.event.voice, 7, "deferred macro snapshot voice");
+  expect_int(test, capture.event.opcode.code, SKODE_OP_AMP,
+             "deferred macro snapshot opcode");
+  expect_float(test, capture.event.opcode.arg[0], -5.0f, 0.0001f,
+               "deferred macro snapshot value");
+  seq_kill_all();
+
+  if (strstr(skred_features(), "SEQ ") != NULL) {
+    consume(test, &ctx, "[v3 a-7] e>118");
+    pattern_reset(10);
+    ctx.pattern = 10;
+    consume(test, &ctx, "[e!118] xa");
+    expect_int(test, seq_pattern_length[10], 1,
+               "append external macro pattern step");
+    expect_int(test, (*seq_step_program(10, 0)).count, 2,
+               "compiled external macro pattern step");
+    consume(test, &ctx, "[v3 a-1] e>118");
+    int dispatched_pattern_voice = 0;
+    expect_int(test, skode_execute_program_state(&(*seq_step_program(10, 0)),
+               &dispatched_pattern_voice, SAMPLE_COUNT_GET(), 0, -1, -1), 0,
+               "execute dispatched pattern macro");
+    expect_float(test, sv.user_amp[3], -7.0f, 0.0001f,
+                 "dispatched pattern macro snapshot");
+
+    consume(test, &ctx, "[v4 a-6] e>119");
+    seq_kill_all();
+    consume(test, &ctx, "~0.01 e!119");
+    expect_int(test, seq_queued(), 1, "dispatcher deferred macro event");
+    consume(test, &ctx, "[v4 a-1] e>119");
+    memset(&capture, 0, sizeof(capture));
+    seq_foreach(capture_event, &capture);
+    expect_int(test, capture.event.voice, 4,
+               "dispatcher deferred macro voice");
+    expect_float(test, capture.event.opcode.arg[0], -6.0f, 0.0001f,
+                 "dispatcher deferred macro snapshot");
+    seq_kill_all();
+  }
+
+  consume(test, &ctx, "[e!124] e>123");
+  consume(test, &ctx, "[e!123] e>124");
+  expect_int(test, skode_compile_program("e!123", &program),
+             SKODE_COMPILE_INVALID, "reject cyclic external macros");
+  consume(test, &ctx,
+    "[v0 ~0 n69l1 ~.25 n$1l2 ~.5 l2 ~.25 l3 ~.25 n60l2 ~.25 n$0l2] e>116");
+  expect_int(test,
+             skode_compile_program(
+               "=0,72 =1,65 v0 N-24,0 v1 N-7,5 e!116", &program),
+             SKODE_COMPILE_OK, "compile expanded external macro");
+  expect_int(test, program.count, 23,
+             "expanded external macro operation count");
+  char macro_command[32];
+  for (int i = 90; i < 105; i++) {
+    snprintf(macro_command, sizeof(macro_command),
+             "[e!%d] e>%d", i + 1, i);
+    consume(test, &ctx, macro_command);
+  }
+  consume(test, &ctx, "[a-1] e>105");
+  expect_int(test, skode_compile_program("e!90", &program),
+             SKODE_COMPILE_OK, "accept maximum compile nesting");
+  expect_int(test, program.count, 1, "maximum nesting operation count");
+  consume(test, &ctx, "[e!106] e>105");
+  consume(test, &ctx, "[a-1] e>106");
+  expect_int(test, skode_compile_program("e!90", &program),
+             SKODE_COMPILE_INVALID, "reject excessive compile nesting");
+  consume(test, &ctx,
+    "[a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 "
+    "a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1] e>125");
+  expect_int(test, skode_compile_program("e!125 p0", &program),
+             SKODE_COMPILE_TOO_LARGE, "reject oversized macro expansion");
+  expect_int(test, skode_compile_program("e!126", &program),
+             SKODE_COMPILE_INVALID, "reject undefined external macro");
+  expect_int(test, skode_compile_program("e!999", &program),
+             SKODE_COMPILE_INVALID, "reject invalid external macro index");
+  consume(test, &ctx, "[#] e>117");
+  expect_int(test, skode_compile_program("e!117", &program),
+             SKODE_COMPILE_OK, "compile no-op external macro");
+  expect_int(test, program.count, 0, "no-op external macro operation count");
+  expect_int(test, skode_compile_program("e!", &program),
+             SKODE_COMPILE_IMMEDIATE_ONLY,
+             "argumentless external macro remains immediate");
+  expect_int(test, skode_compile_program("e!$0", &program),
+             SKODE_COMPILE_IMMEDIATE_ONLY,
+             "variable external macro remains immediate");
+  expect_int(test, skode_compile_program("#", &program),
+             SKODE_COMPILE_OK, "compile sequence no-op");
+  expect_int(test, program.count, 0, "sequence no-op operation count");
+  expect_int(test, seq_step_set(0, 3, "#", &program), 0,
+             "store sequence no-op");
+  expect_int(test, seq_step_set(0, seq_pattern_length[0] - 1, "#", &program), 0,
+             "store final pattern step");
+  if (strcmp(seq_step_source(0, 3), "#") != 0) {
+    fail(test, "sequence no-op source was not stored");
+  }
+  pattern_reset(0);
+  pattern_reset(7);
+  expect_int(test, seq_step_append(7, "#", &program), 0,
+             "append sequence no-op");
+  expect_int(test, seq_pattern_length[7], 1,
+             "sequence no-op advances pattern length");
+
+  seq_kill_all();
+  expect_int(test, skode_compile_program("v1 a-3 ~0.01 n60", &program),
+             SKODE_COMPILE_OK, "compile deferred program");
+  uint64_t now = SAMPLE_COUNT_GET();
+  expect_int(test, skode_execute_program(&program, 0, now, 9), 0,
+             "execute deferred program");
+  expect_float(test, sv.user_amp[1], -3.0f, 0.0001f,
+               "immediate program operation");
+  expect_int(test, seq_queued(), 1, "deferred opcode count");
+  memset(&capture, 0, sizeof(capture));
+  seq_foreach(capture_event, &capture);
+  expect_int(test, capture.event.opcode.code, SKODE_OP_MIDI_NOTE,
+             "deferred opcode");
+  expect_int(test, capture.event.voice, 1, "deferred opcode voice");
+
+  queued_event_ctx = &ctx;
+  seq(now + MAIN_SAMPLE_RATE, execute_queued_event, execute_pattern_program);
+  expect_float(test, sv.last_midi_note[1], 60.0f, 0.0001f,
+               "deferred MIDI execution");
+
+  memset(test_pattern_voice, 0, sizeof(test_pattern_voice));
+  expect_int(test, skode_compile_program("v4 a-8", &program),
+             SKODE_COMPILE_OK, "compile sequence step");
+  expect_int(test, seq_step_set(0, 0, "v4 a-8", &program), 0,
+             "store sequence step");
+  expect_int(test, skode_compile_program("p0.5", &program),
+             SKODE_COMPILE_OK, "compile sequence follow-up");
+  expect_int(test, seq_step_set(0, 1, "p0.5", &program), 0,
+             "store sequence follow-up");
+  expect_int(test, (*seq_step_program(0, 0)).count, 2, "compiled sequence step");
+  expect_int(test, (*seq_step_program(0, 1)).count, 1, "compiled follow-up step");
+  execute_pattern_program(0, 0, &(*seq_step_program(0, 0)));
+  execute_pattern_program(0, 1, &(*seq_step_program(0, 1)));
+  expect_float(test, sv.user_amp[4], -8.0f, 0.0001f,
+               "sequence program amp");
+  expect_float(test, sv.pan[4], 0.5f, 0.0001f,
+               "persistent sequence voice");
+
+  ctx.log_enable = 1;
+  expect_int(test, skode_compile_program("not schedulable", &program),
+             SKODE_COMPILE_IMMEDIATE_ONLY,
+             "reject immediate-only sequence command");
+  expect_int(test, seq_step_set(0, 2, "not schedulable", NULL), -1,
+             "reject uncompiled sequence step");
+  expect_int(test, (*seq_step_program(0, 2)).count, 0,
+             "rejected sequence operation count");
+  if (seq_step_source(0, 2)[0] != '\0') {
+    fail(test, "rejected sequence source was stored");
+  }
+
+  seq_kill_all();
+}
+
+static void test_909_sequence_programs(void) {
+  const char *test = "909 sequence programs";
+  if (!skode_opcode_supported(SKODE_OP_FILTER_MODE)) return;
+
+  static const char *programs[] = {
+    "v2 n69 l1",
+    "v3 l1 +.25 v3 l1 +.25 v3 l1 +.25 v3 l1",
+    "+.5 v4 l1 +.25 v4l.5",
+    "v12 n$0 l1 +.5 v12 n$0 l.75",
+    "=0,$1",
+    "=1,40 v12 j0",
+    "=1,60 v13 j0",
+    "=2,55 v12 j1 v13 j1",
+    "=2,45 v0 n$5 l2 v12m0 v13m0",
+  };
+  event_program_t program;
+  for (size_t i = 0; i < sizeof(programs) / sizeof(programs[0]); i++) {
+    if (skode_compile_program(programs[i], &program) != SKODE_COMPILE_OK) {
+      char msg[256];
+      snprintf(msg, sizeof(msg), "failed to compile [%s]", programs[i]);
+      fail(test, msg);
+    }
+  }
+
+  global_var[1] = 52;
+  expect_int(test, skode_compile_program("=0,$1 v4 n$0", &program),
+             SKODE_COMPILE_OK, "compile variable sequence");
+  expect_int(test, skode_execute_program(&program, 0, SAMPLE_COUNT_GET(), 0),
+             0, "execute variable sequence");
+  expect_float(test, (float)global_var[0], 52, 0.0001f,
+               "runtime variable assignment");
+  expect_float(test, sv.last_midi_note[4], 52, 0.0001f,
+               "runtime variable note");
+
+  seq_kill_all();
+  global_var[2] = 3;
+  global_var[3] = 45;
+  expect_int(test, skode_compile_program("v$2 n$3", &program),
+             SKODE_COMPILE_OK, "compile queued variable sequence");
+  uint64_t now = SAMPLE_COUNT_GET();
+  expect_int(test, skode_queue_program(&program, 0, now + 128, 0),
+             0, "queue variable sequence");
+  global_var[2] = 5;
+  global_var[3] = 47;
+  queued_event_ctx = NULL;
+  seq(now + 256, execute_queued_event, execute_pattern_program);
+  expect_float(test, sv.last_midi_note[5], 47, 0.0001f,
+               "queued runtime variable resolution");
+
+  seq_kill_all();
+  expect_int(test, skode_compile_program("=0,1 =0,2 =0,3", &program),
+             SKODE_COMPILE_OK, "compile equal-time register writes");
+  now = SAMPLE_COUNT_GET();
+  expect_int(test, skode_queue_program(&program, 0, now + 128, 0),
+             0, "queue equal-time register writes");
+  seq(now + 256, execute_queued_event, execute_pattern_program);
+  expect_float(test, (float)global_var[0], 3, 0.0001f,
+               "equal-time opcode order");
+
+  global_var[2] = 6;
+  int persistent_voice = 0;
+  expect_int(test, skode_compile_program("v$2 a-9", &program),
+             SKODE_COMPILE_OK, "compile variable pattern voice");
+  expect_int(test, skode_execute_program_state(&program, &persistent_voice,
+             SAMPLE_COUNT_GET(), 0, -1, -1), 0,
+             "execute variable pattern voice");
+  expect_int(test, persistent_voice, 6, "persistent variable pattern voice");
+  expect_int(test, skode_compile_program("p-.5", &program),
+             SKODE_COMPILE_OK, "compile persistent voice follow-up");
+  expect_int(test, skode_execute_program_state(&program, &persistent_voice,
+             SAMPLE_COUNT_GET(), 0, -1, -1), 0,
+             "execute persistent voice follow-up");
+  expect_float(test, sv.pan[6], -.5f, 0.0001f,
+               "persistent variable voice follow-up");
+
+  global_var[4] = -1; // -1 now means absolute tick delay
+  expect_int(test, skode_compile_program("v6 ~$4 a-7", &program),
+             SKODE_COMPILE_OK, "compile variable defer");
+  expect_int(test, skode_execute_program(&program, 0, SAMPLE_COUNT_GET(), 0),
+             0, "execute tick variable defer");
+  expect_float(test, sv.user_amp[6], -9, 0.0001f,
+               "tick variable defer execution (deferred)");
+
+  pattern_reset(9);
+  expect_int(test, skode_compile_program("v$2 +.5 n$3", &program),
+             SKODE_COMPILE_OK, "compile diagnostic pattern");
+  expect_int(test, seq_step_set(9, 0, "v$2 +.5 n$3", &program), 0,
+             "store diagnostic pattern");
+
+  skode_t ctx = new_ctx();
+  ctx.log_enable = 1;
+  ctx.pattern = 9;
+  consume(test, &ctx, "?o-1,0");
+  if (strstr(ctx.log, "# pattern:9 step:0 source:[v$2 +.5 n$3]") == NULL ||
+      strstr(ctx.log, "VOICE $2") == NULL ||
+      strstr(ctx.log, "DELAY + 0.5") == NULL ||
+      strstr(ctx.log, "MIDI_NOTE $3") == NULL) {
+    fail(test, "compiled pattern diagnostic output mismatch");
+  }
+
+  seq_kill_all();
+  expect_int(test, skode_compile_program("v$2 ~1 n$3", &program),
+             SKODE_COMPILE_OK, "compile diagnostic queue event");
+  expect_int(test, skode_execute_program(&program, 0,
+             SAMPLE_COUNT_GET(), 17), 0, "queue diagnostic event");
+  skred_scheduled_event_t scheduled[2];
+  expect_int(test, skred_scheduled_event_count(), 1,
+             "scheduled event API count");
+  expect_int(test, skred_scheduled_event_snapshot(scheduled, 2), 1,
+             "scheduled event API snapshot count");
+  expect_int(test, scheduled[0].tag, 17, "scheduled event API tag");
+  expect_int(test, scheduled[0].voice_var, 3,
+             "scheduled event API variable voice");
+  expect_int(test, scheduled[0].opcode, SKODE_OP_MIDI_NOTE,
+             "scheduled event API opcode");
+  expect_int(test, scheduled[0].opcode_var_mask, 1,
+             "scheduled event API variable argument mask");
+  expect_float(test, scheduled[0].opcode_arg[0], 3.0f, 0.0f,
+               "scheduled event API variable argument");
+  expect_int(test, skred_scheduled_event_snapshot(NULL, 1), -1,
+             "scheduled event API rejects null buffer");
+  ctx.log[0] = '\0';
+  ctx.log_len = 0;
+  consume(test, &ctx, "?o");
+  if (strstr(ctx.log, "# opcode queue size:1") == NULL ||
+      strstr(ctx.log, "tag:17") == NULL ||
+      strstr(ctx.log, "voice:$2 5 MIDI_NOTE $3") == NULL) {
+    fail(test, "queued opcode diagnostic output mismatch");
+  }
+  ctx.log[0] = '\0';
+  ctx.log_len = 0;
+  consume(test, &ctx, "?q");
+  if (strstr(ctx.log, "# opcode queue size:1") == NULL ||
+      strstr(ctx.log, "tag:17") == NULL) {
+    fail(test, "scheduled queue diagnostic alias mismatch");
+  }
+  seq_kill_all();
+}
+
+static void test_scalar_voice_opcode_inventory(void) {
+  const char *test = "scalar voice opcode inventory";
+  struct {
+    const char *command;
+    skode_opcode_t opcode;
+  } cases[] = {
+    {"a-6", SKODE_OP_AMP},
+    {"A1,.5,0", SKODE_OP_AMP_MOD},
+    {"b1", SKODE_OP_WAVE_DIRECTION},
+    {"B1", SKODE_OP_WAVE_LOOP},
+    {"BC3", SKODE_OP_WAVE_LOOP_COUNT},
+    {"c1,.5", SKODE_OP_PHASE_DISTORTION},
+    {"C1,.5", SKODE_OP_PHASE_MOD},
+    {"ct.01,.2,.5,.3", SKODE_OP_PHASE_ENVELOPE},
+    {"cd-.75", SKODE_OP_PHASE_ENVELOPE_DEPTH},
+    {"f220", SKODE_OP_FREQ},
+    {"kt.01,.2,.5,.3", SKODE_OP_FILTER_ENVELOPE},
+    {"kd2", SKODE_OP_FILTER_ENVELOPE_DEPTH},
+    {"F1,.5,0", SKODE_OP_FREQ_MOD},
+    {"FF1", SKODE_OP_FREQ_MOD_MODE},
+    {"FB2.5", SKODE_OP_FREQ_FEEDBACK},
+    {"g.1", SKODE_OP_GLISSANDO},
+    {"G1,2", SKODE_OP_LINK_MIDI},
+    {"h4", SKODE_OP_SAMPLE_HOLD},
+    {"H1,2", SKODE_OP_LINK_VELOCITY},
+    {"HS1,2", SKODE_OP_LINK_SYNC},
+    {"L.01", SKODE_OP_TRIGGER_DELAY},
+    {"j1", SKODE_OP_FILTER_MODE},
+    {"k1200", SKODE_OP_FILTER_FREQ},
+    {"tm1", SKODE_OP_ENVELOPE_MODE},
+    {"l1", SKODE_OP_VELOCITY},
+    {"m1", SKODE_OP_MUTE},
+    {"n60", SKODE_OP_MIDI_NOTE},
+    {"i60", SKODE_OP_INST_NOTE},
+    {"N-12,5", SKODE_OP_MIDI_DETUNE},
+    {"p.25", SKODE_OP_PAN},
+    {"P1,.5,0", SKODE_OP_PAN_MOD},
+    {"q8", SKODE_OP_QUANTIZE},
+    {"q.7", SKODE_OP_FILTER_RESONANCE},
+    {"r2", SKODE_OP_RECORD_TRACK},
+    {"s.01", SKODE_OP_SMOOTHER},
+    {"S3", SKODE_OP_VOICE_RESET},
+    {"t.01,.2,.5,.3", SKODE_OP_ENVELOPE},
+    {"T", SKODE_OP_TRIGGER},
+    {"w2,1,0", SKODE_OP_WAVE},
+    {">3", SKODE_OP_VOICE_COPY},
+    {"/", SKODE_OP_WAVE_DEFAULT},
+    {"=0,$1", SKODE_OP_VARIABLE_SET},
+    {"XM1,.5", SKODE_OP_RING_MOD},
+    {"ce7,1,2,3", SKODE_OP_CONTROL_EVENT},
+    {"DL1,2,3,4,5,6,7", SKODE_OP_DELAY_PARAMS},
+    {"VS1,3", SKODE_OP_WAVE_RANGE_SET},
+    {"VL1,3", SKODE_OP_WAVE_LOOP_SET},
+    {"fb.5", SKODE_OP_FREQ_BEND},
+    {"fbp12,2", SKODE_OP_FREQ_BEND_PARAM},
+    {"ab-.5", SKODE_OP_AMP_BEND},
+    {"abp6,0", SKODE_OP_AMP_BEND_PARAM},
+  };
+
+  for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+    event_program_t program;
+    skode_compile_result_t result =
+      skode_compile_program(cases[i].command, &program);
+    skode_compile_result_t expected =
+      skode_opcode_supported(cases[i].opcode) ?
+      SKODE_COMPILE_OK : SKODE_COMPILE_IMMEDIATE_ONLY;
+    if (result != expected) {
+      char msg[256];
+      snprintf(msg, sizeof(msg), "[%s] expected %d, got %d",
+        cases[i].command, expected, result);
+      fail(test, msg);
+    }
+  }
+
+  event_program_t program;
+  expect_int(test, skode_compile_program("n-", &program),
+             SKODE_COMPILE_OK, "compile MIDI default note");
+  expect_int(test, skode_compile_program("N-,7", &program),
+             SKODE_COMPILE_OK, "compile MIDI transpose default");
+}
+
+#ifdef SKRED_TEST_PD
+static void test_signed_phase_distortion_and_envelope(void) {
+  const char *test = "signed phase distortion and envelope";
+  const float probes[] = {0.0f, 31.0f, 127.0f, 255.0f};
+
+  wave_reset(0);
+  wave_reset(1);
+
+  for (int mode = 1; mode <= 7; mode++) {
+    for (size_t i = 0; i < sizeof(probes) / sizeof(probes[0]); i++) {
+      expect_float(test, cz_phasor(mode, probes[i], 0.0f, 0.0f, 256.0f), probes[i],
+                   0.001f, "zero distortion should return identical phase");
+      float negative = cz_phasor(mode, probes[i], -0.75f, 0.0f, 256.0f);
+      float positive = cz_phasor(mode, probes[i], 0.75f, 0.0f, 256.0f);
+      if (!isfinite(negative) || negative < 0.0f || negative > 256.0f ||
+          !isfinite(positive) || positive < 0.0f || positive > 256.0f)
+        fail(test, "signed transform escaped its phase range");
+    }
+    if (fabsf(cz_phasor(mode, 47.0f, -0.75f, 0.0f, 256.0f) -
+              cz_phasor(mode, 47.0f, 0.75f, 0.0f, 256.0f)) < 0.001f)
+      fail(test, "negative and positive amounts produced the same shape");
+  }
+
+  skode_t ctx = new_ctx();
+  consume(test, &ctx, "v0 c1,.25 ct .01 .2 .4 .3 cd-.75");
+  expect_int(test, sv.cz_mode[0], 1, "PD mode");
+  expect_float(test, sv.cz_distortion[0], 0.25f, 0.0f, "signed base amount");
+  expect_int(test, sv.use_cz_envelope[0], 1, "PD envelope enabled");
+  expect_float(test, sv.cz_envelope[0].a, 0.01f, 0.000001f,
+               "PD envelope attack");
+  expect_float(test, sv.cz_env_depth[0], -0.75f, 0.0f,
+               "PD envelope depth");
+
+  consume(test, &ctx, "l1");
+  expect_int(test, sv.cz_envelope[0].is_active, 1,
+             "PD envelope triggered");
+  consume(test, &ctx, "l0");
+  if (sv.cz_envelope[0].sample_release == UINT64_MAX)
+    fail(test, "PD envelope was not released");
+
+  voice_copy(0, 1);
+  expect_int(test, sv.use_cz_envelope[1], 1, "copied PD envelope enabled");
+  expect_float(test, sv.cz_env_depth[1], -0.75f, 0.0f,
+               "copied PD envelope depth");
+
+  wave_reset(0);
+  sv.phase[0] = 0.25 * sv.table_size[0];
+  cz_set(0, 0, 0.0f);
+  float plain = osc_next(&skred_global_engine,0, 0.0f);
+  sv.phase[0] = 0.25 * sv.table_size[0];
+  cz_set(0, 1, 0.8f);
+  float shaped = osc_next(&skred_global_engine,0, 0.0f);
+  if (fabsf(plain - shaped) < 0.01f)
+    fail(test, "base PD did not affect audio without a C modulator");
+
+  skode_free(&ctx);
+  wave_reset(0);
+  wave_reset(1);
+}
+#endif
+
+#ifdef SKRED_TEST_FM
+static void configure_fm_pair(int with_phase_mod, float feedback) {
+  wave_reset(0);
+  wave_reset(1);
+  amp_set(0, 0.0f);
+  amp_set(1, 0.0f);
+  sv.use_amp_envelope[0] = 0;
+  sv.use_amp_envelope[1] = 0;
+  wave_mute(0, 1);
+  wave_mute(1, 0);
+  freq_set(0, 330.0f);
+  freq_set(1, 220.0f);
+  sv.phase[0] = 0.0;
+  sv.phase[1] = 0.0;
+  sv.sample[0] = 0.0f;
+  sv.sample[1] = 0.0f;
+  freq_mod_mode_set(0, 2);
+  freq_feedback_set(0, feedback);
+  freq_mod_mode_set(1, 2);
+  if (with_phase_mod)
+    freq_mod_set(1, 0, 4.0f, 0.0f);
+  else
+    freq_mod_set(1, -1, 0.0f, 0.0f);
+}
+
+static void test_phase_modulation_and_feedback(void) {
+  const char *test = "FF2 phase modulation and feedback";
+  skode_t ctx = new_ctx();
+
+  consume(test, &ctx, "v0 FF2 FB2.5");
+  expect_int(test, sv.freq_mod_mode[0], 2, "phase-modulation mode");
+  expect_float(test, sv.freq_mod_feedback[0], 2.5f, 0.0f,
+               "feedback amount");
+  char formatted[1024];
+  voice_format(0, formatted, sizeof(formatted), 0);
+  expect_substr(test, formatted, "FF2", "formatted phase-modulation mode");
+  expect_substr(test, formatted, "FB2.5", "formatted feedback amount");
+
+  sv.freq_mod_feedback_z1[0] = 0.75f;
+  sv.freq_mod_feedback_z2[0] = -0.25f;
+  consume(test, &ctx, "l1");
+  expect_float(test, sv.freq_mod_feedback_z1[0], 0.0f, 0.0f,
+               "feedback z1 trigger reset");
+  expect_float(test, sv.freq_mod_feedback_z2[0], 0.0f, 0.0f,
+               "feedback z2 trigger reset");
+
+  voice_copy(0, 2);
+  expect_int(test, sv.freq_mod_mode[2], 2, "copied phase-modulation mode");
+  expect_float(test, sv.freq_mod_feedback[2], 2.5f, 0.0f,
+               "copied feedback amount");
+  expect_float(test, sv.freq_mod_feedback_z1[2], 0.0f, 0.0f,
+               "copied feedback history reset");
+
+  float pm[64 * AUDIO_CHANNELS];
+  float plain[64 * AUDIO_CHANNELS];
+  memset(pm, 0, sizeof(pm));
+  memset(plain, 0, sizeof(plain));
+
+  configure_fm_pair(1, 0.0f);
+  float carrier_inc = sv.phase_inc[1];
+  synth(&skred_global_engine, pm, NULL, 64, AUDIO_CHANNELS, NULL);
+  expect_float(test, (float)sv.phase[1], carrier_inc * 64.0f, 0.001f,
+               "FF2 preserves carrier phase accumulator");
+
+  configure_fm_pair(0, 0.0f);
+  synth(&skred_global_engine, plain, NULL, 64, AUDIO_CHANNELS, NULL);
+  float difference = 0.0f;
+  for (size_t i = 0; i < sizeof(pm) / sizeof(pm[0]); i++)
+    difference += fabsf(pm[i] - plain[i]);
+  if (difference < 0.01f)
+    fail(test, "FF2 modulation did not change carrier audio");
+
+  float feedback_audio[64 * AUDIO_CHANNELS];
+  float no_feedback_audio[64 * AUDIO_CHANNELS];
+  memset(feedback_audio, 0, sizeof(feedback_audio));
+  memset(no_feedback_audio, 0, sizeof(no_feedback_audio));
+
+  configure_fm_pair(0, 3.0f);
+  wave_mute(0, 0);
+  wave_mute(1, 1);
+  synth(&skred_global_engine, feedback_audio, NULL, 64, AUDIO_CHANNELS, NULL);
+  if (fabsf(sv.freq_mod_feedback_z1[0]) < 0.0001f &&
+      fabsf(sv.freq_mod_feedback_z2[0]) < 0.0001f)
+    fail(test, "feedback history did not capture operator output");
+
+  configure_fm_pair(0, 0.0f);
+  wave_mute(0, 0);
+  wave_mute(1, 1);
+  synth(&skred_global_engine, no_feedback_audio, NULL, 64, AUDIO_CHANNELS, NULL);
+  difference = 0.0f;
+  for (size_t i = 0; i < sizeof(feedback_audio) / sizeof(feedback_audio[0]); i++)
+    difference += fabsf(feedback_audio[i] - no_feedback_audio[i]);
+  if (difference < 0.01f)
+    fail(test, "FB did not change operator audio");
+
+  consume(test, &ctx, "v0 FB0");
+  expect_float(test, sv.freq_mod_feedback_z1[0], 0.0f, 0.0f,
+               "FB0 clears z1");
+  expect_float(test, sv.freq_mod_feedback_z2[0], 0.0f, 0.0f,
+               "FB0 clears z2");
+
+  skode_free(&ctx);
+  wave_reset(0);
+  wave_reset(1);
+  wave_reset(2);
+}
+#endif
+
+static void test_parameter_and_buffer_safety(void) {
+  const char *test = "parameter and buffer safety";
+
+  struct {
+    skode_t ctx;
+    unsigned char guard[32];
+  } guarded = { .ctx = SKODE_EMPTY() };
+  skode_init(&guarded.ctx);
+  guarded.ctx.log_enable = 1;
+  memset(guarded.guard, 0x5a, sizeof(guarded.guard));
+
+  char first[2001];
+  char second[5001];
+  memset(first, 'a', sizeof(first) - 1);
+  first[sizeof(first) - 1] = '\0';
+  memset(second, 'b', sizeof(second) - 1);
+  second[sizeof(second) - 1] = '\0';
+  skode_printf(&guarded.ctx, "%s", first);
+  skode_printf(&guarded.ctx, "%s", second);
+  if (guarded.ctx.log_len >= (int)sizeof(guarded.ctx.log)) {
+    fail(test, "log length exceeded buffer");
+  }
+  for (size_t i = 0; i < sizeof(guarded.guard); i++) {
+    if (guarded.guard[i] != 0x5a) {
+      fail(test, "log write changed guard bytes");
+      break;
+    }
+  }
+
+  guarded.ctx.log[0] = '\0';
+  guarded.ctx.log_len = 0;
+  guarded.ctx.log_enable = 1;
+  skode_printf(&guarded.ctx, "alpha ");
+  skode_printf(&guarded.ctx, "beta\n");
+  if (strstr(guarded.ctx.log, "alpha beta") == NULL) {
+    fail(test, "fragmented printf did not form one log line");
+  }
+
+  guarded.ctx.log[0] = '\0';
+  guarded.ctx.log_len = 0;
+  guarded.ctx.log_enable = 1;
+  for (int i = 0; i < SKODE_LOG_LINES + 5; i++) {
+    skode_printf(&guarded.ctx, "line-%02d\n", i);
+  }
+  if (strstr(guarded.ctx.log, "line-00") != NULL ||
+      strstr(guarded.ctx.log, "line-68") == NULL ||
+      strstr(guarded.ctx.log, "# log dropped 5 lines") == NULL) {
+    fail(test, "ring log overflow did not keep recent lines");
+  }
+
+  skode_t ctx = new_ctx();
+  consume(test, &ctx, "wait");
+  consume(test, &ctx, "100000000 >");
+  consume(test, &ctx, "v0 G100000000 n60");
+  expect_int(test, (int)sv.link_midi[0][0], -1, "invalid MIDI link");
+  consume(test, &ctx, "100000000 0 W*");
+  consume(test, &ctx, "100000000 W");
+
+  consume(test, &ctx, "(1 2 3) d>r; -100 w>; w!");
+  extern synth_sample_t sampling;
+  expect_int(test, sampling.offset, 0, "clamped recording offset");
+  expect_int(test, sampling.len, 3, "recording length");
+
+  char long_text[400];
+  memset(long_text, 'x', sizeof(long_text));
+  long_text[0] = '[';
+  long_text[sizeof(long_text) - 4] = ']';
+  long_text[sizeof(long_text) - 3] = 'v';
+  long_text[sizeof(long_text) - 2] = 't';
+  long_text[sizeof(long_text) - 1] = '\0';
+  consume(test, &ctx, long_text);
+  if (strnlen(sv.text[0], TEXT_MAX) >= TEXT_MAX) {
+    fail(test, "voice text was not terminated");
+  }
+}
+
+static void test_context_modes(void) {
+  const char *test = "context modes";
+  skode_t ctx = new_ctx();
+  consume(test, &ctx, "/v1 /t1 /f7");
+
+  expect_int(test, ctx.verbose, 1, "verbose");
+  expect_int(test, ctx.trace, 1, "trace");
+  expect_int(test, ctx.flag, 7, "flag");
+}
+
+static int buffer_channel_nonzero(const float *buffer, int frames,
+                                  int channels, int channel) {
+  for (int i = 0; i < frames; i++) {
+    float value = buffer[(i * channels) + channel];
+    if (fabsf(value) > 0.000001f) return 1;
+  }
+  return 0;
+}
+
+static int buffer_channels_differ(const float *buffer, int frames, int channels) {
+  for (int i = 0; i < frames; i++) {
+    float left = buffer[(i * channels)];
+    float right = buffer[(i * channels) + 1];
+    if (fabsf(left - right) > 0.000001f) return 1;
+  }
+  return 0;
+}
+
+#ifdef SKRED_TEST_TRACKS
+static void configure_delay_test_voice(int voice, int track, float pan) {
+  static float table[2] = {1.0f, 1.0f};
+  sv.table[voice] = table;
+  sv.table_size[voice] = 2;
+  sv.table_rate[voice] = (float)MAIN_SAMPLE_RATE;
+  sv.table_size_rate[voice] = 2.0f / (float)MAIN_SAMPLE_RATE;
+  sv.one_shot[voice] = 0;
+  sv.finished[voice] = 0;
+  sv.phase_inc[voice] = 0.0f;
+  sv.amp[voice] = 1.0f;
+  sv.user_amp[voice] = 0.0f;
+  sv.use_amp_envelope[voice] = 0;
+  pan_set(voice, pan);
+  sv.pan_left[voice] = 0.0f;
+  sv.pan_right[voice] = 0.0f;
+  synth_record_track_set(voice, track);
+  delay_send_set(&skred_global_engine,voice, 15.0f);
+}
+
+static void test_track_delay_send_requires_route_and_center_pan(void) {
+  const char *test = "track delay send requires route and center pan";
+  enum { frames = 1024, channels = 2 };
+  float buffer[frames * channels];
+  skode_t ctx = new_ctx();
+  int coarse = -1, fine = -1, feedback = -1;
+  int mod_freq = -1, mod_depth = -1, level = -1;
+
+  consume(test, &ctx, "r2 DL2,0,0,0,0,0,15 ds15");
+  delay_params_get(&skred_global_engine,2, &coarse, &fine, &feedback, &mod_freq, &mod_depth, &level);
+  expect_int(test, coarse, 0, "delay coarse command");
+  expect_int(test, fine, 0, "delay fine command");
+  expect_int(test, feedback, 0, "delay feedback command");
+  expect_int(test, mod_freq, 0, "delay mod freq command");
+  expect_int(test, mod_depth, 0, "delay mod depth command");
+  expect_int(test, level, 15, "delay level command");
+  expect_int(test, synth_record_track_get(ctx.voice), 2, "record track command");
+  expect_float(test, sv.delay_send[ctx.voice], 1.0f, 0.0001f,
+               "delay send command");
+
+  voice_init();
+  delay_params_set(&skred_global_engine,2, 0, 0, 0, 0, 0, 15);
+  delay_clear(&skred_global_engine);
+  configure_delay_test_voice(0, 2, 0.0f);
+  memset(buffer, 0, sizeof(buffer));
+  synth(&skred_global_engine, buffer, NULL, frames, channels, NULL);
+  expect_int(test, buffer_channel_nonzero(buffer, frames, channels, 0), 1,
+             "centered voice feeds delay");
+
+  voice_init();
+  delay_params_set(&skred_global_engine,2, 0, 0, 0, 0, 0, 15);
+  delay_clear(&skred_global_engine);
+  configure_delay_test_voice(0, 0, 0.0f);
+  memset(buffer, 0, sizeof(buffer));
+  synth(&skred_global_engine, buffer, NULL, frames, channels, NULL);
+  expect_int(test, buffer_channel_nonzero(buffer, frames, channels, 0), 0,
+             "unrouted voice does not feed track delay");
+
+  voice_init();
+  delay_params_set(&skred_global_engine,2, 0, 0, 0, 0, 0, 15);
+  delay_clear(&skred_global_engine);
+  configure_delay_test_voice(0, 2, 1.0f);
+  memset(buffer, 0, sizeof(buffer));
+  synth(&skred_global_engine, buffer, NULL, frames, channels, NULL);
+  expect_int(test, buffer_channel_nonzero(buffer, frames, channels, 0), 0,
+             "panned voice does not feed delay");
+
+  voice_init();
+  delay_params_set(&skred_global_engine,3, 0, 0, 0, 0, 31, 15);
+  delay_clear(&skred_global_engine);
+  configure_delay_test_voice(0, 3, 0.0f);
+  memset(buffer, 0, sizeof(buffer));
+  synth(&skred_global_engine, buffer, NULL, frames, channels, NULL);
+  expect_int(test, buffer_channels_differ(buffer, frames, channels), 1,
+             "modulated delay returns stereo");
+
+  voice_init();
+  delay_params_set(&skred_global_engine,2, 0, 0, 0, 0, 0, 15);
+  delay_clear(&skred_global_engine);
+  configure_delay_test_voice(0, 2, 0.0f);
+#ifdef SKRED_TEST_RECORD_SCOPE
+  float record_frames[frames * RECORD_CHANNELS];
+  synth_record_bus_t record_bus = {record_frames, RECORD_CHANNELS};
+  memset(buffer, 0, sizeof(buffer));
+  memset(record_frames, 0, sizeof(record_frames));
+  synth(&skred_global_engine, buffer, NULL, frames, channels, &record_bus);
+  expect_int(test, buffer_channel_nonzero(record_frames, frames,
+             RECORD_CHANNELS, 4), 1,
+             "track delay return is included in matching stem");
+#endif
+
+  ctx.log_enable = 1;
+  consume(test, &ctx, "GS");
+  expect_substr(test, ctx.log, "# skred_version ", "global status version");
+  expect_substr(test, ctx.log, "V", "global status master volume");
+  expect_substr(test, ctx.log, "M", "global status tempo");
+  expect_substr(test, ctx.log, "DL1,", "global status delay bus 1");
+  expect_substr(test, ctx.log, "DL4,", "global status delay bus 4");
+
+  consume(test, &ctx, "DL?2");
+  expect_substr(test, ctx.log, "DL2,0,0,0,0,0,15",
+                "delay query is pasteable");
+
+  delay_params_set(&skred_global_engine,2, 1, 2, 3, 4, 5, 6);
+  consume(test, &ctx, "DL2,-,12,-,20,-,10");
+  delay_params_get(&skred_global_engine,2, &coarse, &fine, &feedback, &mod_freq, &mod_depth, &level);
+  expect_int(test, coarse, 1, "delay dash keeps coarse");
+  expect_int(test, fine, 12, "delay updates fine");
+  expect_int(test, feedback, 3, "delay dash keeps feedback");
+  expect_int(test, mod_freq, 20, "delay updates mod freq");
+  expect_int(test, mod_depth, 5, "delay dash keeps mod depth");
+  expect_int(test, level, 10, "delay updates level");
+
+  event_program_t program;
+  delay_params_set(&skred_global_engine,2, 1, 2, 3, 4, 5, 6);
+  expect_int(test, skode_compile_program("DL2,-,11,-,21,-,9", &program),
+             SKODE_COMPILE_OK, "compile delay bus params");
+  expect_int(test, skode_execute_program(&program, ctx.voice,
+             SAMPLE_COUNT_GET(), 0), 0, "execute delay bus params");
+  delay_params_get(&skred_global_engine,2, &coarse, &fine, &feedback, &mod_freq, &mod_depth, &level);
+  expect_int(test, coarse, 1, "delay opcode dash keeps coarse");
+  expect_int(test, fine, 11, "delay opcode updates fine");
+  expect_int(test, feedback, 3, "delay opcode dash keeps feedback");
+  expect_int(test, mod_freq, 21, "delay opcode updates mod freq");
+  expect_int(test, mod_depth, 5, "delay opcode dash keeps mod depth");
+  expect_int(test, level, 9, "delay opcode updates level");
+
+  consume(test, &ctx, "GS1");
+}
+#endif
+
+static void test_ands_macro_commands(void) {
+  const char *test = "ands macro commands";
+  skode_t ctx = new_ctx();
+  ctx.log_enable = 1;
+  ands_macro_clear(ctx.parse);
+
+  consume(test, &ctx,
+    "[ar]: t $$0 0 $$1 0 ; [zz]: f $$0 ; [rr]: *R $$0 ;");
+  expect_int(test, ands_macro_count(ctx.parse), 3, "macro count after define");
+  const skode_word_t *zz = skode_dict_find_by_name(
+    skode_dict_global_vocab(), "zz");
+  if (!zz || !skode_dict_word_is_promoted_macro(zz))
+    fail(test, "realtime macro was not promoted into dictionary");
+
+  ctx.log[0] = '\0';
+  ctx.log_len = 0;
+  consume(test, &ctx, "?m");
+  if (!strstr(ctx.log, "[ar]") || !strstr(ctx.log, "[zz]") ||
+      !strstr(ctx.log, "[rr]")) {
+    fail(test, "macro listing missing definitions");
+  }
+  if (!strstr(ctx.log, "realtime") || !strstr(ctx.log, "immediate") ||
+      ands_macro_status(ctx.parse, 1) != ANDS_MACRO_REALTIME ||
+      ands_macro_status(ctx.parse, 2) != ANDS_MACRO_IMMEDIATE)
+    fail(test, "macro listing missing realtime capability");
+
+  consume(test, &ctx, "v1 zz220");
+  expect_float(test, sv.freq[1], 220.0f, 0.0001f,
+               "promoted macro immediate execution");
+  event_program_t macro_program = {0};
+  expect_int(test, skode_compile_program("v2 zz330", &macro_program),
+             SKODE_COMPILE_OK, "promoted macro compile");
+  expect_int(test, skode_execute_program(&macro_program, 0,
+             SAMPLE_COUNT_GET(), -1), 0, "promoted macro program execution");
+  expect_float(test, sv.freq[2], 330.0f, 0.0001f,
+               "promoted macro compiled execution");
+
+  consume(test, &ctx, "[zz]: *R $$0 ;");
+  if (ands_macro_status(ctx.parse, 1) != ANDS_MACRO_IMMEDIATE ||
+      skode_dict_find_by_name(skode_dict_global_vocab(), "zz"))
+    fail(test, "immediate redefinition did not remove promoted macro");
+  consume(test, &ctx, "[zz]: f $$0 ;");
+  zz = skode_dict_find_by_name(skode_dict_global_vocab(), "zz");
+  if (ands_macro_status(ctx.parse, 1) != ANDS_MACRO_REALTIME ||
+      !zz || !skode_dict_word_is_promoted_macro(zz))
+    fail(test, "realtime redefinition did not replace promoted macro");
+
+  consume(test, &ctx, "[zz] /m");
+  expect_int(test, ands_macro_count(ctx.parse), 2, "macro count after remove");
+  if (skode_dict_find_by_name(skode_dict_global_vocab(), "zz"))
+    fail(test, "removed macro remains in dictionary");
+
+  consume(test, &ctx, "/m!");
+  expect_int(test, ands_macro_count(ctx.parse), 0, "macro count after clear");
+  ands_macro_clear(ctx.parse);
+}
+
+static void test_load_installs_global_macros_and_registers(void) {
+  const char *test = "load installs global macros and registers";
+  char cwd[1024];
+  char filename[64];
+  char named_filename[96];
+  char command[160];
+  int patch = 910000 + (int)(getpid() % 80000);
+  FILE *file;
+  skode_t ctx = new_ctx();
+
+  if (!getcwd(cwd, sizeof(cwd))) {
+    fail(test, "getcwd failed");
+    return;
+  }
+  if (chdir("/tmp") != 0) {
+    fail(test, "chdir /tmp failed");
+    return;
+  }
+
+  snprintf(filename, sizeof(filename), "%d.sk", patch);
+  file = fopen(filename, "w");
+  if (!file) {
+    fail(test, "could not create temporary patch file");
+    chdir(cwd);
+    return;
+  }
+  fputs("[zz]: f $$0 ;\n=12,34\n", file);
+  fclose(file);
+
+  ands_macro_clear(ctx.parse);
+  global_var[12] = 0.0;
+
+  if (skode_load(&ctx, ctx.voice, patch, 0) != 0) {
+    fail(test, "skode_load failed");
+  } else {
+    consume(test, &ctx, "zz 123");
+    expect_float(test, sv.freq[0], 123.0f, 0.0001f,
+                 "macro loaded through /l");
+    expect_float(test, (float)global_var[12], 34.0f, 0.0001f,
+                 "register set through /l");
+  }
+
+  snprintf(named_filename, sizeof(named_filename), "named-load-%d.sk",
+           (int)getpid());
+  file = fopen(named_filename, "w");
+  if (!file) {
+    fail(test, "could not create named temporary patch file");
+  } else {
+    fputs("[yy]: f $$0 ;\n=13,56\n", file);
+    fclose(file);
+    global_var[13] = 0.0;
+    snprintf(command, sizeof(command), "[%s] /ls", named_filename);
+    consume(test, &ctx, command);
+    consume(test, &ctx, "yy 234");
+    expect_float(test, sv.freq[0], 234.0f, 0.0001f,
+                 "macro loaded through /ls");
+    expect_float(test, (float)global_var[13], 56.0f, 0.0001f,
+                 "register set through /ls");
+  }
+
+  remove(filename);
+  remove(named_filename);
+  chdir(cwd);
+  ands_macro_clear(ctx.parse);
+}
+
+static void test_vfs_zip_loads_skode_and_wave_assets(void) {
+  const char *test = "vfs zip loads skode and wave assets";
+  char cwd[1024];
+  char zipname[96];
+  char wavname[96];
+  char realname[96];
+  char ksdir[32] = "ks";
+  char skdir[32] = "sk";
+  char wavdir[32] = "wav";
+  char command[180];
+  void *wav_data = NULL;
+  size_t wav_size = 0;
+  int slot = 350;
+  int fallback_slot = 351;
+  skode_t ctx = new_ctx();
+  FILE *file;
+
+  if (!getcwd(cwd, sizeof(cwd))) {
+    fail(test, "getcwd failed");
+    return;
+  }
+  if (chdir("/tmp") != 0) {
+    fail(test, "chdir /tmp failed");
+    return;
+  }
+  skred_vfs_unmount();
+
+  snprintf(zipname, sizeof(zipname), "skred-vfs-%d.zip", (int)getpid());
+  snprintf(wavname, sizeof(wavname), "skred-vfs-%d.wav", (int)getpid());
+  snprintf(realname, sizeof(realname), "real-load-%d.sk", (int)getpid());
+  remove(zipname);
+  remove(wavname);
+  remove(realname);
+  mkdir(ksdir, 0777);
+  mkdir(skdir, 0777);
+  mkdir(wavdir, 0777);
+
+  if (write_smpl_test_wav(wavname, 10, 2, 6, 0, 0) != 0) {
+    fail(test, "could not create temporary wav");
+    chdir(cwd);
+    return;
+  }
+  wav_data = read_whole_file(wavname, &wav_size);
+  if (!wav_data) {
+    fail(test, "could not read temporary wav");
+    remove(wavname);
+    chdir(cwd);
+    return;
+  }
+
+  const char *patch = "[zx]: f $$0 ;\n=14,78\n";
+  const char *note = "hello from zip\n";
+  const char *ks = "\\ comment only\n";
+  if (!mz_zip_add_mem_to_archive_file_in_place(zipname, "patches/ziptest.sk",
+        patch, strlen(patch), NULL, 0, MZ_DEFAULT_COMPRESSION) ||
+      !mz_zip_add_mem_to_archive_file_in_place(zipname, "text/readme.txt",
+        note, strlen(note), NULL, 0, MZ_DEFAULT_COMPRESSION) ||
+      !mz_zip_add_mem_to_archive_file_in_place(zipname, "ks/test.ks",
+        ks, strlen(ks), NULL, 0, MZ_DEFAULT_COMPRESSION) ||
+      !mz_zip_add_mem_to_archive_file_in_place(zipname, "samples/zip.wav",
+        wav_data, wav_size, NULL, 0, MZ_DEFAULT_COMPRESSION)) {
+    fail(test, "could not create zip fixture");
+    free(wav_data);
+    remove(zipname);
+    remove(wavname);
+    chdir(cwd);
+    return;
+  }
+  free(wav_data);
+
+  ctx.log_enable = 1;
+  snprintf(command, sizeof(command), "[%s] %%z", zipname);
+  consume(test, &ctx, command);
+  expect_substr(test, ctx.log, "# vfs zip:", "zip mount status");
+
+  reset_log(&ctx);
+  consume(test, &ctx, "%pwd");
+  expect_substr(test, ctx.log, "# vfs zip:", "zip pwd status");
+
+  reset_log(&ctx);
+  consume(test, &ctx, "[patches] %cd");
+  consume(test, &ctx, "%ls");
+  expect_substr(test, ctx.log, "[ziptest.sk]", "zip ls skode file");
+
+  ands_macro_clear(ctx.parse);
+  global_var[14] = 0.0;
+  consume(test, &ctx, "[ziptest.sk] /ls");
+  consume(test, &ctx, "zx 345");
+  expect_float(test, sv.freq[0], 345.0f, 0.0001f,
+               "macro loaded from zip");
+  expect_float(test, (float)global_var[14], 78.0f, 0.0001f,
+               "register set from zip");
+
+  file = fopen(realname, "w");
+  if (!file) {
+    fail(test, "could not create real fallback skode file");
+  } else {
+    fputs("[zr]: f $$0 ;\n=15,91\n", file);
+    fclose(file);
+    global_var[15] = 0.0;
+    snprintf(command, sizeof(command), "[file:%s] /ls", realname);
+    consume(test, &ctx, command);
+    consume(test, &ctx, "zr 456");
+    expect_float(test, sv.freq[0], 456.0f, 0.0001f,
+                 "macro loaded from real file while zip mounted");
+    expect_float(test, (float)global_var[15], 91.0f, 0.0001f,
+                 "register set from real file while zip mounted");
+  }
+
+  file = fopen("sk/fallback.sk", "w");
+  if (!file) {
+    fail(test, "could not create sk fallback file");
+  } else {
+    fputs("[zf]: f $$0 ;\n=16,92\n", file);
+    fclose(file);
+    global_var[16] = 0.0;
+    consume(test, &ctx, "[fallback.sk] /ls");
+    consume(test, &ctx, "zf 567");
+    expect_float(test, sv.freq[0], 567.0f, 0.0001f,
+                 "macro loaded from sk fallback");
+    expect_float(test, (float)global_var[16], 92.0f, 0.0001f,
+                 "register set from sk fallback");
+  }
+
+  reset_log(&ctx);
+  consume(test, &ctx, "[../text/readme.txt] %cat");
+  expect_substr(test, ctx.log, "hello from zip", "zip cat text");
+
+  reset_log(&ctx);
+  consume(test, &ctx, "[../ks] %cd");
+  consume(test, &ctx, "%ls 3");
+  expect_substr(test, ctx.log, "[test.ks]", "zip ls ks file");
+
+  file = fopen("ks/fallback.ks", "w");
+  if (!file) {
+    fail(test, "could not create ks fallback file");
+  } else {
+    fputs("\\ comment only\n", file);
+    fclose(file);
+    consume(test, &ctx, "[fallback.ks] /ks");
+  }
+
+  snprintf(command, sizeof(command), "[../samples/zip.wav] /ws%d", slot);
+  consume(test, &ctx, command);
+  expect_int(test, sw.size[slot], 10, "zip wav frame count");
+  expect_int(test, sw.loop_enabled[slot], 1, "zip wav smpl loop enabled");
+  expect_int(test, sw.loop_start[slot], 2, "zip wav loop start");
+  expect_int(test, sw.loop_end[slot], 7, "zip wav loop end");
+
+  if (write_smpl_test_wav("wav/fallback.wav", 10, 3, 5, 0, 0) != 0) {
+    fail(test, "could not create wav fallback file");
+  } else {
+    snprintf(command, sizeof(command), "[fallback.wav] /ws%d", fallback_slot);
+    consume(test, &ctx, command);
+    expect_int(test, sw.size[fallback_slot], 10, "wav fallback frame count");
+    expect_int(test, sw.loop_start[fallback_slot], 3, "wav fallback loop start");
+    expect_int(test, sw.loop_end[fallback_slot], 6, "wav fallback loop end");
+  }
+
+  reset_log(&ctx);
+  consume(test, &ctx, "%zu");
+  expect_substr(test, ctx.log, "# vfs disk:", "zip unmount status");
+
+  skred_vfs_unmount();
+  ands_macro_clear(ctx.parse);
+  remove(zipname);
+  remove(wavname);
+  remove(realname);
+  remove("sk/fallback.sk");
+  remove("ks/fallback.ks");
+  remove("wav/fallback.wav");
+  chdir(cwd);
+}
+
+static void test_session_zip_round_trip(void) {
+  const char *test = "session zip round trip";
+  char cwd[1024];
+  char zipname[96];
+  char command[192];
+  skode_t ctx = new_ctx();
+  ctx.log_enable = 1;
+  int slot = 360;
+
+  if (!getcwd(cwd, sizeof(cwd)) || chdir("/tmp") != 0) {
+    fail(test, "could not enter /tmp");
+    return;
+  }
+  skred_vfs_unmount();
+  snprintf(zipname, sizeof(zipname), "skred-session-%d.zip", (int)getpid());
+  remove(zipname);
+
+  consume(test, &ctx, "=7,123.5");
+  consume(test, &ctx, "[v3 f777] e>23");
+  consume(test, &ctx, "[local session text] s>2");
+  consume(test, &ctx, "(0.125,-0.25,0.5,-0.75) /d360,32000,0,3.5");
+  consume(test, &ctx, "[sessionwave] wt360");
+  consume(test, &ctx, "WL360,1,3");
+  
+  consume(test, &ctx, "(9,8,7)");
+  consume(test, &ctx, "[v2 l1] /ceb 4,77");
+  consume(test, &ctx, "/mv0,3,12");
+  consume(test, &ctx, "[v3K{unit}] /mb11,.,74");
+
+  ctx.flag = 9;
+  ctx.trace = 2;
+  ctx.verbose = 1;
+
+  snprintf(command, sizeof(command), "[%s] GS>", zipname);
+  consume(test, &ctx, command);
+
+  // Clear everything
+  memset(global_var, 0, sizeof(global_var));
+  ands_data_len_set(ctx.parse, 0);
+  wave_free_one(slot);
+  skred_control_response_clear();
+  skred_midi_route_clear();
+  skred_midi_binding_clear();
+  ctx.flag = ctx.trace = ctx.verbose = 0;
+
+  reset_log(&ctx);
+  snprintf(command, sizeof(command), "[%s] GS<", zipname);
+  consume(test, &ctx, command);
+
+  expect_float(test, (float)global_var[7], 123.5f, 0.0001f, "shared variable restored");
+  expect_int(test, ands_data_len(ctx.parse), 3, "data array length restored");
+  expect_float(test, (float)ands_data(ctx.parse)[1], 8.0f, 0.0001f, "data array value restored");
+
+  remove(zipname);
+  chdir(cwd);
+}
+
+static void test_load_909_patch_from_source_assets(void) {
+#ifdef SKRED_TEST_SOURCE_DIR
+  const char *test = "load 909 patch from source assets";
+  char cwd[1024];
+  skode_t ctx = new_ctx();
+
+  if (!getcwd(cwd, sizeof(cwd))) {
+    fail(test, "getcwd failed");
+    return;
+  }
+  if (chdir(SKRED_TEST_SOURCE_DIR) != 0) {
+    fail(test, "chdir source dir failed");
+    return;
+  }
+
+  consume(test, &ctx, "/l909");
+  expect_int(test, sw.size[500] > 0, 1, "909 sample wave loaded");
+  expect_int(test, sw.size[400] > 0, 1, "909 chh wave loaded");
+  expect_int(test, sw.size[401] > 0, 1, "909 kick wave loaded");
+  expect_int(test, sw.size[402] > 0, 1, "909 snare wave loaded");
+
+  chdir(cwd);
+#endif
+}
+
+#ifdef SKRED_TEST_INSPIRED_BANKS
+static void test_load_inspired_example_banks(void) {
+  const char *test = "load inspired example banks";
+  char cwd[1024];
+  skode_t ctx = new_ctx();
+
+  if (!getcwd(cwd, sizeof(cwd))) {
+    fail(test, "getcwd failed");
+    return;
+  }
+  if (chdir(SKRED_TEST_SOURCE_DIR) != 0) {
+    fail(test, "chdir source dir failed");
+    return;
+  }
+
+  consume(test, &ctx, "[examples/pd-cz-inspired.sk] /ls");
+  consume(test, &ctx, "czbr 48");
+  expect_int(test, sv.cz_mode[0], 6, "CZ brass macro");
+  consume(test, &ctx, "czbs 36");
+  expect_int(test, sv.cz_mode[0], 1, "CZ bass macro");
+  consume(test, &ctx, "czbl 72");
+  expect_int(test, sv.cz_mode[0], 4, "CZ bell macro");
+  consume(test, &ctx, "czpd 55");
+  expect_int(test, sv.cz_mode[1], 5, "CZ pad macro");
+
+  consume(test, &ctx, "[examples/moog-inspired.sk] /ls");
+  consume(test, &ctx, "mgbs 36");
+  expect_int(test, sv.filter_mode[0], 1, "Moog bass macro");
+  consume(test, &ctx, "mgld 60");
+  expect_int(test, sv.filter_mode[1], 1, "Moog lead macro");
+  consume(test, &ctx, "mgpl 48");
+  expect_int(test, sv.filter_mode[0], 1, "Moog pluck macro");
+  consume(test, &ctx, "mgpd 48");
+  expect_int(test, sv.filter_mode[1], 1, "Moog pad macro");
+
+  consume(test, &ctx, "[examples/ksynth-drums-inspired.sk] /ls");
+  expect_int(test, sw.size[470] > 0, 1, "Ksynth kick wave");
+  expect_int(test, sw.size[471] > 0, 1, "Ksynth snare wave");
+  expect_int(test, sw.size[472] > 0, 1, "Ksynth hi-hat wave");
+  consume(test, &ctx, "kick");
+  expect_int(test, sv.amp_envelope[0].is_active, 1, "kick macro");
+  consume(test, &ctx, "snar");
+  expect_int(test, sv.amp_envelope[1].is_active, 1, "snare macro");
+  consume(test, &ctx, "chat");
+  expect_int(test, sv.amp_envelope[2].is_active, 1, "closed hi-hat macro");
+
+  consume(test, &ctx, "/m!");
+  skode_free(&ctx);
+  chdir(cwd);
+}
+#endif
+
+static void test_909_load_rejects_too_small_wave_table(void) {
+#ifdef SKRED_TEST_SOURCE_DIR
+  const char *test = "909 load rejects too-small wave table";
+  char cwd[1024];
+  skode_t ctx = new_ctx();
+
+  synth_free();
+  synth_config_set_waves(64);
+  synth_init(8);
+  wave_table_init(0);
+  voice_init();
+  seq_init();
+
+  if (!getcwd(cwd, sizeof(cwd))) {
+    fail(test, "getcwd failed");
+    return;
+  }
+  if (chdir(SKRED_TEST_SOURCE_DIR) != 0) {
+    fail(test, "chdir source dir failed");
+    return;
+  }
+
+  reset_log(&ctx);
+  expect_int(test, wave_load(&ctx, 24, 500, 0, 0), -1,
+             "high sample wave load status");
+
+  reset_log(&ctx);
+  expect_int(test, rec_load(&ctx, 400, 0, -1, 1), -1,
+             "high recording wave load status");
+
+  reset_log(&ctx);
+  consume(test, &ctx, "/l909");
+
+  chdir(cwd);
+#endif
+}
+
+static void test_control_composition_primitives(void) {
+  const char *test = "control composition primitives";
+  skode_t ctx = new_ctx();
+  ctx.log_enable = 1;
+
+  consume(test, &ctx, "0 5 swap v");
+  expect_int(test, ctx.voice, 5, "swap feeds next command");
+  consume(test, &ctx, "7 3 drop v");
+  expect_int(test, ctx.voice, 3, "drop feeds next command");
+  consume(test, &ctx, "4 2 over v");
+  expect_int(test, ctx.voice, 2, "over feeds next command");
+  consume(test, &ctx, "1 6 7 rot v");
+  expect_int(test, ctx.voice, 6, "rot feeds next command");
+  consume(test, &ctx, "5 dup v");
+  expect_int(test, ctx.voice, 5, "dup feeds next command");
+  consume(test, &ctx, "2 clr v");
+  expect_int(test, ctx.voice, 5, "clr leaves next command without args");
+
+  ctx.log[0] = '\0';
+  ctx.log_len = 0;
+  consume(test, &ctx, "[alpha] 0 s> ; [beta] ?s");
+  if (!strstr(ctx.log, "# [beta]")) fail(test, "parser string baseline missing");
+  ctx.log[0] = '\0';
+  ctx.log_len = 0;
+  consume(test, &ctx, "0 <s ?s");
+  if (!strstr(ctx.log, "# [alpha]")) fail(test, ctx.log);
+
+  ctx.log[0] = '\0';
+  ctx.log_len = 0;
+  consume(test, &ctx, "[slot-@0-@1] 3 4 s% ?s");
+  if (!strstr(ctx.log, "# [slot-3-4]")) fail(test, "runtime string format failed");
+
+  consume(test, &ctx, "0 3 4 a= a");
+  expect_float(test, sv.user_amp[ctx.voice], 7.0f, 0.0001f,
+               "arithmetic return feeds amp");
+  consume(test, &ctx, "11 6 = a");
+  expect_float(test, sv.user_amp[ctx.voice], 6.0f, 0.0001f,
+               "register set return feeds amp");
+  consume(test, &ctx, "(11 12) 1 d* a");
+  expect_float(test, sv.user_amp[ctx.voice], 12.0f, 0.0001f,
+               "data read return feeds amp");
+}
+
+static void test_map_bang_command(void) {
+  const char *test = "map! command";
+  skode_t ctx = new_ctx();
+  ctx.log_enable = 1;
+
+  for (int v = 0; v < 8; v++) {
+    envelope_set(v, 0.5f, 0.5f, 0.5f, 0.5f);
+  }
+
+  // 1. Prefix map! integer range 1..5 with ADSR
+  consume(test, &ctx, "[v%d t .01 .25 0 0] map! 1 5 ;");
+
+  // Voices 1..5 should have new envelope
+  for (int v = 1; v <= 5; v++) {
+    expect_float(test, sv.amp_envelope[v].a, 0.01f, 0.0001f, "map! adsr attack");
+    expect_float(test, sv.amp_envelope[v].d, 0.25f, 0.0001f, "map! adsr decay");
+    expect_float(test, sv.amp_envelope[v].s, 0.0f, 0.0001f, "map! adsr sustain");
+    expect_float(test, sv.amp_envelope[v].r, 0.0f, 0.0001f, "map! adsr release");
+  }
+
+  // Voices 0 and 6 should be untouched
+  expect_float(test, sv.amp_envelope[0].a, 0.5f, 0.0001f, "map! untouched voice 0");
+  expect_float(test, sv.amp_envelope[6].a, 0.5f, 0.0001f, "map! untouched voice 6");
+
+  // 2. Postfix map! with custom values
+  consume(test, &ctx, "[v%d a 0.8] 2 4 map! ;");
+  expect_float(test, sv.user_amp[2], 0.8f, 0.0001f, "postfix map! amp 2");
+  expect_float(test, sv.user_amp[3], 0.8f, 0.0001f, "postfix map! amp 3");
+  expect_float(test, sv.user_amp[4], 0.8f, 0.0001f, "postfix map! amp 4");
+
+  // 3. Descending range
+  consume(test, &ctx, "[v%d f 350] map! 5 3 ;");
+  expect_float(test, sv.freq[5], 350.0f, 0.0001f, "descending map! 5");
+  expect_float(test, sv.freq[4], 350.0f, 0.0001f, "descending map! 4");
+  expect_float(test, sv.freq[3], 350.0f, 0.0001f, "descending map! 3");
+
+  // 4. Single-argument count (0 .. N-1)
+  consume(test, &ctx, "[v%d f 520] map! 3 ;");
+  expect_float(test, sv.freq[0], 520.0f, 0.0001f, "single arg map! 0");
+  expect_float(test, sv.freq[1], 520.0f, 0.0001f, "single arg map! 1");
+  expect_float(test, sv.freq[2], 520.0f, 0.0001f, "single arg map! 2");
+
+  // 5. Float range with %g and step
+  consume(test, &ctx, "[v0 p %g] map! -1.0 1.0 0.5 ;");
+  expect_float(test, sv.pan[0], 1.0f, 0.0001f, "float step map! final pan");
+
+  // 6. Zero padding %02d and @0 format in command execution
+  consume(test, &ctx, "[v%02d f 440] map! 1 2 ;");
+  expect_float(test, sv.freq[1], 440.0f, 0.0001f, "map! %02d voice 1");
+  expect_float(test, sv.freq[2], 440.0f, 0.0001f, "map! %02d voice 2");
+
+  consume(test, &ctx, "[v@0 f 880] map! 1 2 ;");
+  expect_float(test, sv.freq[1], 880.0f, 0.0001f, "map! @0 voice 1");
+  expect_float(test, sv.freq[2], 880.0f, 0.0001f, "map! @0 voice 2");
+
+  // 7. Max 256 iterations limit
+  consume(test, &ctx, "[v0 f %d] map! 0 1000 ;");
+  expect_float(test, sv.freq[0], 255.0f, 0.0001f, "map! capped at 256 iterations");
+
+  // 8. Unit tests for skode_format_map_value
+  char buf[64];
+  skode_format_map_value(buf, sizeof(buf), "slot-%02d", 5);
+  if (strcmp(buf, "slot-05") != 0) fail(test, "map format %02d");
+  skode_format_map_value(buf, sizeof(buf), "slot-%03d", 5);
+  if (strcmp(buf, "slot-005") != 0) fail(test, "map format %03d");
+  skode_format_map_value(buf, sizeof(buf), "pan=%g", 0.5);
+  if (strcmp(buf, "pan=0.5") != 0) fail(test, "map format %g");
+  skode_format_map_value(buf, sizeof(buf), "idx=@0", 9);
+  if (strcmp(buf, "idx=9") != 0) fail(test, "map format @0");
+}
+
+static void test_dictionary_core_words(void) {
+  const char *test = "dictionary core words";
+  skode_t ctx = new_ctx();
+  const char *names[] = {"v", "a", "f", "n", "p", "m", "*R", "?R"};
+
+  for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
+    if (!skode_dict_find_by_name(ctx.vocab, names[i])) {
+      char msg[80];
+      snprintf(msg, sizeof(msg), "dictionary entry missing for %s", names[i]);
+      fail(test, msg);
+    }
+  }
+
+  consume(test, &ctx, "v2 a-9 n64,3 f330 p.25 m1");
+  expect_int(test, ctx.voice, 2, "dictionary voice selection");
+  expect_float(test, sv.user_amp[2], -9.0f, 0.0001f, "dictionary amp");
+  expect_float(test, sv.freq[2], 330.0f, 0.0001f, "dictionary freq");
+  expect_float(test, sv.last_midi_note[2], 64.0f, 0.0001f, "dictionary note");
+  expect_float(test, sv.pan[2], 0.25f, 0.0001f, "dictionary pan");
+  expect_int(test, sv.disconnect[2], 1, "dictionary mute");
+
+  ctx.log_enable = 1;
+  reset_log(&ctx);
+  ands_macro_clear(ctx.parse);
+  consume(test, &ctx,
+          "[bob]:*R .1 .2; bob; ?R; ?R; @0 a");
+  expect_substr(test, ctx.log, "# returns @0=0.1 @1=0.2",
+                "return register display");
+  expect_float(test, sv.user_amp[2], 0.1f, 0.0001f,
+               "return register feeds dictionary amp");
+  ands_macro_clear(ctx.parse);
+
+  event_program_t program = {0};
+  expect_int(test, skode_compile_program("v3 a-7 n60 f220 p-.5 m0", &program),
+             SKODE_COMPILE_OK, "dictionary compile result");
+  expect_int(test, skode_execute_program_state(&program, &ctx.voice, 0, -1,
+             -1, -1), 0, "dictionary program execution");
+  expect_int(test, ctx.voice, 3, "compiled dictionary voice selection");
+  expect_float(test, sv.user_amp[3], -7.0f, 0.0001f, "compiled dictionary amp");
+  expect_float(test, sv.freq[3], 220.0f, 0.0001f, "compiled dictionary freq");
+  expect_float(test, sv.last_midi_note[3], 60.0f, 0.0001f, "compiled dictionary note");
+  expect_float(test, sv.pan[3], -0.5f, 0.0001f, "compiled dictionary pan");
+  expect_int(test, sv.disconnect[3], 0, "compiled dictionary mute");
+  expect_int(test, skode_compile_program("@0 a", &program),
+             SKODE_COMPILE_IMMEDIATE_ONLY,
+             "return reference is immediate-only");
+
+  skode_free(&ctx);
+}
+
+static void test_tempo_and_pattern_reset_limits(void) {
+  const char *test = "tempo and pattern reset limits";
+  expect_int(test, tempo_set(120.0f), 0, "set normal tempo");
+  expect_float(test, tempo_bpm_get(), 120.0f, 0.001f, "normal tempo");
+  expect_float(test, tempo_step_seconds_get(), 0.125f, 0.001f, "default sub 16 step duration 125ms");
+  expect_int(test, tempo_set_subdivision(120.0f, 8.0f), 0, "set 120 bpm subdivision 8");
+  expect_float(test, tempo_step_seconds_get(), 0.250f, 0.001f, "120 BPM sub 8 step duration 250ms");
+  expect_int(test, tempo_set_subdivision(120.0f, 4.0f), 0, "set 120 bpm subdivision 4");
+  expect_float(test, tempo_step_seconds_get(), 0.500f, 0.001f, "120 BPM sub 4 step duration 500ms");
+  expect_int(test, tempo_set_subdivision(120.0f, 32.0f), 0, "set 120 bpm subdivision 32");
+  expect_float(test, tempo_step_seconds_get(), 0.0625f, 0.001f, "120 BPM sub 32 step duration 62.5ms");
+  expect_int(test, tempo_set(120.0f), 0, "restore default sub 16");
+  expect_int(test, tempo_set(0.0f), -1, "reject zero tempo");
+  expect_int(test, tempo_set(-1.0f), -1, "reject negative tempo");
+  expect_int(test, tempo_set(NAN), -1, "reject non-finite tempo");
+  expect_int(test, tempo_set(961.0f), -1, "reject excessive tempo");
+  expect_float(test, tempo_bpm_get(), 120.0f, 0.001f,
+               "rejected tempo preserves current value");
+  expect_int(test, tempo_set(1.0f), 0, "accept minimum tempo");
+  expect_int(test, tempo_set(960.0f), 0, "accept maximum tempo");
+
+  event_program_t program = {0};
+  pattern_reset(12);
+  int generation = seq_pattern_generation(12);
+  expect_int(test, seq_step_set(12, 0, "#", &program), 0,
+             "store catch-up pattern");
+  seq_modulo_set(12, 1);
+  seq_state_set(12, 1);
+  seq_rewind();
+  pattern_callback_count = 0;
+  seq((uint64_t)MAIN_SAMPLE_RATE * 100, ignore_queued_event,
+      count_pattern_program);
+  expect_int(test, pattern_callback_count, SEQ_MAX_CATCHUP_TICKS,
+             "bounded pattern catch-up");
+
+  pattern_reset(12);
+  expect_int(test, seq_pattern_generation(12), generation + 1,
+             "pattern clear generation");
+  expect_int(test, seq_state[12], SEQ_STOPPED, "cleared pattern state");
+  expect_int(test, seq_pattern_length[12], 0, "cleared pattern length");
+  expect_int(test, tempo_set(120.0f), 0, "restore default tempo");
+}
+
+static void test_sample_accurate_sequence_boundaries(void) {
+  const char *test = "sample accurate sequence boundaries";
+  event_t event = {0};
+  uint64_t boundary = 0;
+
+  seq_kill_all();
+  expect_int(test, tempo_set(120.0f), 0, "set boundary tempo");
+  seq_rewind();
+  uint64_t now = SAMPLE_COUNT_GET();
+  expect_int(test, queue_event(now + 37, &event, 0), 0,
+             "queue in-block event");
+  expect_int(test, seq_next_boundary(now, now + 128, &boundary), 1,
+             "find queued boundary");
+  expect_u64(test, boundary, now + 37, "queued boundary sample");
+  seq_kill_all();
+  expect_int(test, seq_queued(), 0, "clear queued boundary");
+
+  event_program_t program = {0};
+  pattern_reset(13);
+  expect_int(test, seq_step_set(13, 0, "#", &program), 0,
+             "store boundary pattern");
+  seq_modulo_set(13, 1);
+  seq_state_set(13, 1);
+  seq_rewind();
+  now = SAMPLE_COUNT_GET();
+  expect_int(test, seq_next_boundary(now, now + 6000, &boundary), 1,
+             "find 120 BPM tick");
+  expect_u64(test, boundary, now + 5513, "120 BPM tick sample");
+  seq(boundary, ignore_queued_event, count_pattern_program);
+  expect_u64(test, seq_master_tick(), 2, "120 BPM tick dispatch");
+
+  expect_int(test, tempo_set(123.0f), 0, "set fractional boundary tempo");
+  seq_rewind();
+  now = SAMPLE_COUNT_GET();
+  expect_int(test, seq_next_boundary(now, now + 6000, &boundary), 1,
+             "find fractional tick");
+  expect_u64(test, boundary, now + 5379, "fractional tick sample");
+  seq(boundary, ignore_queued_event, count_pattern_program);
+  expect_u64(test, seq_master_tick(), 2, "fractional tick dispatch");
+  pattern_reset(13);
+  expect_int(test, tempo_set(120.0f), 0, "restore boundary tempo");
+}
+
+static void test_silent_voice_fast_path(void) {
+  const char *test = "silent voice fast path";
+  enum { FRAMES = 16 };
+  float output[FRAMES * AUDIO_CHANNELS] = {0};
+
+  wave_reset(7);
+  float phase = sv.phase[7];
+  synth(&skred_global_engine, output, NULL, FRAMES, AUDIO_CHANNELS, NULL);
+
+  expect_float(test, sv.phase[7], phase, 0.0f,
+               "reset voice oscillator remains idle");
+  expect_float(test, sv.sample[7], 0.0f, 0.0f,
+               "reset voice output remains zero");
+}
+
+static void test_control_plane_voice_events(void) {
+  skred_control_dispatch_stop();
+  const char *test = "control plane voice events";
+  skred_control_event_t events[8];
+  event_program_t program = {0};
+  int voice = 0;
+  float output[AUDIO_CHANNELS] = {0};
+  uint64_t saved_sample_count = SAMPLE_COUNT_GET();
+  skode_t ctx = new_ctx();
+  ctx.log_enable = 1;
+
+  skred_control_event_reset();
+  #if defined(_WIN32) || defined(_WIN64)
+  if (skred_control_event_wait_handle() == NULL) {
+    fail(test, "control event wait handle unavailable");
+  }
+  #else
+  if (skred_control_event_wait_fd() < 0) {
+    fail(test, "control event wait fd unavailable");
+  }
+  #endif
+  expect_int(test, skred_control_event_wait(0), 0,
+             "empty control event wait");
+  skred_control_user_event(SAMPLE_COUNT_GET(), -1, -1, -1, -1,
+                           SKODE_OP_CONTROL_EVENT, 123, 0, NULL);
+  expect_int(test, skred_control_event_wait(0), 1,
+             "published control event wait");
+  expect_int(test, skred_control_event_snapshot(events, 8), 1,
+             "control event snapshot count");
+  expect_int(test, (int)events[0].type, SKRED_CONTROL_EVENT_USER,
+             "control event snapshot type");
+  expect_int(test, skred_control_event_snapshot(NULL, 1), -1,
+             "control event snapshot rejects null buffer");
+  ctx.log[0] = '\0';
+  ctx.log_len = 0;
+  consume(test, &ctx, "?ce");
+  if (strstr(ctx.log, "# control events:1") == NULL ||
+      strstr(ctx.log, "snapshot") == NULL) {
+    fail(test, "control-plane event snapshot diagnostic output mismatch");
+  }
+  expect_int(test, skred_control_event_clear(), 1,
+             "control event clear count");
+  expect_int(test, skred_control_event_wait(0), 0,
+             "cleared control event wait");
+
+  skred_control_event_reset();
+  voice_trigger(2);
+  expect_int(test, skred_control_event_poll(events, 4), 0,
+             "voice trigger event default disabled");
+
+  consume(test, &ctx, "v2 vc1");
+  voice_trigger(2);
+  expect_int(test, skred_control_event_poll(events, 4), 1,
+             "voice trigger event count");
+  expect_int(test, (int)events[0].type, SKRED_CONTROL_EVENT_VOICE_TRIGGER,
+             "voice trigger event type");
+  expect_int(test, events[0].voice, 2, "voice trigger event voice");
+  expect_int(test, events[0].pattern, -1, "voice trigger default pattern");
+  expect_u64(test, events[0].sample, SAMPLE_COUNT_GET(),
+             "voice trigger event sample");
+
+  envelope_velocity(2, 0.0f);
+  expect_int(test, skred_control_event_poll(events, 4), 1,
+             "voice release event count");
+  expect_int(test, (int)events[0].type, SKRED_CONTROL_EVENT_VOICE_RELEASE,
+             "voice release event type");
+  expect_int(test, events[0].voice, 2, "voice release event voice");
+  consume(test, &ctx, "vc0");
+  voice_trigger(2);
+  expect_int(test, skred_control_event_poll(events, 4), 0,
+             "voice trigger event disabled after enable");
+  ctx.log[0] = '\0';
+  ctx.log_len = 0;
+  consume(test, &ctx, "?");
+  if (strstr(ctx.log, "vc0") != NULL) {
+    fail(test, "disabled voice control event flag should be omitted");
+  }
+  consume(test, &ctx, "vc1");
+  ctx.log[0] = '\0';
+  ctx.log_len = 0;
+  consume(test, &ctx, "?");
+  if (strstr(ctx.log, "vc1") == NULL) {
+    fail(test, "enabled voice control event flag missing from voice show");
+  }
+
+  skred_control_event_reset();
+  consume(test, &ctx, "v3 vc1");
+  expect_int(test, skode_compile_program("v3 l1", &program),
+             SKODE_COMPILE_OK, "compile pattern trigger program");
+  expect_int(test, skode_execute_program_state(&program, &voice,
+             SAMPLE_COUNT_GET(), 44, 9, 5), 0,
+             "execute pattern trigger program");
+  expect_int(test, skred_control_event_poll(events, 4), 1,
+             "pattern trigger event count");
+  expect_int(test, (int)events[0].type, SKRED_CONTROL_EVENT_VOICE_TRIGGER,
+             "pattern trigger event type");
+  expect_int(test, events[0].voice, 3, "pattern trigger event voice");
+  expect_int(test, events[0].pattern, 9, "pattern trigger event pattern");
+  expect_int(test, events[0].step, 5, "pattern trigger event step");
+  expect_int(test, events[0].tag, 44, "pattern trigger event tag");
+  expect_int(test, (int)events[0].opcode, SKODE_OP_VELOCITY,
+             "pattern trigger event opcode");
+
+  skred_control_event_reset();
+  consume(test, &ctx, "v4 vc1");
+  voice_trigger(4);
+  consume(test, &ctx, "?ce");
+  if (strstr(ctx.log, "# control events:1") == NULL ||
+      strstr(ctx.log, "type:VOICE_TRIGGER") == NULL ||
+      strstr(ctx.log, "voice:4") == NULL) {
+    fail(test, "control-plane event diagnostic output mismatch");
+  }
+  ctx.log[0] = '\0';
+  ctx.log_len = 0;
+  consume(test, &ctx, "?ce");
+  if (strstr(ctx.log, "# control events:1") == NULL ||
+      strstr(ctx.log, "type:VOICE_TRIGGER") == NULL ||
+      strstr(ctx.log, "voice:4") == NULL) {
+    fail(test, "non-consuming control-plane event diagnostic mismatch");
+  }
+  ctx.log[0] = '\0';
+  ctx.log_len = 0;
+  consume(test, &ctx, "?ce!");
+  if (strstr(ctx.log, "# control events cleared:1") == NULL) {
+    printf("LOG:\n%s\n", ctx.log); fail(test, "control-plane event clear diagnostic output mismatch");
+  }
+  ctx.log[0] = '\0';
+  ctx.log_len = 0;
+  consume(test, &ctx, "?ce");
+  if (strstr(ctx.log, "# control events empty") == NULL) {
+    fail(test, "empty control-plane event after clear mismatch");
+  }
+
+  configure_loop_test_voice(5, 0);
+  consume(test, &ctx, "[/cex1,2,5 VS1,7 VL2,6 BC1 l1] e>0");
+  consume(test, &ctx, "[/ce! 2 5 VS2,8 VL3,7 BC1 l1] e>1");
+  consume(test, &ctx, "/cex0,2,5");
+  consume(test, &ctx, "v5 a0 vc1 BC1 l1");
+  skred_control_event_clear();
+  sv.phase[5] = 4.0f;
+  sv.phase_inc[5] = 1.0f;
+  sv.loop_remaining[5] = 0;
+  synth(&skred_global_engine, output, NULL, 1, AUDIO_CHANNELS, NULL);
+  (void)skred_control_dispatch_pump(8);
+  expect_int(test, sv.wave_range_start[5], 1,
+             "release response updates same voice range start");
+  expect_int(test, sv.wave_range_end[5], 7,
+             "release response updates same voice range end");
+  expect_int(test, sv.loop_start[5], 2,
+             "release response updates same voice loop start");
+  expect_int(test, sv.loop_end[5], 6,
+             "release response updates same voice loop end");
+
+  sv.phase[5] = (double)sv.loop_end[5] - 1.0;
+  sv.phase_inc[5] = 1.0f;
+  sv.loop_remaining[5] = 0;
+  synth(&skred_global_engine, output, NULL, 1, AUDIO_CHANNELS, NULL);
+  (void)skred_control_dispatch_pump(8);
+  expect_int(test, sv.wave_range_start[5], 2,
+             "second release response updates same voice range start");
+  expect_int(test, sv.wave_range_end[5], 8,
+             "second release response updates same voice range end");
+  expect_int(test, sv.loop_start[5], 3,
+             "second release response updates same voice loop start");
+  expect_int(test, sv.loop_end[5], 7,
+             "second release response updates same voice loop end");
+  skred_control_response_clear();
+  skred_control_event_reset();
+  wave_reset(5);
+  SAMPLE_COUNT_PUT(saved_sample_count);
+
+  configure_loop_test_voice(5, 0);
+  consume(test, &ctx, "[/ce! 3 5 /cex1,2,5 VS2,5 VL2,5 BC2 l1] e>0");
+  consume(test, &ctx, "[/ce! 2 5 B0 VS5,8 l1] e>1");
+  consume(test, &ctx, "/cex0,3,5");
+  consume(test, &ctx, "v5 a0 vc1 B0 VS0,2 l1");
+  skred_control_event_clear();
+  sv.phase[5] = 1.0;
+  sv.phase_inc[5] = 1.0f;
+  synth(&skred_global_engine, output, NULL, 1, AUDIO_CHANNELS, NULL);
+  (void)skred_control_dispatch_pump(8);
+  expect_int(test, sv.wave_range_start[5], 2,
+             "finished response sets middle range start");
+  expect_int(test, sv.wave_range_end[5], 5,
+             "finished response sets middle range end");
+  expect_int(test, sv.loop_start[5], 2,
+             "finished response sets middle loop start");
+  expect_int(test, sv.loop_end[5], 5,
+             "finished response sets middle loop end");
+  expect_int(test, sv.loop_count[5], 2,
+             "finished response sets three-play loop count");
+
+  sv.phase[5] = 4.0;
+  sv.phase_inc[5] = 1.0f;
+  sv.loop_remaining[5] = 0;
+  synth(&skred_global_engine, output, NULL, 1, AUDIO_CHANNELS, NULL);
+  (void)skred_control_dispatch_pump(8);
+  expect_int(test, sv.wave_range_start[5], 5,
+             "release response sets outro range start");
+  expect_int(test, sv.wave_range_end[5], 8,
+             "release response sets outro range end");
+  expect_int(test, sv.loop_enabled[5], 0,
+             "release response disables looping for outro");
+  skred_control_response_clear();
+  skred_control_event_reset();
+  wave_reset(5);
+  SAMPLE_COUNT_PUT(saved_sample_count);
+
+  foreign_call_count = 0;
+  memset(&foreign_last_call, 0, sizeof(foreign_last_call));
+  skred_foreign_function_clear(3);
+  consume(test, &ctx, "[quiet] /ff3 1,2");
+  expect_int(test, foreign_call_count, 0, "unbound foreign function no-op");
+  expect_int(test, skred_foreign_function_bind(3, capture_foreign_call, NULL),
+             0, "bind foreign function");
+  ctx.voice = 6;
+  ctx.pattern = 7;
+  ctx.step = 8;
+  consume(test, &ctx, "(4,5,6) [hello] /ff3 1.5,2.5");
+  expect_int(test, foreign_call_count, 1, "foreign function call count");
+  expect_int(test, foreign_last_call.index, 3, "foreign function index");
+  expect_int(test, foreign_last_call.argc, 2, "foreign function argc");
+  expect_float(test, (float)foreign_last_call.arg[0], 1.5f, 0.0f,
+               "foreign function arg0");
+  expect_float(test, (float)foreign_last_call.arg[1], 2.5f, 0.0f,
+               "foreign function arg1");
+  if (strcmp(foreign_last_call.string, "hello") != 0) {
+    fail(test, "foreign function string mismatch");
+  }
+  expect_int(test, foreign_last_call.data_len, 3, "foreign function data len");
+  expect_float(test, (float)foreign_last_call.data[0], 4.0f, 0.0f,
+               "foreign function data0");
+  expect_int(test, foreign_last_call.voice, 6, "foreign function voice");
+  expect_int(test, foreign_last_call.pattern, 7, "foreign function pattern");
+  expect_int(test, foreign_last_call.step, 8, "foreign function step");
+  skred_foreign_function_clear(3);
+
+  skred_control_event_reset();
+  consume(test, &ctx, "v5 ce 42,1.5,2.5");
+  expect_int(test, skred_control_event_poll(events, 8), 1,
+             "immediate user control event count");
+  expect_int(test, (int)events[0].type, SKRED_CONTROL_EVENT_USER,
+             "immediate user control event type");
+  expect_int(test, events[0].voice, 5, "immediate user control event voice");
+  expect_int(test, events[0].id, 42, "immediate user control event id");
+  expect_int(test, (int)events[0].value_count, 2,
+             "immediate user control event value count");
+  expect_float(test, (float)events[0].value[0], 1.5f, 0.0f,
+               "immediate user control event value 0");
+  expect_float(test, (float)events[0].value[1], 2.5f, 0.0f,
+               "immediate user control event value 1");
+
+  skred_control_event_reset();
+  expect_int(test, skode_compile_program("ce 9,3,4,5", &program),
+             SKODE_COMPILE_OK, "compile user control event program");
+  expect_int(test, skode_execute_program_state(&program, &voice,
+             SAMPLE_COUNT_GET(), 77, 11, 6), 0,
+             "execute user control event program");
+  expect_int(test, skred_control_event_poll(events, 8), 1,
+             "pattern user control event count");
+  expect_int(test, (int)events[0].type, SKRED_CONTROL_EVENT_USER,
+             "pattern user control event type");
+  expect_int(test, events[0].pattern, 11,
+             "pattern user control event pattern");
+  expect_int(test, events[0].step, 6, "pattern user control event step");
+  expect_int(test, events[0].tag, 77, "pattern user control event tag");
+  expect_int(test, events[0].id, 9, "pattern user control event id");
+  expect_int(test, (int)events[0].value_count, 3,
+             "pattern user control event value count");
+
+  skred_control_event_reset();
+  pattern_reset(14);
+  ctx.pattern = 14;
+  consume(test, &ctx, "yc1");
+  expect_int(test, seq_control_events[14], 1, "pattern events enabled");
+  expect_int(test, skode_compile_program("ce 12,8", &program),
+             SKODE_COMPILE_OK, "compile pattern event step");
+  expect_int(test, seq_step_set(14, 0, "ce 12,8", &program), 0,
+             "store pattern event step");
+  seq_modulo_set(14, 1);
+  seq_state_set(14, 1);
+  seq_rewind();
+  seq_step_goto(14, 0);
+  SAMPLE_COUNT_PUT(saved_sample_count + 5513);
+  seq(SAMPLE_COUNT_GET(), execute_queued_event, execute_pattern_program);
+  expect_int(test, skred_control_event_poll(events, 8), 8,
+             "pattern boundary event count");
+  expect_int(test, (int)events[0].type, SKRED_CONTROL_EVENT_PATTERN_START,
+             "pattern start event type");
+  expect_int(test, events[0].pattern, 14, "pattern start event pattern");
+  expect_int(test, events[0].step, 0, "pattern start event step");
+  expect_int(test, (int)events[1].type, SKRED_CONTROL_EVENT_PATTERN_STEP,
+             "pattern step event type");
+  expect_int(test, events[1].pattern, 14, "pattern step event pattern");
+  expect_int(test, events[1].step, 0, "pattern step event step");
+  expect_int(test, (int)events[2].type, SKRED_CONTROL_EVENT_USER,
+             "pattern scheduled user event type");
+  expect_int(test, events[2].pattern, 14,
+             "pattern scheduled user event pattern");
+  expect_int(test, events[2].step, 0, "pattern scheduled user event step");
+  expect_int(test, events[2].id, 12, "pattern scheduled user event id");
+  expect_int(test, (int)events[3].type, SKRED_CONTROL_EVENT_PATTERN_END,
+             "pattern end event type");
+  ctx.log[0] = '\0';
+  ctx.log_len = 0;
+  consume(test, &ctx, "z?");
+  if (strstr(ctx.log, "yc1") == NULL) {
+    fail(test, "enabled pattern control event flag missing from pattern show");
+  }
+  consume(test, &ctx, "yc0");
+  ctx.log[0] = '\0';
+  ctx.log_len = 0;
+  consume(test, &ctx, "z?");
+  if (strstr(ctx.log, "yc0") != NULL || strstr(ctx.log, "yc1") != NULL) {
+    fail(test, "disabled pattern control event flag should be omitted");
+  }
+  pattern_reset(14);
+  SAMPLE_COUNT_PUT(saved_sample_count);
+
+  skred_control_event_reset();
+  voice_control_events_set(0, 1);
+  amp_set(0, 0.0f);
+  envelope_set(0, 1.0f, 1.0f, 0.0f, 0.0f);
+  envelope_velocity(0, 1.0f);
+  expect_int(test, skred_control_event_poll(events, 4), 1,
+             "finite ADSR trigger event count");
+  SAMPLE_COUNT_PUT(sv.amp_envelope[0].sample_start +
+                   (uint64_t)(2 * MAIN_SAMPLE_RATE));
+  synth(&skred_global_engine, output, NULL, 1, AUDIO_CHANNELS, NULL);
+  expect_int(test, skred_control_event_poll(events, 4), 1,
+             "finite ADSR finished event count");
+  expect_int(test, (int)events[0].type, SKRED_CONTROL_EVENT_VOICE_FINISHED,
+             "finite ADSR finished event type");
+  SAMPLE_COUNT_PUT(saved_sample_count);
+  wave_reset(0);
+}
+
+static void test_frequency_and_amplitude_bend(void) {
+  const char *test = "frequency and amplitude bend";
+  skode_t ctx = new_ctx();
+  ctx.voice = 0;
+  wave_reset(0);
+  wave_reset(1);
+
+  /* Defaults check */
+  char fmt_buf[512];
+  voice_format(0, fmt_buf, sizeof(fmt_buf), 0);
+  if (strstr(fmt_buf, "fb") != NULL || strstr(fmt_buf, "ab") != NULL) {
+    fail(test, "voice_format output contains bend parameters when default");
+  }
+  expect_float(test, sv.freq_bend[0], 0.0f, 1e-4f, "default freq_bend is 0");
+  expect_float(test, sv.freq_bend_range[0], 2.0f, 1e-4f, "default freq_bend_range is 2");
+  expect_float(test, sv.freq_bend_offset[0], 0.0f, 1e-4f, "default freq_bend_offset is 0");
+  expect_float(test, sv.amp_bend[0], 0.0f, 1e-4f, "default amp_bend is 0");
+  expect_float(test, sv.amp_bend_range[0], 12.0f, 1e-4f, "default amp_bend_range is 12");
+  expect_float(test, sv.amp_bend_offset[0], 0.0f, 1e-4f, "default amp_bend_offset is 0");
+
+  /* SKode command execution for fb and fbp */
+  consume(test, &ctx, "fb .5");
+  expect_float(test, sv.freq_bend[0], 0.5f, 1e-4f, "fb .5 sets freq_bend to 0.5");
+
+  consume(test, &ctx, "fb 2.5");
+  expect_float(test, sv.freq_bend[0], 1.0f, 1e-4f, "fb > 1 clamps to 1.0");
+
+  consume(test, &ctx, "fb -3");
+  expect_float(test, sv.freq_bend[0], -1.0f, 1e-4f, "fb < -1 clamps to -1.0");
+
+  consume(test, &ctx, "fb .5");
+  consume(test, &ctx, "fbp 12 2");
+  expect_float(test, sv.freq_bend_range[0], 12.0f, 1e-4f, "fbp range set to 12");
+  expect_float(test, sv.freq_bend_offset[0], 2.0f, 1e-4f, "fbp offset set to 2");
+
+  /* SKode command execution for ab and abp */
+  consume(test, &ctx, "ab .25");
+  expect_float(test, sv.amp_bend[0], 0.25f, 1e-4f, "ab .25 sets amp_bend to 0.25");
+
+  consume(test, &ctx, "abp 24 -6");
+  expect_float(test, sv.amp_bend_range[0], 24.0f, 1e-4f, "abp range set to 24");
+  expect_float(test, sv.amp_bend_offset[0], -6.0f, 1e-4f, "abp offset set to -6");
+
+  /* Format non-default parameters check */
+  voice_format(0, fmt_buf, sizeof(fmt_buf), 0);
+  expect_substr(test, fmt_buf, "fb0.5", "voice_format includes non-default fb");
+  expect_substr(test, fmt_buf, "fbp12,2", "voice_format includes non-default fbp");
+  expect_substr(test, fmt_buf, "ab0.25", "voice_format includes non-default ab");
+  expect_substr(test, fmt_buf, "abp24,-6", "voice_format includes non-default abp");
+
+  /* Frequency calculation check */
+  freq_set(0, 440.0f);
+  freq_bend_param_set(0, 12.0f, 0.0f);
+  freq_bend_set(0, 1.0f); /* +12 semitones = 1 octave = 880 Hz */
+  float inc_440 = osc_get_phase_inc(&skred_global_engine,0, 440.0f);
+  freq_bend_set(0, 0.0f);
+  float inc_base = osc_get_phase_inc(&skred_global_engine,0, 440.0f);
+  expect_float(test, inc_440, inc_base * 2.0f, 1e-4f, "1 octave frequency bend doubles phase_inc");
+
+  /* SKode command execution for ab and abp */
+  consume(test, &ctx, "ab .25");
+  expect_float(test, sv.amp_bend[0], 0.25f, 1e-4f, "ab .25 sets amp_bend to 0.25");
+
+  consume(test, &ctx, "abp 24 -6");
+  expect_float(test, sv.amp_bend_range[0], 24.0f, 1e-4f, "abp range set to 24");
+  expect_float(test, sv.amp_bend_offset[0], -6.0f, 1e-4f, "abp offset set to -6");
+
+  /* Amplitude calculation check */
+  amp_set(0, 0.0f);
+  amp_bend_param_set(0, 12.0f, 0.0f);
+  amp_bend_set(0, 0.5f); /* +6 dB */
+  expect_float(test, sv.amp[0], powf(10.0f, 6.0f / 20.0f), 1e-4f, "ab .5 with abp 12 range gives +6 dB");
+
+  /* Voice copy */
+  voice_copy(0, 1);
+  expect_float(test, sv.freq_bend[1], sv.freq_bend[0], 1e-4f, "voice_copy copies freq_bend");
+  expect_float(test, sv.freq_bend_range[1], sv.freq_bend_range[0], 1e-4f, "voice_copy copies freq_bend_range");
+  expect_float(test, sv.freq_bend_offset[1], sv.freq_bend_offset[0], 1e-4f, "voice_copy copies freq_bend_offset");
+  expect_float(test, sv.amp_bend[1], sv.amp_bend[0], 1e-4f, "voice_copy copies amp_bend");
+  expect_float(test, sv.amp_bend_range[1], sv.amp_bend_range[0], 1e-4f, "voice_copy copies amp_bend_range");
+  expect_float(test, sv.amp_bend_offset[1], sv.amp_bend_offset[0], 1e-4f, "voice_copy copies amp_bend_offset");
+
+  /* Voice reset */
+  wave_reset(0);
+  expect_float(test, sv.freq_bend[0], 0.0f, 1e-4f, "wave_reset resets freq_bend");
+  expect_float(test, sv.freq_bend_range[0], 2.0f, 1e-4f, "wave_reset resets freq_bend_range");
+  expect_float(test, sv.amp_bend[0], 0.0f, 1e-4f, "wave_reset resets amp_bend");
+  expect_float(test, sv.amp_bend_range[0], 12.0f, 1e-4f, "wave_reset resets amp_bend_range");
+
+  wave_reset(0);
+  wave_reset(1);
+}
+
+static void test_thread_status_includes_midi(void) {
+  const char *test = "thread status includes midi";
+  skode_t ctx = new_ctx();
+  ctx.log_enable = 1;
+  consume(test, &ctx, "/th?");
+  expect_substr(test, ctx.log, "midi:", "thread status includes midi section");
+}
+
+static void test_pattern_sync_and_wait_steps(void) {
+  const char *test = "pattern sync and cross-pattern wait steps";
+  skode_t ctx = new_ctx();
+
+  consume(test, &ctx, "y0 x0 c4 x1 e4 x2 g4 x3 c5");
+  consume(test, &ctx, "y1 x0 a4 x1 c5 x2 -0");
+
+  consume(test, &ctx, "Z1");
+  expect_int(test, seq_state[0], SEQ_RUNNING, "pattern 0 running after Z1");
+  expect_int(test, seq_state[1], SEQ_RUNNING, "pattern 1 running after Z1");
+  expect_int(test, seq_pointer[0], 0, "pattern 0 reset to step 0 after Z1");
+  expect_int(test, seq_pointer[1], 0, "pattern 1 reset to step 0 after Z1");
+
+  consume(test, &ctx, "Z0");
+  expect_int(test, seq_state[0], SEQ_STOPPED, "pattern 0 stopped after Z0");
+  expect_int(test, seq_state[1], SEQ_STOPPED, "pattern 1 stopped after Z0");
+  expect_int(test, seq_pointer[0], 0, "pattern 0 reset to step 0 after Z0");
+  expect_int(test, seq_pointer[1], 0, "pattern 1 reset to step 0 after Z0");
+
+  consume(test, &ctx, "y0 z1");
+  expect_int(test, seq_state[0], SEQ_RUNNING, "pattern 0 running after y0 z1");
+  expect_int(test, seq_pointer[0], 0, "pattern 0 reset to step 0 after y0 z1");
+
+  consume(test, &ctx, "y0 z0");
+  expect_int(test, seq_state[0], SEQ_STOPPED, "pattern 0 stopped after y0 z0");
+
+  consume(test, &ctx, "y0 z?");
+  consume(test, &ctx, "z");
+  consume(test, &ctx, "Z");
+  consume(test, &ctx, "Z?");
+}
+
+static void test_rec_load_k_to_data_to_rec(void) {
+  const char *test = "rec load k to data to rec";
+  skode_t ctx = new_ctx();
+  consume(test, &ctx, "(0 1 2 3) d>r /r100");
+  expect_int(test, sw.data[100] != NULL ? 1 : 0, 1, "wave 100 installed from rec_load");
+  expect_int(test, sw.size[100], 4, "wave 100 size is 4");
+  expect_int(test, sw.one_shot[100], 1, "wave 100 is one_shot");
+  consume(test, &ctx, "v0 w100 f440 n69,0");
+  float phase_inc = osc_get_phase_inc(&skred_global_engine,0, 440.0f);
+  expect_int(test, phase_inc > 0.0f ? 1 : 0, 1, "phase_inc is positive for rec_load one-shot wave");
+}
+
+static void test_x_opcode_escape(void) {
+  const char *test = "EXEC numeric opcode escape";
+  skode_t ctx = new_ctx();
+  ctx.voice = 0;
+  consume(test, &ctx, "v 0");
+  consume(test, &ctx, "a -1000.0"); // essentially 0
+  expect_float(test, sv.user_amp[0], -1000.0f, 1e-4f, "a -1000 sets user_amp to -1000");
+  
+  // SKODE_OP_AMP is 3
+  consume(test, &ctx, "EXEC 3 -6.0");
+  expect_float(test, sv.user_amp[0], -6.0f, 1e-4f, "EXEC 3 -6 sets user_amp to -6");
+  
+  // Negative tests
+  event_program_t program;
+  expect_int(test, skode_compile_program("EXEC", &program), SKODE_COMPILE_INVALID, "bare EXEC rejected");
+  expect_int(test, skode_compile_program("EXEC 250", &program), SKODE_COMPILE_INVALID, "EXEC 250 unmapped rejected");
+  expect_int(test, skode_compile_program("EXEC 9999", &program), SKODE_COMPILE_INVALID, "EXEC 9999 out of range rejected");
+  expect_int(test, skode_compile_program("EXEC 256", &program), SKODE_COMPILE_INVALID, "EXEC 256 out of range rejected");
+}
+
+static void test_multistep_assignment(void) {
+  const char *test = "multi-step pattern assignment";
+  skode_t ctx = new_ctx();
+  consume(test, &ctx, "y20");
+  consume(test, &ctx, "[v1 l.8] x0,4,8,12");
+  expect_int(test, strcmp(seq_step_get(20, 0), "v1 l.8"), 0, "step 0 has program");
+  expect_int(test, strcmp(seq_step_get(20, 1), ""), 0, "step 1 is empty");
+  expect_int(test, strcmp(seq_step_get(20, 4), "v1 l.8"), 0, "step 4 has program");
+  expect_int(test, strcmp(seq_step_get(20, 8), "v1 l.8"), 0, "step 8 has program");
+  expect_int(test, strcmp(seq_step_get(20, 12), "v1 l.8"), 0, "step 12 has program");
+
+  // Multi-step hold / rest syntax
+  consume(test, &ctx, "[-] x1,2,3");
+  expect_int(test, strcmp(seq_step_get(20, 1), "-"), 0, "step 1 has rest");
+  expect_int(test, strcmp(seq_step_get(20, 2), "-"), 0, "step 2 has rest");
+  expect_int(test, strcmp(seq_step_get(20, 3), "-"), 0, "step 3 has rest");
+}
+
+static void test_step_all_data(void) {
+  const char *test = "step assignment via data array (X> / step_all_data)";
+  skode_t ctx = new_ctx();
+  consume(test, &ctx, "y22");
+
+  // Assign 12 steps (exceeding scalar ARG_MAX=8)
+  consume(test, &ctx, "[v8 g&4 n&3] ( 0 2 3 5 6 8 10 11 13 14 15 16 ) X>");
+  expect_int(test, strcmp(seq_step_get(22, 0), "v8 g&4 n&3"), 0, "step 0 has program");
+  expect_int(test, strcmp(seq_step_get(22, 1), ""), 0, "step 1 is empty");
+  expect_int(test, strcmp(seq_step_get(22, 2), "v8 g&4 n&3"), 0, "step 2 has program");
+  expect_int(test, strcmp(seq_step_get(22, 11), "v8 g&4 n&3"), 0, "step 11 has program");
+  expect_int(test, strcmp(seq_step_get(22, 16), "v8 g&4 n&3"), 0, "step 16 has program");
+
+  // Reverse ordering: data array first, then string block
+  consume(test, &ctx, "( 1 4 7 9 ) [v2 l.5] X>");
+  expect_int(test, strcmp(seq_step_get(22, 1), "v2 l.5"), 0, "step 1 has program from array-first");
+  expect_int(test, strcmp(seq_step_get(22, 4), "v2 l.5"), 0, "step 4 has program from array-first");
+  expect_int(test, strcmp(seq_step_get(22, 7), "v2 l.5"), 0, "step 7 has program from array-first");
+  expect_int(test, strcmp(seq_step_get(22, 9), "v2 l.5"), 0, "step 9 has program from array-first");
+
+  // Explicit pattern targeting (clause 1: p X>)
+  consume(test, &ctx, "[v5] ( 0 8 ) 23 X>");
+  expect_int(test, strcmp(seq_step_get(23, 0), "v5"), 0, "pattern 23 step 0 has program");
+  expect_int(test, strcmp(seq_step_get(23, 8), "v5"), 0, "pattern 23 step 8 has program");
+  expect_int(test, strcmp(seq_step_get(23, 1), ""), 0, "pattern 23 step 1 is empty");
+
+  // Canonical name step_all_data
+  consume(test, &ctx, "y24");
+  consume(test, &ctx, "[v9] ( 3 6 ) step_all_data");
+  expect_int(test, strcmp(seq_step_get(24, 3), "v9"), 0, "pattern 24 step 3 has program via step_all_data");
+  expect_int(test, strcmp(seq_step_get(24, 6), "v9"), 0, "pattern 24 step 6 has program via step_all_data");
+}
+
+static void test_inst_note_and_stream_ties(void) {
+  const char *test = "instrument note i and stream ties";
+  skode_t ctx = new_ctx();
+  consume(test, &ctx, "[ C3 . . - ~E3 . - - ] n>d /SS 2");
+
+  expect_int(test, global_stream[2].len, 8, "stream 2 length is 8");
+  expect_float(test, (float)global_stream[2].data[0], 48.0f, 1e-4f, "step 0 is C3 (48)");
+  expect_int(test, ands_is_tie(global_stream[2].data[1]), 1, "step 1 is tie (.)");
+  expect_int(test, ands_is_tie(global_stream[2].data[2]), 1, "step 2 is tie (.)");
+  expect_int(test, ands_is_rest(global_stream[2].data[3]), 1, "step 3 is rest (-)");
+  expect_float(test, (float)global_stream[2].data[4], -52.0f, 1e-4f, "step 4 is slurred E3 (-52)");
+  expect_int(test, ands_is_tie(global_stream[2].data[5]), 1, "step 5 is tie (.)");
+  expect_int(test, ands_is_rest(global_stream[2].data[6]), 1, "step 6 is rest (-)");
+  expect_int(test, ands_is_rest(global_stream[2].data[7]), 1, "step 7 is rest (-)");
+
+  consume(test, &ctx, "v0 w1 a-6");
+  expect_int(test, skode_inst_note(0, 48.0f, 0.8f, 0.0f), 0, "inst_note 48 Note-On succeeds");
+  expect_float(test, sv.last_midi_note[0], 48.0f, 1e-4f, "voice 0 note is 48");
+
+  expect_int(test, skode_inst_note(0, skode_double_to_float_note(ANDS_SENTINEL_TIE), 1.0f, 0.0f), 0, "inst_note tie succeeds");
+  expect_float(test, sv.last_midi_note[0], 48.0f, 1e-4f, "voice 0 note still 48 after tie");
+
+  expect_int(test, skode_inst_note(0, -52.0f, 1.0f, 0.0f), 0, "inst_note slur -52 succeeds");
+  expect_float(test, sv.last_midi_note[0], 52.0f, 1e-4f, "voice 0 note is 52 after slur");
+
+  expect_int(test, skode_inst_note(0, NAN, 1.0f, 0.0f), 0, "inst_note rest succeeds");
+
+  event_program_t program;
+  expect_int(test, skode_compile_program("v0 i-", &program), 0, "compile v0 i- succeeds");
+  expect_int(test, program.count, 2, "v0 i- produces 2 opcodes");
+  expect_int(test, program.op[1].opcode.code, SKODE_OP_INST_NOTE, "opcode 1 is SKODE_OP_INST_NOTE");
+  expect_int(test, isnan(program.op[1].opcode.arg[0]), 1, "arg[0] is NaN rest");
+  consume(test, &ctx, "v0 i-");
+
+  expect_int(test, skode_compile_program("v0 i -", &program), 0, "compile v0 i - succeeds");
+  expect_int(test, program.count, 2, "v0 i - produces 2 opcodes");
+  expect_int(test, program.op[1].opcode.code, SKODE_OP_INST_NOTE, "opcode 1 is SKODE_OP_INST_NOTE");
+  ctx.log_enable = 1;
+  reset_log(&ctx);
+  consume(test, &ctx, "v0 i60");
+  expect_float(test, sv.last_midi_note[0], 60.0f, 1e-4f, "v0 i60 plays 60");
+  expect_int(test, ctx.log_len, 0, "v0 i60 has no log errors");
+
+  reset_log(&ctx);
+  consume(test, &ctx, "v0 i -52");
+  expect_float(test, sv.last_midi_note[0], 52.0f, 1e-4f, "v0 i -52 slurs to 52");
+  expect_int(test, ctx.log_len, 0, "v0 i -52 has no log errors");
+
+  reset_log(&ctx);
+  consume(test, &ctx, "v0 i .");
+  expect_float(test, sv.last_midi_note[0], 52.0f, 1e-4f, "v0 i . ties 52");
+  expect_int(test, ctx.log_len, 0, "v0 i . has no log errors");
+
+  reset_log(&ctx);
+  consume(test, &ctx, "v0 i -");
+  expect_int(test, ctx.log_len, 0, "v0 i - has no log errors");
+
+  expect_int(test, skode_compile_program("v0 i -52", &program), 0, "compile v0 i -52 succeeds");
+  expect_int(test, program.count, 2, "v0 i -52 produces 2 opcodes");
+  expect_int(test, program.op[1].opcode.code, SKODE_OP_INST_NOTE, "opcode 1 is SKODE_OP_INST_NOTE");
+  consume(test, &ctx, "v0 i -52");
+  expect_float(test, sv.last_midi_note[0], 52.0f, 1e-4f, "voice 0 note is 52 after slur");
+  expect_int(test, skode_compile_program("v0 i60", &program), 0, "compile v0 i60 succeeds");
+  expect_int(test, program.count, 2, "v0 i60 produces 2 opcodes");
+  expect_int(test, program.op[1].opcode.code, SKODE_OP_INST_NOTE, "opcode 1 is SKODE_OP_INST_NOTE");
+}
+
+static void test_voice_show_names(void) {
+  const char *test = "voice show names - ???";
+  skode_t ctx = new_ctx();
+  ctx.log_enable = 1;
+
+  voice_init();
+  reset_log(&ctx);
+
+  /* Set up voice 0 with name Kick, voice 1 with waveform 2 (no name), voice 2 modulator with w15 (no name), voice 3 default */
+  consume(test, &ctx, "v0 [Kick] vt");
+  consume(test, &ctx, "v1 w2 a0.5");
+  consume(test, &ctx, "v2 w15 m1");
+  consume(test, &ctx, "v0");
+
+  reset_log(&ctx);
+  consume(test, &ctx, "???");
+
+  /* Voice 0 is current voice and has [Kick] vt */
+  expect_substr(test, ctx.log, "v0 [Kick] vt # *", "voice 0 name and current marker in ???");
+  /* Voice 1 has no name, prints waveform w2 */
+  expect_substr(test, ctx.log, "v1 w2\n", "voice 1 waveform without name in ???");
+  /* Voice 2 has no name, is modulator, prints w15 m1 */
+  expect_substr(test, ctx.log, "v2 w15 m1\n", "voice 2 modulator flag in ???");
+  /* Should NOT output frequency or amplitude parameters */
+  if (strstr(ctx.log, "f440") != NULL || strstr(ctx.log, "a0.5") != NULL) {
+    fail(test, "??? should not output frequency or amplitude parameters");
+  }
+  /* Voice 3 (unconfigured) should NOT be printed */
+  if (strstr(ctx.log, "v3") != NULL) {
+    fail(test, "??? should not output unconfigured voice 3");
+  }
+
+  /* Test alias v??? */
+  reset_log(&ctx);
+  consume(test, &ctx, "v???");
+  expect_substr(test, ctx.log, "v0 [Kick] vt # *", "voice 0 name in v???");
+  expect_substr(test, ctx.log, "v1 w2\n", "voice 1 in v???");
+  expect_substr(test, ctx.log, "v2 w15 m1\n", "voice 2 in v???");
+  if (strstr(ctx.log, "v3") != NULL) {
+    fail(test, "v??? should not output unconfigured voice 3");
+  }
+
+  /* Test poly pool and group prototype annotation in ??? */
+  reset_log(&ctx);
+  consume(test, &ctx, "/pg 0,4,1,0");
+  consume(test, &ctx, "/pp 0,0,5,2,0");
+  consume(test, &ctx, "v5");
+  reset_log(&ctx);
+  consume(test, &ctx, "???");
+  expect_substr(test, ctx.log, "v4 w0 # pg0\n", "group prototype voice 4 in ???");
+  expect_substr(test, ctx.log, "v5 w0 # * pp0[0]\n", "pool instance 0 current voice in ???");
+  expect_substr(test, ctx.log, "v6 w0 # pp0[1]\n", "pool instance 1 in ???");
+
+  /* Clean up poly state */
+  skred_poly_reset();
+}
+
+static void test_voice_show_all(void) {
+  const char *test = "voice show all - ??";
+  skode_t ctx = new_ctx();
+  ctx.log_enable = 1;
+
+  voice_init();
+  reset_log(&ctx);
+
+  /* Set up voice 0 default, voice 1 configured with w1 */
+  consume(test, &ctx, "v1 w1");
+  consume(test, &ctx, "v0");
+
+  reset_log(&ctx);
+  consume(test, &ctx, "??");
+
+  /* Voice 0 is current voice (v0 w0 f440 a0 # *) */
+  expect_substr(test, ctx.log, "v0 w0 f440 a0 # *", "voice 0 in ??");
+  /* Voice 1 is configured (v1 w1 f440 a0) */
+  expect_substr(test, ctx.log, "v1 w1 f440 a0", "voice 1 in ??");
+  /* Unconfigured voices should NOT appear */
+  if (strstr(ctx.log, "v2") != NULL) {
+    fail(test, "?? should not output unconfigured voice 2");
+  }
+}
+
+static void test_voice_show_connected(void) {
+  const char *test = "voice show connected - ?";
+  skode_t ctx = new_ctx();
+  ctx.log_enable = 1;
+
+  voice_init();
+
+  /* 1. Isolated voice: only v0 printed */
+  consume(test, &ctx, "v0");
+  reset_log(&ctx);
+  consume(test, &ctx, "?");
+  expect_substr(test, ctx.log, "v0 w0", "v0 in isolated query");
+  if (strstr(ctx.log, "v1") != NULL) fail(test, "unconnected voice v1 should not appear");
+
+  /* 2. Voice 1 links to Voice 2 via G and H */
+  consume(test, &ctx, "v1 G2 H2");
+  consume(test, &ctx, "v1");
+  reset_log(&ctx);
+  consume(test, &ctx, "?");
+  expect_substr(test, ctx.log, "v1 w0", "v1 in linked query");
+  expect_substr(test, ctx.log, "v2 w0", "v2 connected via G/H in query");
+
+  /* 3. Voice 3 has FM modulator Voice 4, and Voice 4 has FM modulator Voice 5 */
+  consume(test, &ctx, "v3 F4,2.0");
+  consume(test, &ctx, "v4 F5,1.5");
+  consume(test, &ctx, "v3");
+  reset_log(&ctx);
+  consume(test, &ctx, "?");
+  expect_substr(test, ctx.log, "v3 w0", "v3 root in FM query");
+  expect_substr(test, ctx.log, "v4 w0", "v4 modulator in FM query");
+  expect_substr(test, ctx.log, "v5 w0", "v5 secondary modulator in FM query");
+
+  /* 4. Hard sync link: Voice 6 syncs Voice 7 */
+  consume(test, &ctx, "v6 HS7");
+  consume(test, &ctx, "v6");
+  reset_log(&ctx);
+  consume(test, &ctx, "?");
+  expect_substr(test, ctx.log, "v6 w0", "v6 root in HS query");
+  expect_substr(test, ctx.log, "v7 w0", "v7 sync target in query");
+
+  /* 5. Cyclic modulators: Voice 4 modulates Voice 5, Voice 5 modulates Voice 4 */
+  consume(test, &ctx, "v4 F5,1.0");
+  consume(test, &ctx, "v5 F4,1.0");
+  consume(test, &ctx, "v4");
+  reset_log(&ctx);
+  consume(test, &ctx, "?");
+  expect_substr(test, ctx.log, "v4 w0", "v4 in cyclic query");
+  expect_substr(test, ctx.log, "v5 w0", "v5 in cyclic query");
+  /* Ensure v4 only appears once */
+  char *first_v4 = strstr(ctx.log, "v4");
+  if (first_v4 && strstr(first_v4 + 2, "v4") != NULL) {
+    fail(test, "v4 should not appear multiple times despite cyclic modulation");
+  }
+}
+
+static void test_voice_format_links(void) {
+  const char *test = "voice format links pasteable";
+  skode_t ctx = new_ctx();
+  voice_init();
+
+  consume(test, &ctx, "v0 G1,3 H2 HS4,5");
+  char out[2048];
+  voice_format(0, out, sizeof(out), 0);
+
+  expect_substr(test, out, " G1,3", "voice_format formats active G links without unused slots");
+  expect_substr(test, out, " H2", "voice_format formats active H link without unused slots");
+  expect_substr(test, out, " HS4,5", "voice_format formats active HS links without unused slots");
+
+  /* Ensure no '-' sentinels appear in link outputs */
+  if (strstr(out, "G-") || strstr(out, "H-") || strstr(out, "HS-") ||
+      strstr(out, ",-") || strstr(out, "-,")) {
+    fail(test, "voice_format should not output '-' in link lists");
+  }
+
+  /* Test pasteability: executing the formatted string back in must succeed */
+  skode_t ctx2 = new_ctx();
+  consume(test, &ctx2, out);
+  expect_int(test, (int)sv.link_midi[0][0], 1, "pasted voice restored link_midi 0");
+  expect_int(test, (int)sv.link_midi[1][0], 3, "pasted voice restored link_midi 1");
+  expect_int(test, (int)sv.link_velo[0][0], 2, "pasted voice restored link_velo 0");
+  expect_int(test, (int)sv.link_sync[0][0], 4, "pasted voice restored link_sync 0");
+  expect_int(test, (int)sv.link_sync[1][0], 5, "pasted voice restored link_sync 1");
+}
+
+static void test_voice_format_pitch_mode(void) {
+  const char *test = "voice format pitch mode";
+  skode_t ctx = new_ctx();
+  char out[1024];
+
+  /* 1. Default after reset: shows frequency f440, no note n */
+  voice_init();
+  voice_format(0, out, sizeof(out), 0);
+  expect_substr(test, out, " f440 ", "default voice shows frequency");
+  if (strstr(out, " n") != NULL) {
+    fail(test, "default voice should not show note 'n' when freq was set");
+  }
+
+  /* 2. Setting note via 'n60': shows 'n60', suppresses 'f' */
+  consume(test, &ctx, "v0 n60");
+  voice_format(0, out, sizeof(out), 0);
+  expect_substr(test, out, " n60 ", "voice shows n60 when note was last set");
+  if (strstr(out, " f") != NULL) {
+    fail(test, "voice should not show frequency 'f' when note was last set");
+  }
+
+  /* 3. Setting note with cents: shows 'n60,15' */
+  consume(test, &ctx, "v0 n60 15");
+  voice_format(0, out, sizeof(out), 0);
+  expect_substr(test, out, " n60,15 ", "voice shows n60,15 when note with cents was set");
+
+  /* 4. Switching back to frequency: shows 'f220', suppresses 'n' */
+  consume(test, &ctx, "v0 f220");
+  voice_format(0, out, sizeof(out), 0);
+  expect_substr(test, out, " f220 ", "voice shows f220 after switching back to f");
+  if (strstr(out, " n") != NULL) {
+    fail(test, "voice should not show note 'n' after switching to frequency");
+  }
+
+  /* 5. Voice copy: copying voice preserves pitch mode */
+  consume(test, &ctx, "v0 n55");
+  consume(test, &ctx, "v0 >1");
+  voice_format(1, out, sizeof(out), 0);
+  expect_substr(test, out, " n55 ", "copied voice preserved note pitch mode");
+  if (strstr(out, " f") != NULL) {
+    fail(test, "copied voice should not show frequency 'f'");
+  }
+
+  /* 6. Glide with and without mode */
+  consume(test, &ctx, "v0 g0.05");
+  voice_format(0, out, sizeof(out), 0);
+  expect_substr(test, out, " g0.05", "voice shows g0.05 with default mode");
+
+  consume(test, &ctx, "v0 g0.05 1");
+  voice_format(0, out, sizeof(out), 0);
+  expect_substr(test, out, " g0.05,1", "voice shows g0.05,1 with non-default mode");
+
+  /* Test pasteability of g with mode */
+  skode_t ctx2 = new_ctx();
+  consume(test, &ctx2, out);
+  expect_float(test, sv.glissando_time[0], 0.05f, 0.0001f, "pasted voice restored glissando time");
+  expect_int(test, sv.glissando_mode[0], 1, "pasted voice restored glissando mode");
+
+  /* 7. Glide with 0 arguments clears glide */
+  consume(test, &ctx, "v0 g");
+  expect_float(test, sv.glissando_time[0], 0.0f, 0.0001f, "v0 g cleared glissando time");
+  expect_int(test, sv.glissando_enable[0], 0, "v0 g cleared glissando enable");
+  expect_int(test, sv.glissando_mode[0], 0, "v0 g cleared glissando mode");
+  voice_format(0, out, sizeof(out), 0);
+  if (strstr(out, " g") != NULL) {
+    fail(test, "voice format should not show g after g with no args");
+  }
+}
+
+static void test_voice_format_envelopes(void) {
+  const char *test = "voice format envelopes";
+  skode_t ctx = new_ctx();
+  char out[1024];
+
+  /* 1. Amp envelope: 2 elements assumes s=0, r=0 and formats as t%g,%g */
+  voice_init();
+  consume(test, &ctx, "v0 t0.01,0.25");
+  expect_float(test, sv.amp_envelope[0].a, 0.01f, 0.0001f, "amp env a");
+  expect_float(test, sv.amp_envelope[0].d, 0.25f, 0.0001f, "amp env d");
+  expect_float(test, sv.amp_envelope[0].s, 0.0f, 0.0001f, "amp env s");
+  expect_float(test, sv.amp_envelope[0].r, 0.0f, 0.0001f, "amp env r");
+  voice_format(0, out, sizeof(out), 0);
+  expect_substr(test, out, "t0.01,0.25", "amp envelope 2-arg formatting");
+
+  /* 2. Amp envelope: 0 elements makes it flat (suppressed in non-verbose display) */
+  consume(test, &ctx, "v0 t");
+  expect_float(test, sv.amp_envelope[0].a, 0.0f, 0.0001f, "flat amp env a");
+  expect_float(test, sv.amp_envelope[0].d, 0.0f, 0.0001f, "flat amp env d");
+  expect_float(test, sv.amp_envelope[0].s, 1.0f, 0.0001f, "flat amp env s");
+  expect_float(test, sv.amp_envelope[0].r, 0.0f, 0.0001f, "flat amp env r");
+  voice_format(0, out, sizeof(out), 0);
+  if (strstr(out, " t") != NULL) {
+    fail(test, "flat amp envelope should be suppressed in voice format");
+  }
+
+  /* 3. Multistage amp envelope via te */
+  consume(test, &ctx, "v0 (0.01 1 0.2 0) te");
+  expect_int(test, sv.amp_envelope[0].mode, 1, "amp env mode multistage");
+  voice_format(0, out, sizeof(out), 0);
+  expect_substr(test, out, "(0.01 1 0.2 0) te", "te multistage formatting");
+
+  /* 4. Filter envelope: 2 elements assumes s=0, r=0 and formats kt a d kd */
+  consume(test, &ctx, "v0 kt 0.02 0.3 kd 1");
+  expect_float(test, sv.filter_envelope[0].a, 0.02f, 0.0001f, "filter env a");
+  expect_float(test, sv.filter_envelope[0].d, 0.3f, 0.0001f, "filter env d");
+  expect_float(test, sv.filter_envelope[0].s, 0.0f, 0.0001f, "filter env s");
+  expect_float(test, sv.filter_envelope[0].r, 0.0f, 0.0001f, "filter env r");
+  voice_format(0, out, sizeof(out), 0);
+  expect_substr(test, out, "kt 0.02 0.3 kd 1", "filter envelope 2-arg formatting");
+
+  /* Filter envelope: 0 elements makes it flat */
+  consume(test, &ctx, "v0 kt");
+  expect_int(test, sv.use_filter_envelope[0], 0, "flat filter env disabled");
+  voice_format(0, out, sizeof(out), 0);
+  if (strstr(out, "kt") != NULL) {
+    fail(test, "flat filter envelope should be suppressed in voice format");
+  }
+
+  /* 5. Phase envelope: 2 elements and 0 elements */
+  consume(test, &ctx, "v0 ct 0.03 0.4 cd 0.5");
+  voice_format(0, out, sizeof(out), 0);
+  expect_substr(test, out, "ct 0.03 0.4 cd 0.5", "phase envelope 2-arg formatting");
+  consume(test, &ctx, "v0 ct");
+  expect_int(test, sv.use_cz_envelope[0], 0, "flat phase env disabled");
+
+  /* 6. Pitch envelope: 2 elements and 0 elements */
+  consume(test, &ctx, "v0 pt 0.04 0.5 pd 2");
+  voice_format(0, out, sizeof(out), 0);
+  expect_substr(test, out, "pt 0.04 0.5 pd 2", "pitch envelope 2-arg formatting");
+  consume(test, &ctx, "v0 pt");
+  expect_int(test, sv.use_freq_envelope[0], 0, "flat pitch env disabled");
+}
+
+int main(int argc, char **argv) {
+  synth_init(8);
+  wave_table_init(0);
+  voice_init();
+  seq_init();
+
+  if (argc > 1 && strcmp(argv[1], "--session-only") == 0) {
+    test_session_zip_round_trip();
+    synth_free();
+    if (failures) {
+      fprintf(stderr, "%d session archive test failure(s)\n", failures);
+      return 1;
+    }
+    printf("SKODE session archive test passed\n");
+    return 0;
+  }
+
+  test_voice_core_commands();
+  test_frequency_and_amplitude_bend();
+  test_thread_status_includes_midi();
+  test_rec_load_k_to_data_to_rec();
+  test_pattern_sync_and_wait_steps();
+  test_invalid_voice_does_not_move_selection();
+  test_text_and_show_logging();
+  test_data_array_logging();
+  test_record_to_data();
+  test_command_help();
+  test_named_wave_destination();
+  test_midi_and_links();
+  test_trigger_delay_lifecycle();
+  test_envelope_configuration_is_deferred();
+  test_envelope_future_timestamps();
+  test_cycle_playback_classification();
+  test_bounded_one_shot_loops();
+  test_named_wav_exports();
+  test_wave_loop_points();
+  test_wave_load_smpl_loop();
+  test_record_find_trim_command();
+  test_record_voice_selection();
+  test_bounded_loop_preserves_tail_envelopes();
+  test_one_shot_asr_mode();
+  test_opcode_events();
+  test_909_sequence_programs();
+  test_scalar_voice_opcode_inventory();
+#ifdef SKRED_TEST_PD
+  test_signed_phase_distortion_and_envelope();
+#endif
+#ifdef SKRED_TEST_FM
+  test_phase_modulation_and_feedback();
+#endif
+  test_parameter_and_buffer_safety();
+  test_context_modes();
+#ifdef SKRED_TEST_TRACKS
+  test_track_delay_send_requires_route_and_center_pan();
+#endif
+  test_ands_macro_commands();
+  test_load_installs_global_macros_and_registers();
+  test_vfs_zip_loads_skode_and_wave_assets();
+  test_session_zip_round_trip();
+  test_control_composition_primitives();
+  test_map_bang_command();
+  test_dictionary_core_words();
+  test_tempo_and_pattern_reset_limits();
+  test_sample_accurate_sequence_boundaries();
+  test_silent_voice_fast_path();
+  test_control_plane_voice_events();
+  test_load_909_patch_from_source_assets();
+#ifdef SKRED_TEST_INSPIRED_BANKS
+  test_load_inspired_example_banks();
+#endif
+  test_909_load_rejects_too_small_wave_table();
+  test_multichannel_capture_waves();
+  test_x_opcode_escape();
+  test_multistep_assignment();
+  test_step_all_data();
+  test_inst_note_and_stream_ties();
+  test_voice_show_names();
+  test_voice_show_all();
+  test_voice_show_connected();
+  test_voice_format_links();
+  test_voice_format_pitch_mode();
+  test_voice_format_envelopes();
+
+  synth_free();
+
+  if (failures) {
+    fprintf(stderr, "%d SKODE state test failure(s)\n", failures);
+    return 1;
+  }
+  printf("SKODE state tests passed\n");
+  return 0;
+}

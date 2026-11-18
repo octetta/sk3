@@ -1,0 +1,303 @@
+#include <errno.h>
+
+#ifndef _WIN32
+#include <pthread.h>
+#endif
+
+#include <stdint.h>
+
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include "portable_win.h"
+typedef int socklen_t;
+#define CLOSE_SOCKET closesocket
+#else
+#include <arpa/inet.h>
+#define SOCKET int
+#define INVALID_SOCKET (-1)
+#define SOCKET_ERROR (-1)
+#include <sys/select.h>
+#include <unistd.h>
+#define CLOSE_SOCKET close
+#endif
+
+
+#include "skred.h"
+#include "skode.h"
+#include "udp.h"
+#include "api.h"
+#include "util.h"
+#include "portable_atomic.h"
+
+// Simple hash function for UDP address/port to array index
+static int get_connection_index(struct sockaddr_in *addr, int array_size) {
+    uint32_t ip = addr->sin_addr.s_addr;
+    uint16_t port = addr->sin_port;
+    
+    // Combine IP and port with XOR and multiply
+    uint32_t hash = ip ^ (port << 16) ^ port;
+    
+    // Simple mixing
+    hash = hash * 2654435761u;  // Knuth's multiplicative hash
+    
+    return hash % array_size;
+}
+
+static int udp_port = 0;
+static volatile int udp_running = 1;
+static SOCKET udp_socket = INVALID_SOCKET;
+static atomic_int_t udp_thread_active;
+static atomic_int_t udp_startup_status;
+static atomic_uint64_t udp_packets;
+static atomic_uint64_t udp_commands;
+static atomic_uint64_t udp_errors;
+
+static pthread_t udp_thread_handle;
+static pthread_attr_t udp_attr;
+
+
+static int udp_open(int port) {
+#ifdef _WIN32
+  static int first = 1;
+  if (first) {
+    WSADATA wsa;
+    WSAStartup(MAKEWORD(2,2), &wsa);
+    first = 0;
+  }
+#endif
+    SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);
+    struct sockaddr_in serve;
+#ifdef _WIN32
+    memset(&serve, 0, sizeof(serve));
+#else
+    bzero(&serve, sizeof(serve));
+#endif
+    serve.sin_family = AF_INET;
+    serve.sin_addr.s_addr = htonl(INADDR_ANY);
+    serve.sin_port = htons(port);
+    if (bind(sock, (struct sockaddr *)&serve, sizeof(serve)) >= 0) {
+        return sock;
+    }
+    return -1;
+}
+
+typedef struct {
+  skode_t w;
+  int in_use;
+  int last_use;
+} udp_state_t;
+
+#define UDP_PORT_MAX (127)
+
+static skode_t *udp_context_for(udp_state_t *user, struct sockaddr_in *client,
+                                int now) {
+  int base = get_connection_index(client, UDP_PORT_MAX);
+  int empty = -1;
+  for (int offset = 0; offset < UDP_PORT_MAX; offset++) {
+    int which = (base + offset) % UDP_PORT_MAX;
+    udp_state_t *slot = &user[which];
+    if (slot->in_use) {
+      if (slot->w.ip == client->sin_addr.s_addr &&
+          slot->w.port == client->sin_port) {
+        slot->last_use = now;
+        return &slot->w;
+      }
+    } else if (empty < 0) {
+      empty = which;
+    }
+  }
+
+  int which = empty >= 0 ? empty : base;
+  udp_state_t *slot = &user[which];
+  if (slot->in_use) {
+    skode_free(&slot->w);
+    skode_init(&slot->w);
+  }
+  slot->in_use = 1;
+  slot->last_use = now;
+  slot->w.udp = 1;
+  slot->w.which = which;
+  slot->w.ip = client->sin_addr.s_addr;
+  slot->w.port = client->sin_port;
+  return &slot->w;
+}
+
+static void *udp_main(void *arg) {
+  (void)arg;
+  if (udp_port <= 0) {
+    return NULL;
+  }
+  atomic_store_int(&udp_thread_active, 1);
+  int sock = udp_open(udp_port);
+  
+  atomic_store_int(&udp_startup_status, (sock < 0) ? -1 : 1);
+  
+  if (sock < 0) {
+    puts("# udp thread cannot run");
+    atomic_fetch_add_uint64(&udp_errors, 1);
+    atomic_store_int(&udp_thread_active, 0);
+    return NULL;
+  }
+  udp_socket = sock;
+  //util_set_thread_name("udp");
+  struct sockaddr_in client;
+#ifdef _WIN32
+  int client_len = sizeof(client);
+#else
+  unsigned int client_len = sizeof(client);
+#endif
+  char line[1024];
+  fd_set readfds;
+  struct timeval timeout;
+  udp_state_t *user = calloc(UDP_PORT_MAX, sizeof(*user));
+  if (!user) {
+    puts("# udp thread cannot allocate state");
+    atomic_fetch_add_uint64(&udp_errors, 1);
+    CLOSE_SOCKET(sock);
+    if (udp_socket == sock) udp_socket = INVALID_SOCKET;
+    atomic_store_int(&udp_thread_active, 0);
+    return NULL;
+  }
+  for (int i = 0; i < UDP_PORT_MAX; i++) {
+    skode_init(&user[i].w);
+  }
+  int use_counter = 0;
+  while (udp_running) {
+    FD_ZERO(&readfds);
+    FD_SET(sock, &readfds);
+    timeout.tv_sec = 1;
+    timeout.tv_usec = 0;
+    int ready = select(sock+1, &readfds, NULL, NULL, &timeout);
+    if (ready > 0 && FD_ISSET(sock, &readfds)) {
+      client_len = sizeof(client);
+      ssize_t n = recvfrom(sock, line, sizeof(line) - 1, 0, (struct sockaddr *)&client, &client_len);
+      if (n > 0) {
+        atomic_fetch_add_uint64(&udp_packets, 1);
+        line[n] = '\0';
+        skode_t *w = udp_context_for(user, &client, ++use_counter);
+        int handled = 0;
+        if (line[0] == '-' || line[0] == '.') {
+          handled = skred_command_ctx(line, w);
+        }
+        if (handled) {
+          atomic_fetch_add_uint64(&udp_commands, 1);
+        } else if (skode_consume(line, w) >= 0) {
+          atomic_fetch_add_uint64(&udp_commands, 1);
+        } else {
+          atomic_fetch_add_uint64(&udp_errors, 1);
+        }
+        //
+        if (w->log_len) {
+          sendto(sock, w->log, w->log_len, 0, (struct sockaddr *)&client, client_len);
+        }
+        //
+      } else {
+        if (errno == EAGAIN) continue;
+      }
+    } else if (ready == 0) {
+      // timeout
+    } else {
+      if (!udp_running || errno == EBADF) break;
+      atomic_fetch_add_uint64(&udp_errors, 1);
+      perror("# select");
+    }
+  }
+  if (sock != INVALID_SOCKET && udp_socket == sock) {
+    CLOSE_SOCKET(sock);
+  }
+  udp_socket = INVALID_SOCKET;
+  for (int i = 0; i < UDP_PORT_MAX; i++) {
+    skode_free(&user[i].w);
+    user[i].in_use = 0;
+  }
+  free(user);
+  atomic_store_int(&udp_thread_active, 0);
+  return NULL;
+}
+
+int udp_start(int port) {
+  if (port == 0) return 0;
+  udp_port = port;
+  udp_running = 1;
+  atomic_store_uint64(&udp_packets, 0);
+  atomic_store_uint64(&udp_commands, 0);
+  atomic_store_uint64(&udp_errors, 0);
+  atomic_store_int(&udp_startup_status, 0);
+  
+  pthread_attr_init(&udp_attr);
+  pthread_attr_setstacksize(&udp_attr, 2 * 1024 * 1024);
+  pthread_create(&udp_thread_handle, &udp_attr, udp_main, NULL);
+  pthread_detach(udp_thread_handle);
+  
+  while (atomic_load_int(&udp_startup_status) == 0) {
+#ifdef _WIN32
+      Sleep(1);
+#else
+      usleep(1000); // 1ms
+#endif
+  }
+  
+  if (atomic_load_int(&udp_startup_status) < 0) {
+      udp_running = 0;
+      udp_port = 0;
+      return -1;
+  }
+  return port;
+}
+
+void udp_stop(void) {
+  udp_running = 0;
+  if (udp_socket != INVALID_SOCKET) {
+    CLOSE_SOCKET(udp_socket);
+    udp_socket = INVALID_SOCKET;
+  }
+#ifdef _WIN32
+  WSACleanup();
+#endif
+}
+
+int udp_info(void) {
+  return udp_port;
+}
+
+int udp_metrics(skred_udp_metrics_t *out) {
+  if (!out) return -1;
+  out->port = udp_port;
+  out->running = atomic_load_int(&udp_thread_active);
+  out->packets = atomic_load_uint64(&udp_packets);
+  out->commands = atomic_load_uint64(&udp_commands);
+  out->errors = atomic_load_uint64(&udp_errors);
+  return 0;
+}
+
+//
+
+int udp_send_to(int fd, void *c, int len, void *addr, unsigned int client_len) {
+    struct sockaddr *client;
+    client = addr;
+    //printf("fd=%d c=%p len=%d client=%p client_len=%d\n",
+    //    fd, c, len, client, client_len);
+    int n = sendto(fd, c, len, 0, client, client_len);
+    if (n < 0) {
+        //printf("n = %d\n", n);
+        perror("# sendto()");
+    }
+    return n;
+}
+
+#if 0
+static struct sockaddr_in client;
+static unsigned int client_len = sizeof(client);
+static char client_read_something = 0;
+
+int udp_send(int fd, void *c, int len) {
+    if (client_read_something) {
+        int n = sendto(fd, c, len, 0,
+            (struct sockaddr *)&client,
+            client_len);
+        return n;
+    }
+    return 0;
+}
+#endif
