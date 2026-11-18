@@ -110,6 +110,12 @@ void synth_alloc_voices(int voice_max) {
     VALLOC(table_size_rate,  float);
     VALLOC(playback_class,   int);
     VALLOC(latency_timestamp_ns, uint64_t);
+    VALLOC(noise_type,       int);
+    VALLOC(noise_bits,       int);
+    VALLOC(noise_tap,        int);
+    VALLOC(noise_dac,        int);
+    VALLOC(noise_lfsr,       int);
+    VALLOC(noise_sample,     float);
     VALLOC(one_shot,         int);
     VALLOC(finished,         int);
     VALLOC(direction,        int);
@@ -259,6 +265,8 @@ void synth_free_voices(void) {
     VFREE(phase);            VFREE(phase_inc);       VFREE(table);
     VFREE(table_size);       VFREE(table_rate);      VFREE(table_size_rate);
     VFREE(playback_class);   VFREE(one_shot);        VFREE(latency_timestamp_ns);
+    VFREE(noise_type);       VFREE(noise_bits);      VFREE(noise_tap);
+    VFREE(noise_dac);        VFREE(noise_lfsr);      VFREE(noise_sample);
     VFREE(finished);         VFREE(direction);       VFREE(pingpong_reverse);
     VFREE(loop_enabled);
     VFREE(loop_count);       VFREE(loop_bounded);    VFREE(loop_remaining);

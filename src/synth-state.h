@@ -62,6 +62,13 @@ typedef struct {
     /* Diagnostics */
     uint64_t * restrict latency_timestamp_ns;
 
+    int    * restrict noise_type;
+    int    * restrict noise_bits;
+    int    * restrict noise_tap;
+    int    * restrict noise_dac;
+    int    * restrict noise_lfsr;
+    float  * restrict noise_sample;
+
     int    * restrict one_shot;
     int    * restrict finished;
     int    * restrict direction;          /* 0 forward, 1 backward, 2 ping-pong */

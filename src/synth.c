@@ -400,6 +400,30 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
         }
         f = whiteish;
       }
+      else if (sv.wave_table_index[n] == WAVE_TABLE_NOISE) {
+        float phase_inc = sv.phase_inc[n];
+        if (sv.use_freq_envelope[n]) {
+            float freq_env_val = envelope_step_e(&sv.freq_envelope[n], current_sample);
+            phase_inc *= exp2f(freq_env_val * sv.freq_env_depth[n]);
+        }
+        if (sv.freq_mod_osc[n] >= 0 && sv.freq_mod_osc[n] != n) {
+            int mod = sv.freq_mod_osc[n];
+            float g = sv.sample[mod] * sv.freq_mod_depth[n] + sv.freq_mod_adder[n];
+            if (sv.freq_mod_mode[n] == 1) {
+                phase_inc = (g * sv.table_size_rate[n]);
+            } else if (sv.freq_mod_mode[n] == 0) {
+                phase_inc += (sv.phase_inc[mod] * sv.freq_scale[n] * g);
+            }
+        }
+        double table_sz = sv.table_size[n] > 0 ? (double)sv.table_size[n] : 1024.0;
+        double phase = sv.phase[n] + (double)fabsf(phase_inc);
+        while (phase >= table_sz) {
+            phase -= table_sz;
+            osc_noise_step(n);
+        }
+        sv.phase[n] = phase;
+        f = sv.noise_sample[n];
+      }
       else {
         float phase_inc = sv.phase_inc[n];
         if (sv.use_freq_envelope[n]) {

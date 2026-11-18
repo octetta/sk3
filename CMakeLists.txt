@@ -222,6 +222,11 @@ target_link_libraries(hard_sync_tests PRIVATE api)
 target_include_directories(hard_sync_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}/src/gen")
 add_test(NAME synth.hard-sync COMMAND hard_sync_tests)
 
+add_executable(noise_tests tests/noise_tests.c)
+target_link_libraries(noise_tests PRIVATE api)
+target_include_directories(noise_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}/src/gen")
+add_test(NAME synth.noise-generator COMMAND noise_tests)
+
 add_executable(midi_tests tests/midi_tests.c)
 target_link_libraries(midi_tests PRIVATE api)
 target_include_directories(midi_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}/src/gen")

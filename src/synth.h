@@ -49,6 +49,9 @@ float osc_next(skred_engine_t *engine, int voice, float phase_inc);
 void osc_set_wave_table_index(skred_engine_t *engine, int voice, int wave);
 void osc_trigger(skred_engine_t *engine, int voice);
 void osc_hard_sync_sanitize(int voice);
+int osc_noise_set_type(int voice, int type);
+int osc_noise_set_custom(int voice, int bits, int tap, int dac);
+void osc_noise_step(int voice);
 
 int volume_set(float v);
 float volume_get(void);

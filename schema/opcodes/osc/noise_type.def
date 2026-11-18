@@ -1,0 +1,52 @@
+@name     noise_type
+@alias    NT
+@group    osc
+@c_name   skode_clause_noise_type_0
+@type     realtime
+@arity    0
+@match    ()
+@summary  reset voice noise type to default (SID)
+@doc
+Resets voice LFSR noise type to default MOS 6581 SID mode (preset 0).
+Usage: NT (or noise_type)
+@code
+    if (voice < 0 || voice >= synth_config.voice_max) return -1;
+    return osc_noise_set_type(voice, 0);
+@end
+
+@name     noise_type
+@alias    NT
+@group    osc
+@c_name   skode_clause_noise_type_1
+@type     realtime
+@arity    1..4
+@match    (finite, finite, finite, finite)
+@summary  select or configure voice hardware LFSR noise generator
+@doc
+Selects voice hardware LFSR noise generator preset or custom configuration for w5.
+Presets (0..6):
+  0: SID (MOS 6581/8580 23-bit LFSR with 8-bit DAC output)
+  1: POKEY 4-bit (15-step harsh buzzing noise)
+  2: POKEY 5-bit (31-step metallic robotic noise)
+  3: POKEY 9-bit (511-step gritty chiptune noise)
+  4: POKEY 17-bit (131071-step long pseudo-random noise)
+  5: NES 15-bit (32767-step periodic white/colored noise)
+  6: NES 7-bit (short loop metallic buzzing noise)
+Custom mode (preset 7):
+  NT 7 <bits> [tap] [dac]
+  bits: 2..31 (LFSR bit width)
+  tap: feedback tap index (defaults to maximal-length tap if omitted)
+  dac: 0 = 1-bit pulse, 1 = 8-bit DAC output (defaults to 1)
+Usage: NT preset | NT 7 bits [tap [dac]]
+@code
+    if (voice < 0 || voice >= synth_config.voice_max) return -1;
+    int mode = (int)args[0];
+    if (mode < 0 || mode > 7) return -1;
+    if (mode < 7 || argc == 1) {
+        return osc_noise_set_type(voice, mode);
+    }
+    int bits = (int)args[1];
+    int tap = (argc >= 3) ? (int)args[2] : 0;
+    int dac = (argc >= 4) ? (int)args[3] : 1;
+    return osc_noise_set_custom(voice, bits, tap, dac);
+@end

@@ -79,6 +79,53 @@
 @reset      0.0
 @doc        Phase increment per audio sample frame
 
+@field      noise_type
+@type       int
+@default    0
+@range      0 .. 7
+@copy       true
+@reset      0
+@doc        LFSR noise generator preset for w5 (0=SID 23-bit, 1=POKEY 4-bit, 2=POKEY 5-bit, 3=POKEY 9-bit, 4=POKEY 17-bit, 5=NES 15-bit, 6=NES 7-bit, 7=Custom)
+
+@field      noise_bits
+@type       int
+@default    23
+@range      2 .. 31
+@copy       true
+@reset      23
+@doc        LFSR bit width for custom mode
+
+@field      noise_tap
+@type       int
+@default    17
+@range      1 .. 30
+@copy       true
+@reset      17
+@doc        LFSR feedback tap index for custom mode
+
+@field      noise_dac
+@type       int
+@default    1
+@range      0 .. 1
+@copy       true
+@reset      1
+@doc        LFSR DAC output mode (0=1-bit pulse, 1=8-bit DAC)
+
+@field      noise_lfsr
+@type       int
+@default    1
+@copy       false
+@reset      1
+@doc        LFSR shift register state for voice
+
+@field      noise_sample
+@type       float
+@default    0.0
+@range      -1.0 .. 1.0
+@copy       false
+@reset      0.0
+@doc        Current output sample held by voice noise generator
+
 @field      one_shot
 @type       int
 @default    0

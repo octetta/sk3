@@ -103,6 +103,13 @@ char *voice_format(int v, char *out, size_t out_size, int verbose) {
           sv.user_amp[v]);
     }
     if (sv.control_events[v]) APPEND(" vc1");
+    if (sv.wave_table_index[v] == WAVE_TABLE_NOISE) {
+        if (sv.noise_type[v] == 7) {
+            APPEND(" NT7,%d,%d,%d", sv.noise_bits[v], sv.noise_tap[v], sv.noise_dac[v]);
+        } else if (verbose || sv.noise_type[v] != 0) {
+            APPEND(" NT%d", sv.noise_type[v]);
+        }
+    }
 
     /* --- frequency bend (suppress if default) --- */
     if (verbose || sv.freq_bend[v] != 0.0f)
@@ -760,6 +767,10 @@ int voice_copy(int v, int n) {
   voice_copy_gen(n, v);
 #endif
   wave_set(n, sv.wave_table_index[v]);
+  sv.noise_type[n] = sv.noise_type[v];
+  sv.noise_bits[n] = sv.noise_bits[v];
+  sv.noise_tap[n] = sv.noise_tap[v];
+  sv.noise_dac[n] = sv.noise_dac[v];
   sv.one_shot[n] = sv.one_shot[v];
   amp_set(n, sv.user_amp[v]);
   freq_set(n, sv.freq[v]);
@@ -909,6 +920,12 @@ void voice_reset(int i) {
   sv.table_size[i] = 0;
   sv.sample[i] = 0;
   sv.finished[i] = 1;
+  sv.noise_type[i] = 0;
+  sv.noise_bits[i] = 23;
+  sv.noise_tap[i] = 17;
+  sv.noise_dac[i] = 1;
+  sv.noise_lfsr[i] = 1;
+  sv.noise_sample[i] = 0.0f;
   sv.amp[i] = 1.0f;
   sv.user_amp[i] = 0.0f;
   sv.use_amp_envelope[i] = 1;
