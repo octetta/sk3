@@ -58,7 +58,20 @@ Yannes then co-founded **Ensoniq**, designing the 5503 Digital Oscillator Chip (
 
 ---
 
-## 4. Voltage Control & Subtractive Synthesis: Dr. Robert Moog
+## 4. Phase Distortion & Wavetable Pulse-Width Simulation: Casio CZ-101
+
+- **Institution**: [Casio Computer Co., Ltd.](https://en.wikipedia.org/wiki/Casio)
+- **Architect & Instrument**: [Casio CZ-101 (1984)](https://en.wikipedia.org/wiki/Casio_CZ-101) | [Phase Distortion Synthesis](https://en.wikipedia.org/wiki/Phase_distortion_synthesis)
+
+In 1984, Casio introduced the CZ-101 powered by **Phase Distortion (PD)** synthesis. Instead of filtering a harmonically rich waveform with expensive analog filters, Casio distorted the phase angle reading of a stored lookup table at non-linear rates, dynamically warping a basic cosine table into sawtooth, pulse, double-sine, and resonant waveforms via digital envelopes.
+
+The phase distortion engine in `sk3` and `pulp` (`cz_phasor` in [src/synth-osc.c](file:///home/stewartj/book/sk3/src/synth-osc.c) and opcode `c`) was directly inspired by the CZ-101, combined with a crucial creative breakthrough: **the realization that CZ phase distortion methods make pulse-width simulation possible on arbitrary single-cycle wavetables**.
+
+In classical wavetable synthesis, altering the pulse width or duty cycle of a fixed single-cycle waveform normally requires either storing large multi-frame wavetables or computing expensive real-time FFT resynthesis. By applying piecewise-linear CZ phase warping (`saw -> pulse`, `folded sine`, etc.) to the normalized phase phasor *prior* to indexing the wavetable, `sk3` can continuously modulate the duty cycle and harmonic asymmetry of *any* single-cycle wavetable (including Korg DWGS, Ensoniq ESQ-1, and custom user tables) in real time with near-zero CPU overhead.
+
+---
+
+## 5. Voltage Control & Subtractive Synthesis: Dr. Robert Moog
 
 - **Pioneer**: [Dr. Robert A. Moog](https://en.wikipedia.org/wiki/Robert_Moog)
 - **Organizations**: [Moog Music](https://www.moogmusic.com/) | [Bob Moog Foundation](https://moogfoundation.org/)
@@ -69,7 +82,7 @@ Bob Moog invented the voltage-controlled analog modular synthesizer, defining th
 
 ---
 
-## 5. Expressive Virtuosity & Acoustics: Wendy Carlos
+## 6. Expressive Virtuosity & Acoustics: Wendy Carlos
 
 - **Pioneer**: [Wendy Carlos](https://www.wendycarlos.com/)
 - **Seminal Works**: *Switched-On Bach* (1968), *Sonic Seasonings* (1972), *A Clockwork Orange* (1971), *The Shining* (1980), *Tron* (1982), *Beauty in the Beast* (1986)
@@ -80,7 +93,7 @@ The design of `sk3`—emphasizing musical phrasing, sub-millisecond parameter mo
 
 ---
 
-## 6. Digital Synthesis & The Universal Protocol: Dave Smith
+## 7. Digital Synthesis & The Universal Protocol: Dave Smith
 
 - **Pioneer**: [Dave Smith](https://www.sequential.com/dave-smith/)
 - **Organization**: [Sequential](https://www.sequential.com/)
@@ -92,7 +105,7 @@ Dave Smith revolutionized music technology twice over. In 1978, he founded Seque
 
 ---
 
-## 7. Strongly-Timed Live Audio Coding: Ge Wang (ChucK)
+## 8. Strongly-Timed Live Audio Coding: Ge Wang (ChucK)
 
 - **Pioneer**: [Ge Wang](https://ccrma.stanford.edu/~gow/)
 - **Institution**: [Stanford University CCRMA (Center for Computer Research in Music and Acoustics)](https://ccrma.stanford.edu/)
@@ -105,7 +118,7 @@ Ge Wang introduced the concept of **strongly-timed audio programming** through C
 
 ---
 
-## 8. Real-Time Dataflow & Computer Music: Miller Puckette (Max & Pure Data)
+## 9. Real-Time Dataflow & Computer Music: Miller Puckette (Max & Pure Data)
 
 - **Pioneer**: [Miller Puckette](https://msp.ucsd.edu/)
 - **Institutions**: [IRCAM](https://www.ircam.fr/) | [UC San Diego Department of Music](https://music.ucsd.edu/)
@@ -118,7 +131,7 @@ Miller Puckette designed **Max** at IRCAM in the mid-1980s and subsequently deve
 
 ---
 
-## 9. Array Programming & Holistic Vector Audio: Arthur Whitney (K / ksimple)
+## 10. Array Programming & Holistic Vector Audio: Arthur Whitney (K / ksimple)
 
 - **Pioneer**: [Arthur Whitney](https://en.wikipedia.org/wiki/Arthur_Whitney_(computer_scientist))
 - **Lineage**: [ksimple (kparc)](https://github.com/kparc/ksimple) | [Kx Systems](https://kx.com/) | [A+ / K / Q](https://en.wikipedia.org/wiki/K_(programming_language))
@@ -134,7 +147,7 @@ By embedding this array-language engine, `sk3` inherits the lightning-fast vecto
 
 ---
 
-## 10. Concatenative Minimalism & Dictionary Execution: Chuck Moore (Forth)
+## 11. Concatenative Minimalism & Dictionary Execution: Chuck Moore (Forth)
 
 - **Pioneer**: [Charles H. "Chuck" Moore](https://en.wikipedia.org/wiki/Charles_H._Moore)
 - **Creations**: [Forth (1970)](https://www.forth.com/about-forth/) | [ColorForth](https://www.colorforth.com/) | [GreenArrays](http://www.greenarrays.com/)

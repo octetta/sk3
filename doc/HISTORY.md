@@ -77,6 +77,7 @@ Before committing to a single language and engine topology, multiple experimenta
 
 `skred` brought the threads together into a single cohesive binary:
 - A multi-voice C synthesis engine with resonant filters, envelopes, and single-cycle wavetables.
+- **Casio CZ-101 Phase Distortion**: Inspired by the CZ-101 and the breakthrough realization that CZ phase distortion methods could simulate continuous pulse-width modulation (PWM) and duty-cycle control over fixed single-cycle wavetables without multi-frame interpolation.
 - The **Skode** domain-specific language: a concise, postfix, dictionary-driven language executing directly against voice state registers without intermediate bytecode compilation.
 - Embedded terminal line-editing (`uedit`) and immediate livecoding ergonomics.
 

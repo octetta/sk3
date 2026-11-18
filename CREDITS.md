@@ -77,7 +77,9 @@ The following companion projects developed by **Joseph Stewart / Octetta** are v
 - **PolyBLEP Anti-Aliasing (V. Välimäki, J. Nam, J. S. Smith, A. Huovilainen)**:
   - *Current Implementation*: Lightly utilized in `osc_hard_sync_fire` ([src/synth-osc.c](file:///home/stewartj/book/sk3/src/synth-osc.c)) for sub-sample polynomial residual correction (`delta * (d - 0.5 * d * d - 0.5)`), smoothing step discontinuities when a master voice resets a slave voice's phase during hard sync.
   - *Aspirational / Roadmap*: Full analytic PolyBLEP continuous waveform generation (for table-less bandlimited sawtooth, square/PWM, and triangle oscillators) is aspirational for future revisions.
-- **Casio CZ Phase Distortion (PD)**: Phase distortion algorithms and resonance window functions inspired by the classic Casio CZ-101 / CZ-1 synthesis engines.
+- **Casio CZ Phase Distortion (PD) & Wavetable PWM Simulation**:
+  - Phase distortion algorithms and resonance window functions inspired by the classic Casio CZ-101 / CZ-1 synthesis engines.
+  - Extends Casio's phase distortion principles to arbitrary single-cycle wavetables (`cz_phasor` in [src/synth-osc.c](file:///home/stewartj/book/sk3/src/synth-osc.c)), enabling continuous pulse-width modulation (PWM) and duty-cycle simulation across DWGS, ESQ-1, and custom wavetables without requiring multi-frame sample interpolation.
 - **Frequency Modulation (FM)**: Multi-operator algorithmic frequency modulation with feedback loops.
 - **State Variable Filters (SVF)**: Resonant digital state-variable filter topologies providing continuous lowpass, bandpass, highpass, and notch outputs.
 - **Digital Waveguide (DWG)**: Physical acoustic modeling algorithms for strings, acoustic piano, reeds, and brass instruments.
