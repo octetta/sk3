@@ -114,7 +114,7 @@ their named build option is enabled.
 | `G` | `voice [, voice ...]` | `SKODE_OP_LINK_MIDI` | Sets up to six `sv.link_midi[0..5]` voices | base |
 | `h` | `ratio [mode]` | `SKODE_OP_SAMPLE_HOLD` | Sets `sv.sample_hold_ratio` and `sv.sample_hold_mode` | `SAH` |
 | `H` | `voice [, voice ...]` | `SKODE_OP_LINK_VELOCITY` | Sets up to six `sv.link_velo[0..5]` voices | base |
-| `HS` | `voice[, voice ...]` (1-6) | `SKODE_OP_LINK_SYNC` | Hard-sync targets: sets `sv.link_sync[0..5]`; the master's oscillator wrap resets each target's phase (`osc_hard_sync_fire`) with sub-sample PolyBLEP anti-aliasing. Replaces the list; `HS-1` clears it | base |
+| `HS` | `[voice[, voice ...]]` (0-6) | `SKODE_OP_LINK_SYNC` | Hard-sync targets: sets `sv.link_sync[0..5]`; the master's oscillator wrap resets each target's phase (`osc_hard_sync_fire`) with sub-sample PolyBLEP anti-aliasing. Replaces the list; bare `HS` (no args) or `HS-1` clears it | base |
 | `L` | `seconds` | `SKODE_OP_TRIGGER_DELAY` | Sets `sv.link_trig` and `sv.link_trig_samp` | base |
 | `J` | `mode [character]` | `SKODE_OP_FILTER_MODE` | Sets filter mode and calls `mmf_set_params()` | `FILT` |
 | `K` | `Hz` | `SKODE_OP_FILTER_FREQ` | `mmf_set_freq()` | `FILT` |

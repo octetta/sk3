@@ -1,7 +1,27 @@
 @name     hard_sync
 @alias    HS
 @group    osc
-@c_name   skode_clause_hard_sync
+@c_name   skode_clause_hard_sync_0
+@type     realtime
+@arity    0
+@match    ()
+@summary  clear all hard-sync targets
+@doc
+Clears all oscillator hard-sync targets on the active voice.
+Usage: HS (or hard_sync)
+@code
+    if (voice < 0 || voice >= synth_config.voice_max) return -1;
+    for (int i = 0; i < 6; i++) {
+        sv.link_sync[i][voice] = -1.0f;
+    }
+    osc_hard_sync_sanitize(voice);
+    return 0;
+@end
+
+@name     hard_sync
+@alias    HS
+@group    osc
+@c_name   skode_clause_hard_sync_1
 @type     realtime
 @arity    1..6
 @match    (finite, finite, finite, finite, finite, finite)

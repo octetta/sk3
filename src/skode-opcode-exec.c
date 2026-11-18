@@ -516,7 +516,6 @@ int skode_execute_voice_opcode(const opcode_event_t *opcode, int voice) {
       }
       return 0;
     case SKODE_OP_LINK_SYNC:
-      if (opcode->argc < 1) return -1;
       skode_opcode_links(opcode, sv.link_sync, voice);
       osc_hard_sync_sanitize(voice);
       return 0;

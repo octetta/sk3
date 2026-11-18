@@ -76,6 +76,14 @@ static void test_configuration(void) {
   cmd("v0 HS -1");
   expect(sync_slot(0, 0) == -1 && sync_slot(0, 1) == -1, "HS -1 clears the list");
 
+  cmd("v0 HS 1,2");
+  cmd("v0 HS");
+  expect(sync_slot(0, 0) == -1 && sync_slot(0, 1) == -1, "bare HS (no args) clears the list");
+
+  cmd("v0 hard_sync 1,2");
+  cmd("v0 hard_sync");
+  expect(sync_slot(0, 0) == -1 && sync_slot(0, 1) == -1, "bare hard_sync (no args) clears the list");
+
   /* voice copy and reset carry/clear the list */
   cmd("v0 HS 1,2");
   cmd("v0 >4");
@@ -165,6 +173,17 @@ static void test_cleared_stops_syncing(void) {
   int wraps, synced, free_wraps;
   watch(0, 1, 48000 / 4, &wraps, &synced, &free_wraps);
   expect(synced < wraps / 4, "cleared list no longer syncs");
+  teardown();
+
+  /* Also verify bare HS stops syncing */
+  setup();
+  cmd("v0 f110 a0 l1");
+  cmd("v1 f337 a0 l1");
+  cmd("v0 HS 1");
+  cmd("v0 HS");
+  for (int i = 0; i < 200; i++) render1();
+  watch(0, 1, 48000 / 4, &wraps, &synced, &free_wraps);
+  expect(synced < wraps / 4, "bare HS clears sync and slave no longer syncs");
   teardown();
 }
 
@@ -289,10 +308,23 @@ static void test_realtime_path(void) {
   expect(res == 0, "skred_execute_opcode clears sync targets with -1");
   expect(sync_slot(0, 0) == -1, "sync targets cleared via realtime opcode");
 
+  /* Test 2b: Clear sync via opcode with 0 arguments */
+  targets[0] = 2.0;
+  skred_execute_opcode(0, SKODE_OP_LINK_SYNC, 1, targets);
+  expect(sync_slot(0, 0) == 2, "sync target set before 0-arg clear");
+  res = skred_execute_opcode(0, SKODE_OP_LINK_SYNC, 0, NULL);
+  expect(res == 0, "skred_execute_opcode clears sync targets with argc 0");
+  expect(sync_slot(0, 0) == -1, "sync targets cleared via 0-arg realtime opcode");
+
   /* Test 3: Macro containing HS is promoted to realtime capability */
   cmd("[synclink] : v$$0 HS $$1 ;");
   cmd("synclink 0 2");
   expect(sync_slot(0, 0) == 2, "promoted macro using HS executes and links targets");
+
+  /* Test 3b: Macro containing bare HS executes and clears targets */
+  cmd("[syncclear] : v$$0 HS ;");
+  cmd("syncclear 0");
+  expect(sync_slot(0, 0) == -1, "promoted macro using bare HS clears targets");
 
   skred_stop();
 }
