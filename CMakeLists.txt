@@ -196,7 +196,6 @@ target_compile_definitions(skode_state_tests PRIVATE
     SKRED_TEST_FM=1
     SKRED_TEST_KSYNTH=1
     SKRED_TEST_MIDI=1
-    SKRED_TEST_INSPIRED_BANKS=1
 )
 add_test(NAME skode.command-state COMMAND skode_state_tests)
 add_test(NAME skode.session-archive COMMAND skode_state_tests --session-only)

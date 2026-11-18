@@ -150,9 +150,11 @@ int main(void) {
   synth_sample_rate_set(48000);
   skode_t audio_skode2 = SKODE_EMPTY();
   skode_init(&audio_skode2);
-  if (skode_load_name(&audio_skode2, "sk/2023.sk", 1) != 0) {
-    skode_load_name(&audio_skode2, "file:sk/2023.sk", 1);
-  }
+  const char *drum_groove_code =
+    "M 120 v0 w82 f440 a0 v1 w83 f440 a-2 v2 w84 f440 a-7 "
+    "v3 w15 a-6 N-12 t .01 .4 0 0 G4 H4 "
+    "y0 [v0l1 v3n48l1] x0 [v2l0.4] x1 [v2l0.4] x2 [v1l1] x4 Z1";
+  skode_consume((char*)drum_groove_code, &audio_skode2);
   skode_consume("v0l1 v1l1", &audio_skode2);
   float max_val = 0.0f;
   int non_zero_samples = 0;
@@ -169,24 +171,22 @@ int main(void) {
   float inc_440 = osc_get_phase_inc(&skred_global_engine,0, 440.0f);
   float inc_220 = osc_get_phase_inc(&skred_global_engine,0, 220.0f);
   expect(fabsf(inc_220 - (inc_440 * 0.5f)) < 1e-4f, "halving frequency halves phase increment for drum patch");
-  expect(max_val > 0.1f, "2023.sk renders strong audio amplitude");
+  expect(max_val > 0.1f, "drum groove renders strong audio amplitude");
   skode_free(&audio_skode2);
   wave_free();
   synth_free();
 
-  static const char *demo_files[] = {
-    "sk/demo_polymetric.sk", "file:../sk/demo_polymetric.sk",
-    "sk/demo_ratchets.sk", "file:../sk/demo_ratchets.sk",
-    "sk/demo_dynamic_speed.sk", "file:../sk/demo_dynamic_speed.sk"
+  static const char *demo_patterns[] = {
+    "M 124 v0 w82 a0 v1 w83 a0 y0 [v0l1] x0 [v1l1] x4 Z1",
+    "M 140 v0 w82 a0 v1 w83 a0 y0 [v0l1 z*3] x0 [v1l1] x4 Z1",
+    "M 120 v0 w82 a0 v1 w83 a0 y0 [v0l1 z%1] x0 [v1l1 z%2] x4 Z1"
   };
   for (int d = 0; d < 3; d++) {
     synth_init(8); wave_table_init(0); voice_init(); seq_init();
     synth_sample_rate_set(48000);
     skode_t sk_demo = SKODE_EMPTY();
     skode_init(&sk_demo);
-    if (skode_load_name(&sk_demo, (char*)demo_files[d*2], 0) != 0) {
-      skode_load_name(&sk_demo, (char*)demo_files[d*2+1], 0);
-    }
+    skode_consume((char*)demo_patterns[d], &sk_demo);
     skode_consume("v0l1 v1l1 v2l1 v3l1", &sk_demo);
     float d_max = 0.0f;
     for (int f = 0; f < 500; f++) {
@@ -197,7 +197,7 @@ int main(void) {
         if (a > d_max) d_max = a;
       }
     }
-    expect(d_max > 0.01f, "demo composition file renders audio");
+    expect(d_max > 0.01f, "demo pattern renders audio");
     skode_free(&sk_demo); wave_free(); synth_free();
   }
 

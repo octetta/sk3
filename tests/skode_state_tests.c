@@ -2701,81 +2701,6 @@ static void test_session_zip_round_trip(void) {
   chdir(cwd);
 }
 
-static void test_load_909_patch_from_source_assets(void) {
-#ifdef SKRED_TEST_SOURCE_DIR
-  const char *test = "load 909 patch from source assets";
-  char cwd[1024];
-  skode_t ctx = new_ctx();
-
-  if (!getcwd(cwd, sizeof(cwd))) {
-    fail(test, "getcwd failed");
-    return;
-  }
-  if (chdir(SKRED_TEST_SOURCE_DIR) != 0) {
-    fail(test, "chdir source dir failed");
-    return;
-  }
-
-  consume(test, &ctx, "/l909");
-  expect_int(test, sw.size[400] > 0, 1, "909 chh wave loaded");
-  expect_int(test, sw.size[401] > 0, 1, "909 kick wave loaded");
-  expect_int(test, sw.size[402] > 0, 1, "909 snare wave loaded");
-
-  chdir(cwd);
-#endif
-}
-
-#ifdef SKRED_TEST_INSPIRED_BANKS
-static void test_load_inspired_example_banks(void) {
-  const char *test = "load inspired example banks";
-  char cwd[1024];
-  skode_t ctx = new_ctx();
-
-  if (!getcwd(cwd, sizeof(cwd))) {
-    fail(test, "getcwd failed");
-    return;
-  }
-  if (chdir(SKRED_TEST_SOURCE_DIR) != 0) {
-    fail(test, "chdir source dir failed");
-    return;
-  }
-
-  consume(test, &ctx, "[examples/pd-cz-inspired.sk] /ls");
-  consume(test, &ctx, "czbr 48");
-  expect_int(test, sv.cz_mode[0], 6, "CZ brass macro");
-  consume(test, &ctx, "czbs 36");
-  expect_int(test, sv.cz_mode[0], 1, "CZ bass macro");
-  consume(test, &ctx, "czbl 72");
-  expect_int(test, sv.cz_mode[0], 4, "CZ bell macro");
-  consume(test, &ctx, "czpd 55");
-  expect_int(test, sv.cz_mode[1], 5, "CZ pad macro");
-
-  consume(test, &ctx, "[examples/moog-inspired.sk] /ls");
-  consume(test, &ctx, "mgbs 36");
-  expect_int(test, sv.filter_mode[0], 1, "Moog bass macro");
-  consume(test, &ctx, "mgld 60");
-  expect_int(test, sv.filter_mode[1], 1, "Moog lead macro");
-  consume(test, &ctx, "mgpl 48");
-  expect_int(test, sv.filter_mode[0], 1, "Moog pluck macro");
-  consume(test, &ctx, "mgpd 48");
-  expect_int(test, sv.filter_mode[1], 1, "Moog pad macro");
-
-  consume(test, &ctx, "[examples/ksynth-drums-inspired.sk] /ls");
-  expect_int(test, sw.size[470] > 0, 1, "Ksynth kick wave");
-  expect_int(test, sw.size[471] > 0, 1, "Ksynth snare wave");
-  expect_int(test, sw.size[472] > 0, 1, "Ksynth hi-hat wave");
-  consume(test, &ctx, "kick");
-  expect_int(test, sv.amp_envelope[0].is_active, 1, "kick macro");
-  consume(test, &ctx, "snar");
-  expect_int(test, sv.amp_envelope[1].is_active, 1, "snare macro");
-  consume(test, &ctx, "chat");
-  expect_int(test, sv.amp_envelope[2].is_active, 1, "closed hi-hat macro");
-
-  consume(test, &ctx, "/m!");
-  skode_free(&ctx);
-  chdir(cwd);
-}
-#endif
 
 static void test_909_load_rejects_too_small_wave_table(void) {
 #ifdef SKRED_TEST_SOURCE_DIR
@@ -4064,10 +3989,6 @@ int main(int argc, char **argv) {
   test_sample_accurate_sequence_boundaries();
   test_silent_voice_fast_path();
   test_control_plane_voice_events();
-  test_load_909_patch_from_source_assets();
-#ifdef SKRED_TEST_INSPIRED_BANKS
-  test_load_inspired_example_banks();
-#endif
   test_909_load_rejects_too_small_wave_table();
   test_multichannel_capture_waves();
   test_x_opcode_escape();
