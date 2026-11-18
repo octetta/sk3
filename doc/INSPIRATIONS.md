@@ -39,22 +39,28 @@ The stereo delay line architecture in `pulp` and `sk3` ([src/synth-delay.c](file
 
 ---
 
-## 3. Custom Silicon & Digital Synthesis: Bob Yannes (SID & Ensoniq ESQ-1)
+## 3. Custom Silicon & The 70s/80s "POKE" Live Coding Era: Bob Yannes (SID) & Doug Neubauer (POKEY)
 
-- **Visionary**: [Bob Yannes](https://en.wikipedia.org/wiki/Bob_Yannes)
-- **Silicon & Synthesizers**:
+- **Visionaries**:
+  - [Bob Yannes](https://en.wikipedia.org/wiki/Bob_Yannes) (MOS Technology / Ensoniq)
+  - [Doug Neubauer](https://en.wikipedia.org/wiki/Doug_Neubauer) (Atari)
+- **Custom Silicon & Iconic Machines**:
   - [MOS Technology 6581 SID (Sound Interface Device)](https://en.wikipedia.org/wiki/MOS_Technology_6581) (Commodore 64, 1982)
+  - [Atari POKEY (POt Keyboard Integrated Circuit)](https://en.wikipedia.org/wiki/POKEY) (Atari 400 / 800, 1979; Atari 5200; arcade classics: *Asteroids Deluxe*, *Missile Command*, *Tempest*)
   - [Ensoniq 5503 DOC (Digital Oscillator Chip)](https://en.wikipedia.org/wiki/Ensoniq_ESQ-1) (Ensoniq Mirage, 1984; ESQ-1, 1986; SQ-80, 1987)
   - [IEEE Spectrum: The Design of the SID Chip](https://spectrum.ieee.org/design-of-the-sid-chip)
 
-Few engineers have shaped the sound of modern electronic music and digital synthesis as profoundly as Bob Yannes.
-At MOS Technology, he single-handedly architected the 6581 SID chip, bringing multi-waveform oscillators, variable pulse-width modulation, ring modulation, hard sync, and analog multi-mode filtering to millions of Commodore 64 personal computers.
+### The 70s/80s "POKE" Live Coding Heritage
+Long before modern "live coding" became a formalized computer music discipline, the purest form of interactive sound synthesis was happening in bedrooms and computer clubs in the late 1970s and early 1980s. Sitting at an Atari 400/800 or a Commodore 64, typing direct `POKE` commands in BASIC—such as `POKE 53760, ...` to modulate POKEY's 4-channel polynomial distortion counters, or `POKE 54272, ...` to manipulate SID's oscillators, PWM, and multi-mode filters—provided immediate, visceral acoustic feedback. 
 
-Yannes then co-founded **Ensoniq**, designing the 5503 Digital Oscillator Chip (DOC). The Ensoniq ESQ-1 took wavetable synthesis into uncharted creative territory by combining 32 wavetable oscillators with subtractive analog filters and multi-stage envelopes.
+There was no compilation step, no asset loading, and no abstraction layer: typing a value into a memory-mapped hardware address instantly changed the physical vibration of the speaker cone. It was spontaneous, direct, and electric—the original 8-bit live coding.
 
-`sk3` honors Bob Yannes's contributions on multiple fronts:
+### Technological Lineage in `sk3`
+The interaction model of `sk3` and the **Skode** language is a direct spiritual descendant of this "POKE" ethos:
+- **Direct Register Manipulation**: Typing atoms into the `sk3` REPL (`v0 w1 440 f 1 l`, `c 1 0.5`, `ds 0.8`) is modern, high-level "POKEing"—writing values straight into synthesizer voice registers with zero delay and instantaneous audible transformation.
 - **`waves/esq1/`**: The complete authentic collection of Ensoniq ESQ-1 8-bit digital wavetables (`50_saw` through `81_oct5th`) built into the `sk3` synthesis engine.
 - **Ksynth SID Emulation (`w300..w304`)**: Bandlimited SID triangle, sawtooth, pulse/PWM, and combined waveform models designed for chiptune and demo-scene authenticity.
+- **POKEY-Inspired Poly-Counters**: Distortion modes, noise registers, and raw frequency dividing concepts inspired by Doug Neubauer's ingenious 4-channel POKEY architecture.
 
 ---
 

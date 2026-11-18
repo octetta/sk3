@@ -2,6 +2,8 @@
 
 The architecture, language design, and synthesis engine of `sk3` did not emerge overnight. They represent the culmination of a multi-year evolutionary journey of experiments across languages, timing models, wire protocols, and custom audio engines developed by **Joseph Ellis Stewart / [Octetta](https://github.com/octetta)**.
 
+The philosophical roots trace back to the 1970s and 1980s tradition of direct 8-bit sound chip manipulation: sitting at an Atari 400/800 with Doug Neubauer's **POKEY** chip or a Commodore 64 with Bob Yannes's **SID**, typing `POKE` commands in BASIC directly into sound registers, and instantly hearing the timbre, pitch, and distortion shift in real time. That visceral, immediate experience—the original 8-bit live coding—runs through the DNA of every project below.
+
 This document traces the historical lineage and milestones that led to `sk3`.
 
 ```mermaid
