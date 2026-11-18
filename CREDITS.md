@@ -22,6 +22,7 @@ The following companion projects developed by **Joseph Stewart / Octetta** are v
 - **[k-synth](https://github.com/octetta/k-synth)** (`src/vendor/ksynth/`)
   - **Version / Revision**: Git commit `307a651038b9ca115340e697352134475e77345b`
   - Fast, array-oriented DSP vector language, expression evaluator, and bandlimited wavetable oscillator bank.
+  - Heavily inspired by the **[ksimple](https://github.com/kparc/ksimple)** lineage by **Arthur Whitney**.
   - Licensed under the MIT License.
 - **[minimidio](https://github.com/octetta/minimidio)** (`src/vendor/minimidio/`)
   - **Version / Revision**: Git commit `0d1f33a24ca1aa9b8d22727e42cdda057570992a`
@@ -54,6 +55,19 @@ The following companion projects developed by **Joseph Stewart / Octetta** are v
 - **Author**: Rich Geldreich (Tenacious Software LLC / Valve Software) & contributors.
 - **Role**: High-speed, public-domain Deflate/Inflate and ZIP archive reader/writer powering `sk3`'s in-memory Virtual File System (`src/exp-vfs/`), allowing zero-copy runtime mounting and streaming of asset bundles (`.zip`).
 - **License**: Public Domain (Unlicense) / MIT License.
+
+### 3. [ksimple](https://github.com/kparc/ksimple)
+- **Author**: Arthur Whitney / [kparc](https://github.com/kparc).
+- **Role**: Minimalist, high-performance K array language interpreter lineage that inspired `k-synth`'s vector math semantics and whole-buffer signal processing.
+- **Website**: [kparc.io](https://kparc.io) / [Kx Systems](https://kx.com)
+
+---
+
+## Language & Computing Lineages
+
+- **Charles H. "Chuck" Moore ([Forth](https://www.forth.com/about-forth/))**:
+  - Pioneer of Forth, stack architectures, and radical programming simplicity.
+  - Skode's dictionary word execution, postfix argument model, and interactive live-coding ergonomics trace their lineage directly to Chuck Moore's philosophy: *"Keep it simple. As simple as you can. Do not solve problems you don't have."*
 
 ---
 

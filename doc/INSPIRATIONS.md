@@ -104,3 +104,35 @@ Ge Wang introduced the concept of **strongly-timed audio programming** through C
 Miller Puckette designed **Max** at IRCAM in the mid-1980s and subsequently developed **Pure Data (Pd)** in the 1990s as an open-source real-time graphical programming environment for audio, video, and graphical processing. His dual-rate architecture—distinguishing high-rate audio signal vectors (`~`) from asynchronous control message processing—has formed the theoretical backbone of modern digital audio software.
 
 `sk3` honors Miller Puckette's principles through its strict separation of high-priority audio render callbacks from non-blocking lockless control event dispatchers (`src/control-events.h`, `src/skqueue.c`), ensuring audio callback execution remains realtime-safe and glitch-free.
+
+---
+
+## 9. Array Programming & Holistic Vector Audio: Arthur Whitney (K / ksimple)
+
+- **Pioneer**: [Arthur Whitney](https://en.wikipedia.org/wiki/Arthur_Whitney_(computer_scientist))
+- **Lineage**: [ksimple (kparc)](https://github.com/kparc/ksimple) | [Kx Systems](https://kx.com/) | [A+ / K / Q](https://en.wikipedia.org/wiki/K_(programming_language))
+
+Arthur Whitney transformed data processing by treating entire collections of values as primitive, first-class entities manipulated by terse, expressive mathematical verbs. His tiny `ksimple` interpreter proved that an astonishingly powerful, array-oriented computational engine could fit within a few hundred lines of elegant, uncompromising C code.
+
+`k-synth`—vendored inside `sk3` at `src/vendor/ksynth/`—draws directly from Arthur Whitney's `ksimple` lineage. Instead of viewing audio as a continuous sequential stream processed one sample loop at a time, `k-synth` treats sound as a holistic mathematical vector. A kick drum, an envelope ramp, or a bandlimited wavetable is simply an array:
+- `A: !8000` (generate an index ramp of 8,000 samples)
+- `E: 1 - 0.000125 * A` (vectorized linear decay)
+- `K: 5 * (s 0.007 * A) * E * E` (vectorized sine oscillator multiplied by squared exponential envelope)
+
+By embedding this array-language engine, `sk3` inherits the lightning-fast vector mathematics and radical economy of expression pioneered by Arthur Whitney.
+
+---
+
+## 10. Concatenative Minimalism & Dictionary Execution: Chuck Moore (Forth)
+
+- **Pioneer**: [Charles H. "Chuck" Moore](https://en.wikipedia.org/wiki/Charles_H._Moore)
+- **Creations**: [Forth (1970)](https://www.forth.com/about-forth/) | [ColorForth](https://www.colorforth.com/) | [GreenArrays](http://www.greenarrays.com/)
+- **Philosophy**: *"Keep it simple. As simple as you can. Do not solve problems you don't have."*
+
+Chuck Moore invented the Forth programming language in 1970, championing an uncompromising philosophy of extreme simplicity, zero-overhead execution, and interactive live control. In Forth, there are no complex syntax trees, no heavy grammars, and no arbitrary syntactic ceremony: execution proceeds through a dictionary of words that operate on data through a concatenative flow.
+
+The design of the **Skode** language and runtime in `sk3` is deeply indebted to Chuck Moore's Forth paradigms:
+- **Dictionary-Driven Execution**: Words in Skode (`puts`, `wt`, `G`, `HS`, `play`, `stop`) are registered in a fast lookup dictionary (`src/skode-dict.c`) that directly dispatches native C functions.
+- **Postfix & Flexible Argument Flow**: Arguments can precede or follow atoms naturally (`v0 w1 440 f 1 l` or `v0 w1 f440 l1`), mimicking Forth's postfix ergonomics while remaining optimized for real-time live typing.
+- **Eliminating Syntax Overhead**: Skode scripts dispense with parentheses, commas, and complex grammar hierarchies, executing token-by-token directly into audio state changes.
+- **Interactive REPL Philosophy**: Just as Forth systems were designed to boot instantaneously and allow engineers to interact with hardware live, `sk3` provides an immediate interactive environment where music and synthesis parameters are sculpted in real time.
