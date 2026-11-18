@@ -301,19 +301,3 @@ int udp_send_to(int fd, void *c, int len, void *addr, unsigned int client_len) {
     }
     return n;
 }
-
-#if 0
-static struct sockaddr_in client;
-static unsigned int client_len = sizeof(client);
-static char client_read_something = 0;
-
-int udp_send(int fd, void *c, int len) {
-    if (client_read_something) {
-        int n = sendto(fd, c, len, 0,
-            (struct sockaddr *)&client,
-            client_len);
-        return n;
-    }
-    return 0;
-}
-#endif

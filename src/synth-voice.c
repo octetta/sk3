@@ -980,11 +980,7 @@ void voice_reset(int i) {
   envelope_init_e(&sv.filter_envelope[i], 0.0f, 0.0f, 1.0f, 0.0f);
   //
   sv.smoother_enable[i] = 1;
-#if 0
-  sv.smoother_gain[i] = 0.0f;
-#else
   sv.smoother_gain[i] = sv.amp[i];
-#endif
   sv.smoother_smoothing[i] = SMOOTH_DEFAULT;
   sv.smoother_mode[i] = 0;
   sv.smoother_delta[i] = 0.0f;

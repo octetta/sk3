@@ -782,12 +782,9 @@ char *skred_control_response_status(void) {
   skred_control_dispatch_init();
   char *ptr = control_response_status;
   size_t left = sizeof(control_response_status);
-  int written = 0;
-#if 0
-  written = snprintf(ptr, left, "# ce dispatcher %s running:%d\n",
+  int written = snprintf(ptr, left, "# ce dispatcher %s running:%d\n",
     skred_control_response_enabled() ? "on" : "off",
     skred_control_dispatch_running());
-#endif
   if (written < 0) {
     control_response_status[0] = '\0';
     return control_response_status;
@@ -798,7 +795,6 @@ char *skred_control_response_status(void) {
   simple_mutex_lock(&control_response_mutex);
   for (int i = 0; i < SKRED_CONTROL_RESPONSE_CAPACITY; i++) {
     if (!control_response[i].used) continue;
-#if 0
     if (control_response[i].key < 0) {
       written = snprintf(ptr, left, "# [%s] /ceb %u *\n",
         control_response[i].command, control_response[i].type);
@@ -807,7 +803,6 @@ char *skred_control_response_status(void) {
         control_response[i].command, control_response[i].type,
         control_response[i].key);
     }
-#endif
     if (written < 0) break;
     if ((size_t)written >= left) break;
     ptr += written;

@@ -261,10 +261,6 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
   for (int n = 0; n < nvoices; n++) {
     sv.record[n] = atomic_load_int(&sv.record_pending[n]);
   }
-#if 0
-  const int nframes = num_frames;
-  (void)nframes; /* available for future vectorised frame loop */
-#endif
   static uint64_t synth_random;
   static int first = 1;
   if (first) {
@@ -575,13 +571,6 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
         fprintf(stderr, "# command latency [v%d]: %llu ns (%.3f ms)\n", n, (unsigned long long)delta_ns, delta_ns / 1000000.0);
         sv.latency_timestamp_ns[n] = 0;
       }
-
-#if 0
-      if (sv.smoother_enable[n]) {
-        sv.smoother_gain[n] += sv.smoother_smoothing[n] * (final - sv.smoother_gain[n]);
-        final = sv.smoother_gain[n];
-      }
-#endif
 
       sv.sample[n] *= final;
 
