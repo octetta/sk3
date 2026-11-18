@@ -822,7 +822,6 @@ static void emit_c_source(const char *out_path) {
     fprintf(f, "#include \"api.h\"\n");
     fprintf(f, "#include \"scope-ipc.h\"\n");
     fprintf(f, "#include \"polyphony.h\"\n");
-    fprintf(f, "#include \"midi_player.h\"\n");
     fprintf(f, "#include <math.h>\n");
     fprintf(f, "#include <stdlib.h>\n");
     fprintf(f, "#include <string.h>\n");

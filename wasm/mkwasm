@@ -31,7 +31,6 @@ emcc -I"${ROOT_DIR}/src" \
     "${ROOT_DIR}/src/skqueue.c" \
     "${ROOT_DIR}/src/seq.c" \
     "${ROOT_DIR}/src/api.c" \
-    "${ROOT_DIR}/src/midi_player.c" \
     "${ROOT_DIR}/src/synth.c" \
     "${ROOT_DIR}/src/synth-delay.c" \
     "${ROOT_DIR}/src/synth-osc.c" \

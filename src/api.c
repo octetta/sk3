@@ -1,5 +1,4 @@
 #include "api.h"
-#include "midi_player.h"
 #include "synth-state.h"
 
 #include <ctype.h>
@@ -1375,7 +1374,6 @@ static void internal_synth_process(float* output, const float* input, int frame_
     int immediate_passes = 0;
     do {
       seq(now, event_cb, pattern_cb);
-      midi_player_tick(now);
       if (!seq_next_boundary(now, block_end, &boundary) || boundary != now) break;
       immediate_passes++;
     } while (immediate_passes < SEQ_MAX_CATCHUP_TICKS);

@@ -47,7 +47,6 @@ set(API_SOURCES
     src/ands.c
     src/miniaudio.c
     src/midi.c
-    src/midi_player.c
     src/util.c
     src/exp-vfs/miniz.c
     src/exp-vfs/miniz_tdef.c

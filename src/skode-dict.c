@@ -1,7 +1,6 @@
 #include "skode-dict.h"
 #include "skode_dict_gen.h"
 
-#include "midi_player.h"
 #include "synth.h"
 
 #include <ctype.h>

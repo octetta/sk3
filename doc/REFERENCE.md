@@ -9,10 +9,10 @@ Generated automatically by `tools/mkopcodes` from modular opcode definitions in 
 
 ## Architecture & System Overview
 
-- **Total Command Words**: 307
-- **Total Dispatch Clauses**: 611
+- **Total Command Words**: 300
+- **Total Dispatch Clauses**: 603
 - **Real-Time Audio Opcode Handlers**: 148 (audio-thread safe, zero allocation, zero string lookup)
-- **Immediate / Control Plane Clauses**: 463 (REPL / parser / file system / diagnostics)
+- **Immediate / Control Plane Clauses**: 455 (REPL / parser / file system / diagnostics)
 
 ### Functional Command Groups
 
@@ -31,7 +31,7 @@ Generated automatically by `tools/mkopcodes` from modular opcode definitions in 
 | repeat | `repeat` | 11 | Scheduled repeats, tick loops, and deferred queues |
 | stream | `stream` | 5 | Step data streams and stream cursors |
 | rec | `rec` | 24 | Track stems, buffer recording, auto-trim, track routing |
-| midi | `midi` | 31 | MIDI devices, bindings, routes, file playback |
+| midi | `midi` | 24 | MIDI devices, bindings, routes, file playback |
 | scope | `scope` | 4 | Oscilloscope shared-memory IPC and events |
 | ksynth | `ksynth` | 11 | KSynth DSL, array bridges, bytebeat eval |
 | macro | `macro` | 7 | User macro definition, storage, and execution |
@@ -274,7 +274,7 @@ Triggers voice gate on.
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `271` (`skode_clause_inst_note_c572`)
+- **Discrete Opcode ID**: `271` (`skode_clause_inst_note_c564`)
 - **Summary**: trigger instrument note
 
 **Description & Details**:
@@ -288,7 +288,7 @@ Usage: i note
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `272` (`skode_clause_inst_note_c573`)
+- **Discrete Opcode ID**: `272` (`skode_clause_inst_note_c565`)
 - **Summary**: trigger instrument note with velocity
 
 **Description & Details**:
@@ -302,7 +302,7 @@ Usage: i note velocity
 
 - **Arity**: `3`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `273` (`skode_clause_inst_note_c574`)
+- **Discrete Opcode ID**: `273` (`skode_clause_inst_note_c566`)
 - **Summary**: trigger instrument note with velocity and cents
 
 **Description & Details**:
@@ -4667,7 +4667,7 @@ Usage: -j step
 
 - **Arity**: `3`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `254` (`skode_clause_pattern_loop_c423`)
+- **Discrete Opcode ID**: `254` (`skode_clause_pattern_loop_c415`)
 - **Summary**: pattern step loop counter and branch
 
 **Description & Details**:
@@ -4808,7 +4808,7 @@ Usage: zq mode (or pattern_queue mode)
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `255` (`skode_clause_pattern_ratchet_c424`)
+- **Discrete Opcode ID**: `255` (`skode_clause_pattern_ratchet_c416`)
 - **Summary**: set step ratchet multiplier
 
 **Description & Details**:
@@ -5015,7 +5015,7 @@ Usage: z??
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `253` (`skode_clause_pattern_state_set_c422`)
+- **Discrete Opcode ID**: `253` (`skode_clause_pattern_state_set_c414`)
 - **Summary**: set pattern state by explicit index
 
 **Description & Details**:
@@ -5934,7 +5934,7 @@ Usage: DO?
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `256` (`skode_clause_stream_copy_c432`)
+- **Discrete Opcode ID**: `256` (`skode_clause_stream_copy_c424`)
 - **Summary**: copy stream contents
 
 **Description & Details**:
@@ -5956,7 +5956,7 @@ Usage: /SC dst src
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `257` (`skode_clause_stream_mode_c433`)
+- **Discrete Opcode ID**: `257` (`skode_clause_stream_mode_c425`)
 - **Summary**: set stream playback mode
 
 **Description & Details**:
@@ -5978,7 +5978,7 @@ Usage: /SM stream_idx mode
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `258` (`skode_clause_stream_pos_c434`)
+- **Discrete Opcode ID**: `258` (`skode_clause_stream_pos_c426`)
 - **Summary**: set stream read position
 
 **Description & Details**:
@@ -6979,13 +6979,6 @@ Track route voice no-op.
 | [`midi_bridge_query`](#midi_bridge_query) | `/mb?` | 1 | 0 | Immediate | query MIDI Skode bindings |
 | [`midi_bridge_unbind`](#midi_bridge_unbind) | `/mbd` | 1 | 3 | Immediate | remove MIDI Skode binding |
 | [`midi_debug`](#midi_debug) | `/md` | 2 | 0..1 | Immediate | toggle midi debug logging |
-| [`midi_file_dump`](#midi_file_dump) | `/mfD` | 1 | 3 | Immediate | dump MIDI file events |
-| [`midi_file_load`](#midi_file_load) | `/mf` | 1 | 1 | Immediate | load MIDI file into slot |
-| [`midi_file_play`](#midi_file_play) | `/mf>` | 1 | 1 | Immediate | play MIDI file slot |
-| [`midi_file_seek`](#midi_file_seek) | `/mfP` | 1 | 2 | Immediate | seek MIDI file playback position |
-| [`midi_file_status`](#midi_file_status) | `/mf?` | 2 | 0..1 | Immediate | query MIDI player slots status |
-| [`midi_file_stop`](#midi_file_stop) | `/mf<` | 1 | 1 | Immediate | stop MIDI file playback |
-| [`midi_file_sync`](#midi_file_sync) | `/mfS` | 1 | 2 | Immediate | set MIDI file sync mode |
 | [`midi_input`](#midi_input) | `/mi` | 1 | 1 | Immediate | open MIDI input port |
 | [`midi_input_close`](#midi_input_close) | `/mic` | 1 | 0 | Immediate | close MIDI input port |
 | [`midi_input_virt`](#midi_input_virt) | `/miV` | 1 | 0 | Immediate | open virtual MIDI input port |
@@ -7149,175 +7142,6 @@ Usage: /md
 ```text
 Sets MIDI debug logging (0=off, 1=on).
 Usage: /md 1
-```
-
----
-
-### `midi_file_dump`
-
-- **Alias**: `/mfD`
-- **Group**: `midi`
-- **Clause Count**: 1
-
-#### Clause 1: `midi_file_dump(finite, finite, finite)`
-
-- **Arity**: `3`
-- **Execution Model**: `immediate (control plane)`
-- **Feature Flag (`#ifdef`)**: `SKRED_MIDI_ENABLED`
-- **Summary**: dump MIDI file events
-
-**Description & Details**:
-
-```text
-Dumps events from MIDI player slot starting at event index up to limit.
-Usage: /mfD slot start limit
-```
-
----
-
-### `midi_file_load`
-
-- **Alias**: `/mf`
-- **Group**: `midi`
-- **Clause Count**: 1
-
-#### Clause 1: `midi_file_load(finite)`
-
-- **Arity**: `1`
-- **Execution Model**: `immediate (control plane)`
-- **Feature Flag (`#ifdef`)**: `SKRED_MIDI_ENABLED`
-- **Parser State Requirements**: `string`
-- **Summary**: load MIDI file into slot
-
-**Description & Details**:
-
-```text
-Loads a standard MIDI file (.mid) from bracket string into player slot (0..3).
-Usage: [file.mid] /mf slot
-```
-
----
-
-### `midi_file_play`
-
-- **Alias**: `/mf>`
-- **Group**: `midi`
-- **Clause Count**: 1
-
-#### Clause 1: `midi_file_play(finite)`
-
-- **Arity**: `1`
-- **Execution Model**: `immediate (control plane)`
-- **Feature Flag (`#ifdef`)**: `SKRED_MIDI_ENABLED`
-- **Summary**: play MIDI file slot
-
-**Description & Details**:
-
-```text
-Starts playback of loaded MIDI file in slot (0..3).
-Usage: /mf> slot
-```
-
----
-
-### `midi_file_seek`
-
-- **Alias**: `/mfP`
-- **Group**: `midi`
-- **Clause Count**: 1
-
-#### Clause 1: `midi_file_seek(finite, finite)`
-
-- **Arity**: `2`
-- **Execution Model**: `immediate (control plane)`
-- **Feature Flag (`#ifdef`)**: `SKRED_MIDI_ENABLED`
-- **Summary**: seek MIDI file playback position
-
-**Description & Details**:
-
-```text
-Seeks playback of MIDI file slot to tick position.
-Usage: /mfP slot tick
-```
-
----
-
-### `midi_file_status`
-
-- **Alias**: `/mf?`
-- **Group**: `midi`
-- **Clause Count**: 2
-
-#### Clause 1: `midi_file_status()`
-
-- **Arity**: `0`
-- **Execution Model**: `immediate (control plane)`
-- **Feature Flag (`#ifdef`)**: `SKRED_MIDI_ENABLED`
-- **Summary**: query MIDI player slots status
-
-**Description & Details**:
-
-```text
-Prints playback status of all MIDI player slots (0..3).
-Usage: /mf?
-```
-
-#### Clause 2: `midi_file_status(finite)`
-
-- **Arity**: `1`
-- **Execution Model**: `immediate (control plane)`
-- **Feature Flag (`#ifdef`)**: `SKRED_MIDI_ENABLED`
-- **Summary**: query single MIDI player slot status
-
-**Description & Details**:
-
-```text
-Prints playback status of specified MIDI player slot.
-Usage: /mf? slot
-```
-
----
-
-### `midi_file_stop`
-
-- **Alias**: `/mf<`
-- **Group**: `midi`
-- **Clause Count**: 1
-
-#### Clause 1: `midi_file_stop(finite)`
-
-- **Arity**: `1`
-- **Execution Model**: `immediate (control plane)`
-- **Feature Flag (`#ifdef`)**: `SKRED_MIDI_ENABLED`
-- **Summary**: stop MIDI file playback
-
-**Description & Details**:
-
-```text
-Stops playback of MIDI file in slot (0..3).
-Usage: /mf< slot
-```
-
----
-
-### `midi_file_sync`
-
-- **Alias**: `/mfS`
-- **Group**: `midi`
-- **Clause Count**: 1
-
-#### Clause 1: `midi_file_sync(finite, finite)`
-
-- **Arity**: `2`
-- **Execution Model**: `immediate (control plane)`
-- **Feature Flag (`#ifdef`)**: `SKRED_MIDI_ENABLED`
-- **Summary**: set MIDI file sync mode
-
-**Description & Details**:
-
-```text
-Sets tempo synchronization mode for player slot (0=free, 1=sync to sequencer BPM).
-Usage: /mfS slot mode
 ```
 
 ---

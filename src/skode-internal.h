@@ -4,7 +4,6 @@
 #include "skred.h"
 #include "api.h"
 #include "skode.h"
-#include "midi_player.h"
 #include "seq.h"
 
 typedef struct {
