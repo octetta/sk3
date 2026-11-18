@@ -1,0 +1,197 @@
+name: Release Distributions
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+    paths:
+      - VERSION
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  metadata:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read and validate VERSION
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < VERSION)"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "VERSION is not a release version: $version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: metadata
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev ninja-build cmake
+
+      - name: Run test suite
+        run: make test
+
+  linux:
+    needs: metadata
+    runs-on: ubuntu-24.04
+    env:
+      VERSION: ${{ needs.metadata.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev ninja-build cmake
+
+      - name: Build Linux API distribution
+        run: make dist-api
+
+      - name: Verify and name release asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          source="dist/linux-x86_64/skred-${VERSION}-maxed-linux-x86_64.tar.gz"
+          test -f "$source"
+          tar -tzf "$source" > archive-contents.txt
+          grep -q "skred-${VERSION}-maxed/include/skred/api.h" archive-contents.txt
+          mkdir -p release-assets
+          cp "$source" "release-assets/"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: api-linux-x86_64
+          path: release-assets/*
+          if-no-files-found: error
+
+  wasm:
+    needs: metadata
+    runs-on: ubuntu-24.04
+    env:
+      VERSION: ${{ needs.metadata.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: mymindstorm/setup-emsdk@v14
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev ninja-build cmake nodejs
+
+      - name: Build WASM distribution
+        run: make dist-api-wasm
+
+      - name: Verify and name release asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          source="dist/wasm/skred-${VERSION}-maxed-wasm.zip"
+          test -f "$source"
+          unzip -l "$source" > archive-contents.txt
+          grep -q "skred-${VERSION}-maxed/skred_api.js" archive-contents.txt
+          grep -q "skred-${VERSION}-maxed/skred_api.wasm" archive-contents.txt
+          mkdir -p release-assets
+          cp "$source" "release-assets/"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: api-wasm
+          path: release-assets/*
+          if-no-files-found: error
+
+  release:
+    needs:
+      - metadata
+      - test
+      - linux
+      - wasm
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.metadata.outputs.version }}
+      TAG: ${{ needs.metadata.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: api-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Validate release payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected=(
+            "skred-${VERSION}-maxed-linux-x86_64.tar.gz"
+            "skred-${VERSION}-maxed-wasm.zip"
+          )
+          for asset in "${expected[@]}"; do
+            test -s "release-assets/$asset"
+          done
+          (
+            cd release-assets
+            sha256sum "${expected[@]}" > SHA256SUMS
+          )
+
+      - name: Publish GitHub release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; uploading assets if needed."
+            gh release upload "$TAG" release-assets/* --clobber
+          else
+            release_args=(
+              --target "$GITHUB_SHA"
+              --title "SKRED $VERSION"
+              --generate-notes
+            )
+            if [[ "$VERSION" == *-* ]]; then
+              release_args+=(--prerelease)
+            fi
+            gh release create "$TAG" release-assets/* "${release_args[@]}"
+          fi
+
+      - name: Dispatch downstream web builds
+        if: success()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.DISPATCH_TOKEN || secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.metadata.outputs.version }}
+        run: |
+          for repo in "octetta/skred-web" "octetta/skode-repl"; do
+            echo "Attempting dispatch to $repo for v$VERSION..."
+            gh api "repos/$repo/dispatches" \
+              -X POST \
+              -F "event_type=pulp_release" \
+              -F "client_payload[version]=$VERSION" 2>/dev/null || echo "Dispatch to $repo skipped"
+          done
