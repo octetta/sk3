@@ -9,6 +9,7 @@
 [![Release](https://img.shields.io/github/v/release/octetta/sk3?color=blue)](https://github.com/octetta/sk3/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Credits](https://img.shields.io/badge/credits-acknowledgements-purple.svg)](CREDITS.md)
+[![Inspirations](https://img.shields.io/badge/history-inspirations-pink.svg)](doc/INSPIRATIONS.md)
 [![Tests](https://img.shields.io/badge/tests-12%2F12%20passing-brightgreen.svg)]()
 
 `sk3` (formerly skred) is a lightweight, high-performance polyphonic synthesizer, deterministic audio engine, and embedded Forth-inspired domain specific language (`skode`) for generative sound design and sequencing.
@@ -48,7 +49,7 @@ make wasm-test   # Run headless Node.js verification test
 
 - `schema/synth/`: Synthesizer engine state and allocation schema specifications (`.def`).
 - `schema/opcodes/`: Opcode dictionary and dispatch schema specifications (`.def`).
-- `doc/`: Architecture guides and generated reference manual (`REFERENCE.md`).
+- `doc/`: Architecture guides, generated reference manual (`REFERENCE.md`), and historical lineage (`INSPIRATIONS.md`).
 - `tools/`: Declarative code compilers (`mksynth.c`, `mkopcodes.c`).
 - `src/`: Core C DSP, audio, and language runtime implementations.
 - `src/gen/`: Generated C headers, dispatch tables, and equivalence harnesses.
@@ -61,3 +62,5 @@ make wasm-test   # Run headless Node.js verification test
 `sk3` is released under the [MIT License](LICENSE) &copy; 2026 Joseph Ellis Stewart / Octetta.
 
 For detailed third-party software acknowledgements, upstream libraries (miniaudio, miniz), and dogfooded components (k-synth, minimidio, uedit, ueval), please refer to [CREDITS.md](CREDITS.md).
+
+For the historical lineages and sonic pioneers that shaped `sk3` and the Skode language, see [INSPIRATIONS.md](doc/INSPIRATIONS.md).
