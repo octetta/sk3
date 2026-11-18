@@ -19,7 +19,7 @@ Version: `1.0.0`
 ## Features
 
 - **Polyphonic Synthesizer Engine**: Multi-voice allocation with dynamic voice pooling and voice groups.
-- **Rich DSP Primitives**: Dual-oscillator algorithms, phase distortion (CZ), frequency modulation (FM), resonant filters, exponential envelopes, polyblep anti-aliasing, and stereo delay lines.
+- **Rich DSP Primitives**: Dual-oscillator algorithms, phase distortion (CZ), frequency modulation (FM), resonant filters, exponential envelopes, sub-sample PolyBLEP anti-aliasing for hard sync, and stereo delay lines.
 - **Skode Command Language**: Compact, Forth-like reactive language with declarative grammar, pattern matching, guard expressions, and realtime opcode evaluation.
 - **Dual Runtime Targets**:
   - **Native C**: High-performance multi-threaded CLI (`sk3`, with compatibility aliases `skred` / `mini-skred`) and static/shared libraries (`libapi.a`, `libapi.so`) with ALSA, CoreAudio, and MIDI support.
