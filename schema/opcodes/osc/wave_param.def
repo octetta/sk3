@@ -7,7 +7,7 @@
 @match    (finite, finite)
 @summary  query wavetable slot metadata parameter
 @doc
-Reads wavetable slot metadata parameter (0:size, 1:rate, 2:seconds, 3:loop start, 4:loop end, 5:one-shot, 6:direction).
+Reads wavetable slot metadata parameter (0:size, 1:rate, 2:seconds, 3:loop start, 4:loop end, 5:one-shot, 6:direction, 7:eval_ms).
 Usage: W* wave param (or wave_param wave param)
 @code
     if (!ctx) return -1;
@@ -23,6 +23,7 @@ Usage: W* wave param (or wave_param wave param)
             case 4: val = sw.loop_end[wave]; break;
             case 5: val = sw.one_shot[wave]; break;
             case 6: val = sw.direction[wave]; break;
+            case 7: val = sw.eval_ms ? (double)sw.eval_ms[wave] : 0.0; break;
             default: val = 0.0; break;
         }
         ctx->printf(ctx, "# W* %d %d -> %g\n", wave, param, val);

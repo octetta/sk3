@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "control-events.h"
+#include <time.h>
 #define SIZE_SINE (4096)
 #include "dwg.h"
 #include "vendor/ksynth/ksynth.h"
@@ -16,6 +17,9 @@
 #ifdef KSYNTH
 static void synth_eval_and_register_ks_wave(int w, const char *name, const char *ks_code, int is_drum) {
   if (wave_invalid(w)) return;
+
+  struct timespec t0, t1;
+  clock_gettime(CLOCK_MONOTONIC, &t0);
 
   if (is_drum) {
     // Reset PRNG seed to 1 so noise generation in ksynth ('r') is 100% deterministic
@@ -48,6 +52,9 @@ static void synth_eval_and_register_ks_wave(int w, const char *name, const char 
     }
   }
 
+  clock_gettime(CLOCK_MONOTONIC, &t1);
+  float elapsed_ms = (float)((t1.tv_sec - t0.tv_sec) * 1000.0 + (t1.tv_nsec - t0.tv_nsec) * 1e-6);
+
   if (result && result->n > 0) {
     int size = result->n;
     float *buf = (float *)malloc(size * sizeof(float));
@@ -58,6 +65,18 @@ static void synth_eval_and_register_ks_wave(int w, const char *name, const char 
 
       if (sw.data[w] && sw.is_heap[w]) {
         free(sw.data[w]);
+      }
+      if (sw.source && sw.source_is_heap && sw.source_is_heap[w] && sw.source[w]) {
+        free((void *)sw.source[w]);
+      }
+      if (sw.source) {
+        sw.source[w] = ks_code;
+      }
+      if (sw.source_is_heap) {
+        sw.source_is_heap[w] = 0;
+      }
+      if (sw.eval_ms) {
+        sw.eval_ms[w] = elapsed_ms;
       }
       strncpy(sw.name[w], name, WAVE_NAME_MAX);
       sw.data[w] = buf;
@@ -214,6 +233,9 @@ void wave_table_init(int flag) {
     sw.direction[i] = 0;
     sw.readonly[i] = 0;
     sw.refcount[i] = 0;
+    if (sw.eval_ms) sw.eval_ms[i] = 0.0f;
+    if (sw.source) sw.source[i] = NULL;
+    if (sw.source_is_heap) sw.source_is_heap[i] = 0;
   }
 
   synth_init_ksynth_base_waves();

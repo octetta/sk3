@@ -2741,6 +2741,8 @@ void skode_init(skode_t *ctx) {
   ctx->flag = 0;
   ctx->ks = NULL;
   ctx->ks_result = NULL;
+  ctx->ks_last_eval_ms = 0.0f;
+  ctx->ks_last_source = NULL;
   ctx->udp = 0;
   ctx->which = 0;
   ctx->ip = 0;
@@ -2767,6 +2769,10 @@ void skode_free(skode_t *ctx) {
   if (ctx->ks_result && ctx->ks) {
     k_free(ctx->ks, (K)ctx->ks_result);
     ctx->ks_result = NULL;
+  }
+  if (ctx->ks_last_source) {
+    free(ctx->ks_last_source);
+    ctx->ks_last_source = NULL;
   }
   if (ctx->ks) {
     ks_destroy(ctx->ks);

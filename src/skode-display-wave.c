@@ -437,13 +437,17 @@ int wavetable_summary_show(skode_t *ctx, int n) {
     int size = sw.size[n];
     float rate = sw.rate[n] > 0.0f ? sw.rate[n] : (float)MAIN_SAMPLE_RATE;
     float ms = (float)size * 1000.0f / rate;
+    char eval_buf[32] = "";
+    if (sw.eval_ms && sw.eval_ms[n] > 0.0f) {
+      snprintf(eval_buf, sizeof(eval_buf), " | %5.2f ms eval", sw.eval_ms[n]);
+    }
     
     if (sw.one_shot[n]) {
-      ctx->printf(ctx, "# W%-3d | %6d smp | %6.1f ms | %s | ref#%-2d | 1-shot %5gHz | [%s]\n", 
-        n, size, ms, readonly ? "R/O" : "R/W", refcount, rate, sw.name[n]);
+      ctx->printf(ctx, "# W%-3d | %6d smp | %6.1f ms%s | %s | ref#%-2d | 1-shot %5gHz | [%s]\n", 
+        n, size, ms, eval_buf, readonly ? "R/O" : "R/W", refcount, rate, sw.name[n]);
     } else {
-      ctx->printf(ctx, "# W%-3d | %6d smp | %6.1f ms | %s | ref#%-2d | cycle          | [%s]\n", 
-        n, size, ms, readonly ? "R/O" : "R/W", refcount, sw.name[n]);
+      ctx->printf(ctx, "# W%-3d | %6d smp | %6.1f ms%s | %s | ref#%-2d | cycle          | [%s]\n", 
+        n, size, ms, eval_buf, readonly ? "R/O" : "R/W", refcount, sw.name[n]);
     }
   }
   return 0;
@@ -477,6 +481,23 @@ int wavetable_show(skode_t *ctx, int n) {
       stats.min, stats.max, stats.peak, stats.rms, stats.dc, stats.zero_crossings);
     if (stats.clipped) ctx->printf(ctx, " clip %d", stats.clipped);
     ctx->puts(ctx, "");
+    if (sw.eval_ms && sw.eval_ms[n] > 0.0f) {
+      ctx->printf(ctx, "# ksynth eval: %.3f ms\n", sw.eval_ms[n]);
+    }
+    if (sw.source && sw.source[n] && sw.source[n][0] != '\0') {
+      ctx->printf(ctx, "# ksynth source:\n");
+      const char *p = sw.source[n];
+      while (*p) {
+        char line[256];
+        size_t len = strcspn(p, "\n\r");
+        if (len >= sizeof(line)) len = sizeof(line) - 1;
+        memcpy(line, p, len);
+        line[len] = '\0';
+        p += len;
+        while (*p == '\n' || *p == '\r') p++;
+        ctx->printf(ctx, "#   %s\n", line);
+      }
+    }
   }
   return 0;
 }

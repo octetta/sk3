@@ -346,14 +346,25 @@ void synth_alloc_waves(int wave_table_max) {
     WALLOC(refcount,     int);
     WALLOC(readonly,     int);
     WALLOC(name,         wave_name_t);
+    WALLOC(eval_ms,      float);
+    WALLOC(source,       const char *);
+    WALLOC(source_is_heap, int);
 }
 
 void synth_free_waves(void) {
+    if (sw.source && sw.source_is_heap) {
+        for (int i = 0; i < synth_config.wave_table_max; i++) {
+            if (sw.source_is_heap[i] && sw.source[i]) {
+                free((void *)sw.source[i]);
+            }
+        }
+    }
     WFREE(data);         WFREE(size);         WFREE(rate);
     WFREE(one_shot);     WFREE(loop_enabled); WFREE(loop_start);
     WFREE(loop_end);     WFREE(midi_note);    WFREE(offset_hz);
     WFREE(direction);    WFREE(is_heap);      WFREE(refcount);
     WFREE(readonly);     WFREE(name);
+    WFREE(eval_ms);      WFREE(source);       WFREE(source_is_heap);
 }
 
 #include "../src/gen/synth_alloc_gen.c"

@@ -2408,3 +2408,13 @@ void skred_dump_wave_base64(int wave_idx) {
     free(comp_data);
     fflush(stdout);
 }
+
+float skred_wave_eval_ms(int wave_idx) {
+    if (wave_idx < 0 || wave_idx >= synth_config.wave_table_max || !sw.eval_ms) return 0.0f;
+    return sw.eval_ms[wave_idx];
+}
+
+const char *skred_wave_source(int wave_idx) {
+    if (wave_idx < 0 || wave_idx >= synth_config.wave_table_max || !sw.source) return NULL;
+    return sw.source[wave_idx];
+}

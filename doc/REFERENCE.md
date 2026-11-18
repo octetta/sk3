@@ -1483,7 +1483,7 @@ Usage: [name] wt wave
 **Description & Details**:
 
 ```text
-Reads wavetable slot metadata parameter (0:size, 1:rate, 2:seconds, 3:loop start, 4:loop end, 5:one-shot, 6:direction).
+Reads wavetable slot metadata parameter (0:size, 1:rate, 2:seconds, 3:loop start, 4:loop end, 5:one-shot, 6:direction, 7:eval_ms).
 Usage: W* wave param (or wave_param wave param)
 ```
 

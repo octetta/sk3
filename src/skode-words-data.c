@@ -317,8 +317,23 @@ static int word_exec_k_gtw(const skode_word_t *self, skode_t *ctx, ands_t *s, do
         if (argc > 1) rate = arg[1];
         if (argc > 2) skode_double_to_int(arg[2], &one_shot);
         if (argc > 3) offset = arg[3];
-        if (skode_ks_result_to_data(ctx))
+        if (skode_ks_result_to_data(ctx)) {
           data_load(ctx, wave_slot, one_shot, rate, offset);
+          if (skode_wave_valid(wave_slot)) {
+            if (sw.eval_ms) sw.eval_ms[wave_slot] = ctx->ks_last_eval_ms;
+            if (ctx->ks_last_source) {
+              if (sw.source && sw.source_is_heap && sw.source_is_heap[wave_slot] && sw.source[wave_slot]) {
+                free((void *)sw.source[wave_slot]);
+              }
+              if (sw.source) {
+                sw.source[wave_slot] = strdup(ctx->ks_last_source);
+              }
+              if (sw.source_is_heap) {
+                sw.source_is_heap[wave_slot] = 1;
+              }
+            }
+          }
+        }
       }
       return 0;
 }

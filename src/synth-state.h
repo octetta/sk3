@@ -226,6 +226,9 @@ typedef struct {
     int         * restrict refcount;
     int         * restrict readonly;
     wave_name_t * restrict name;
+    float       * restrict eval_ms;
+    const char ** restrict source;
+    int         * restrict source_is_heap;
 
 } synth_waves_t;
 

@@ -173,6 +173,8 @@ typedef struct skode_s {
   int flag;
   struct ks_ctx *ks;
   void *ks_result;
+  float ks_last_eval_ms;
+  char *ks_last_source;
   //
   int udp;
   int which;

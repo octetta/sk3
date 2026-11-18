@@ -1,4 +1,7 @@
 #include "skode-internal.h"
+#include <time.h>
+#include <string.h>
+#include <stdlib.h>
 
 #ifdef KSYNTH
 ks_ctx *skode_ks_ctx(skode_t *ctx) {
@@ -34,9 +37,16 @@ int skode_ks_eval(skode_t *ctx, char *cmd, int len) {
 
 
 
+  struct timespec t0, t1;
+  clock_gettime(CLOCK_MONOTONIC, &t0);
+
   simple_mutex_lock(&skode_ks_eval_mutex);
   K next = ks_eval(ks, cmd, (size_t)len);
   simple_mutex_unlock(&skode_ks_eval_mutex);
+
+  clock_gettime(CLOCK_MONOTONIC, &t1);
+  ctx->ks_last_eval_ms = (float)((t1.tv_sec - t0.tv_sec) * 1000.0 + (t1.tv_nsec - t0.tv_nsec) * 1e-6);
+
   if (ks->last_status != KS_OK) {
     ctx->printf(ctx, "# ksynth status %d error %s\n",
                 ks->last_status, ks_strerror(ks->last_status));
@@ -91,6 +101,21 @@ int skode_ks_bind_values(skode_t *ctx, int variable,
 
 void ksynth_loader(skode_t *ctx, const char *text, size_t text_len,
     const char *label, int verbose) {
+  if (!ctx || !text || text_len == 0) return;
+
+  struct timespec t0, t1;
+  clock_gettime(CLOCK_MONOTONIC, &t0);
+
+  if (ctx->ks_last_source) {
+    free(ctx->ks_last_source);
+    ctx->ks_last_source = NULL;
+  }
+  ctx->ks_last_source = (char *)malloc(text_len + 1);
+  if (ctx->ks_last_source) {
+    memcpy(ctx->ks_last_source, text, text_len);
+    ctx->ks_last_source[text_len] = '\0';
+  }
+
   size_t pos = 0;
   (void)label;
   while (pos < text_len) {
@@ -106,6 +131,9 @@ void ksynth_loader(skode_t *ctx, const char *text, size_t text_len,
     if (verbose) ctx->printf(ctx, "  %s\n", line);
     if (len > 0) skode_ks_eval(ctx, line, (int)len);
   }
+
+  clock_gettime(CLOCK_MONOTONIC, &t1);
+  ctx->ks_last_eval_ms = (float)((t1.tv_sec - t0.tv_sec) * 1000.0 + (t1.tv_nsec - t0.tv_nsec) * 1e-6);
 }
 
 int ksynth_load_name(skode_t *ctx, char *file, int verbose) {
