@@ -1,8 +1,8 @@
-# SKRED Architecture and Adoption Guide
+# skred Architecture and Adoption Guide
 
-SKRED is a small, embeddable audio engine controlled by a compact text
-language called Skode. The repository is named PULP, while the runnable engine
-and C API are named SKRED.
+`skred` is a lightweight, embeddable audio engine controlled by a compact text
+language called Skode. The repository is named `sk3`, and the runnable engine,
+WASM module, and C API are named `skred` (v1.0.0).
 
 The project combines several ideas that are normally separate:
 
@@ -613,17 +613,18 @@ native Skode uses `%z`, `%zu`, `%pwd`, `%cd`, `%ls`, and `%cat`.
 
 Files:
 
-- `wasm-assets/mkwasm`
-- `wasm-assets/test-wasm.html`
-- `../doc/skred_api.js`
-- `../doc/skred_api.wasm`
+- `wasm/mkwasm`
+- `wasm/test-wasm.html`
+- `wasm/test-control-dispatch.js`
+- `build_wasm/skred_api.js`
+- `build_wasm/skred_api.wasm`
 
-The WASM build uses the same generated engine sources and public C API. The
-build embeds example Skode, Ksynth, and audio assets into Emscripten's virtual
-filesystem and exports the API through `ccall`/`cwrap`.
+The WASM build compiles the C engine sources and exports the public C API
+through `ccall`/`cwrap`. In `sk3`, the WASM runtime is lean and self-contained
+with zero attached audio or demo file bloat.
 
-The generated JavaScript and WASM under `doc/` are distribution artifacts.
-Run `make wasm` after changes affecting generated code or the public runtime.
+Run `make wasm` to compile the browser/node runtime, and `make wasm-test` to run
+headless lifecycle tests via Node.js.
 
 ## Threading and Real-Time Rules
 
@@ -654,49 +655,22 @@ then send fixed-size data or stable resource identifiers to audio execution.
 
 ## Build and Source Workflow
 
-Work from the `parts` directory:
+Build directly from the repository root:
 
 ```sh
-cd parts
-make native
-make test
+make all         # build native libraries and skred / mini-skred CLI
+make test        # run all 12 contract and state test suites
+make wasm        # build WebAssembly distribution artifacts
+make wasm-test   # run headless Node.js tests against WASM engine
+make gen         # compile declarative schemas and opcode tables
+make test-schema # verify schema boundary invariance
 ```
 
-Useful validation targets:
+System-level integrations can be toggled via CMake:
 
 ```sh
-make warn         # strict default-feature build
-make warn-maxed   # strict canonical maxed-preset build
-make wasm         # rebuild browser artifacts
-```
-
-System-level integrations can be toggled via CMake (e.g. `SKRED_SCOPE=OFF`), but most engine features (filters, envelopes, recording) are now permanent and always included.
-
-```sh
-cmake -B build_native -S . -DSKRED_SCOPE=OFF -DSKRED_UDP=OFF
-cmake --build build_native
-```
-
-On Windows, prefer the Ninja/Zig presets instead of CMake's NMake generator:
-
-```powershell
-cd parts
-cmake --preset windows-zig-ninja
-cmake --build --preset windows-zig-ninja
-```
-
-Use `windows-zig-maxed` for the portable maxed feature set. It includes
-Ksynth, MIDI, recording, and track routing, but omits `SCOPE=1` because the
-current CMake configuration rejects that feature on Windows.
-
-Linux hosts can also cross-build a Windows executable with Zig. Build the
-native generator first, then configure the Windows target:
-
-```sh
-cd parts
-cmake --preset ninja-release
-cmake --preset cross-windows-zig-ninja
-cmake --build --preset cross-windows-zig-ninja --target mini-skred
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+cmake --build build
 ```
 
 

@@ -9,30 +9,16 @@ engine when finished.
 
 ## Distribution Layout
 
-Build or unpack a distribution under `dist/`:
+Build native and WebAssembly distribution libraries from root:
 
 ```sh
-cd parts
-make native-libs     # default feature set
-make maxed-libs      # maxed feature set
-make dist-api        # archive the maxed package
-make dist-api-windows # cross-build and zip the Windows maxed package
+make all         # build static and shared native libraries
+make wasm        # build WebAssembly artifacts
+make test        # run test suite
 ```
 
-Native packages are installed below `dist/<platform>/`, where the default
-platform is derived from the host OS and architecture. The installed tree
-looks like:
-
-```text
-dist/<platform>/skred-<version>-maxed/
-  bin/mini-skred
-  include/skred/api.h
-  include/skred/polyphony.h
-  include/skred/skred_vfs.h
-  include/skred/skred-version.h
-  lib*/libapi.a
-  lib*/libapi.so.<version>
-  lib/libapi.<version>.dylib
+Native artifacts are compiled into `build/` (e.g. `libapi.a`, `libapi.so`, `skred`, `mini-skred`).
+Installed headers are located in `src/` (and include `api.h`, `polyphony.h`, `synth-config.h`, `synth-types.h`).
 ```
 
 The Linux-hosted Windows cross package is written under

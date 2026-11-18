@@ -1,9 +1,9 @@
-# Pulp / Skred Command & Opcode Reference
+# skred Command & Opcode Reference (v1.0.0)
 
-Release: **0.85.0**  
-Unified Opcode Dictionary and Execution Engine reference for `pulp` and `skred`.
+Release: **1.0.0**  
+Unified Opcode Dictionary and Execution Engine reference for `skred` and `skode`.
 
-Generated automatically by [`tools/mkopcodes`](file:///home/stewartj/book/pulp/tools/mkopcodes.c) from modular opcode definitions in `doc/opcodes/`.
+Generated automatically by `tools/mkopcodes` from modular opcode definitions in `doc/opcodes/`.
 
 ---
 

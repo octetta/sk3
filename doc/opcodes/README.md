@@ -263,12 +263,9 @@ To re-generate dispatch structures and run verification tests:
 # 1. Regenerate dictionary & opcode dispatch tables
 make gen
 
-# 2. Build library and test executables
-make -C parts/build_wasm -j$(nproc)
+# 2. Build library and run full automated contract test suite
+make test
 
-# 3. Run full automated test suite
-ctest --test-dir parts/build_wasm --output-on-failure
-
-# 4. Run dedicated dictionary and scheduler contract suite
-./parts/build_wasm/test_dict_scheduler
+# 3. Verify WebAssembly compilation and Node.js lifecycle
+make wasm-test
 ```

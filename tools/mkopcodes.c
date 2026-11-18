@@ -1380,10 +1380,10 @@ static void emit_markdown(const char *out_path, int total_rt) {
         exit(1);
     }
 
-    fprintf(f, "# Pulp / Skred Command & Opcode Reference\n\n");
-    fprintf(f, "Release: **0.85.0**  \n");
-    fprintf(f, "Unified Opcode Dictionary and Execution Engine reference for `pulp` and `skred`.\n\n");
-    fprintf(f, "Generated automatically by [`tools/mkopcodes`](file:///home/stewartj/book/pulp/tools/mkopcodes.c) from modular opcode definitions in `doc/opcodes/`.\n\n");
+    fprintf(f, "# skred Command & Opcode Reference (v1.0.0)\n\n");
+    fprintf(f, "Release: **1.0.0**  \n");
+    fprintf(f, "Unified Opcode Dictionary and Execution Engine reference for `skred` and `skode`.\n\n");
+    fprintf(f, "Generated automatically by `tools/mkopcodes` from modular opcode definitions in `doc/opcodes/`.\n\n");
     fprintf(f, "---\n\n");
 
     fprintf(f, "## Architecture & System Overview\n\n");
