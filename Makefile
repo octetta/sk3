@@ -86,4 +86,4 @@ sync-skode: $(SYNTH_GEN_OUTPUTS) wasm
 	@echo "==> skred and skode are synchronized!"
 
 clean:
-	rm -rf $(BUILD_DIR) build_wasm src/gen/test_schema_bounds tools/mksynth tools/mkopcodes
+	rm -rf $(BUILD_DIR) build_wasm src/gen/test_schema_bounds tools/mksynth tools/mkopcodes *-history.txt mini-skred-history.txt
