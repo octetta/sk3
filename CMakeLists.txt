@@ -227,6 +227,11 @@ target_link_libraries(noise_tests PRIVATE api)
 target_include_directories(noise_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}/src/gen")
 add_test(NAME synth.noise-generator COMMAND noise_tests)
 
+add_executable(bandlimited_tests tests/bandlimited_tests.c)
+target_link_libraries(bandlimited_tests PRIVATE api)
+target_include_directories(bandlimited_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}/src/gen")
+add_test(NAME synth.bandlimited-wavetables COMMAND bandlimited_tests)
+
 add_executable(midi_tests tests/midi_tests.c)
 target_link_libraries(midi_tests PRIVATE api)
 target_include_directories(midi_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}/src/gen")

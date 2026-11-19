@@ -1,0 +1,44 @@
+@name     wave_bandlimit
+@alias    WB
+@group    wave
+@c_name   skode_clause_wave_bandlimit_0
+@type     realtime
+@arity    0
+@match    ()
+@summary  bandlimit active voice wavetable
+@doc
+Generates 8-level harmonic octave mipmaps via Fourier analysis for the active voice's wavetable slot, eliminating aliasing at high frequencies.
+Usage: WB (or wave_bandlimit)
+@code
+    if (voice < 0 || voice >= synth_config.voice_max) return -1;
+    int w = sv.wave_table_index[voice];
+    if (w < 0 || w >= synth_config.wave_table_max) return -1;
+    int rc = wave_generate_mipmaps_fft(w);
+    if (rc == 0) {
+        osc_update_wavetable_mip(voice);
+    }
+    return rc;
+@end
+
+@name     wave_bandlimit
+@alias    WB
+@group    wave
+@c_name   skode_clause_wave_bandlimit_1
+@type     realtime
+@arity    1
+@match    (finite)
+@summary  bandlimit specified wavetable slot
+@doc
+Generates 8-level harmonic octave mipmaps via Fourier analysis for the specified wavetable slot, eliminating aliasing at high frequencies.
+Usage: WB <slot> (or wave_bandlimit <slot>)
+@code
+    int w = (int)args[0];
+    if (w < 0 || w >= synth_config.wave_table_max) return -1;
+    int rc = wave_generate_mipmaps_fft(w);
+    if (rc == 0 && voice >= 0 && voice < synth_config.voice_max) {
+        if (sv.wave_table_index[voice] == w) {
+            osc_update_wavetable_mip(voice);
+        }
+    }
+    return rc;
+@end

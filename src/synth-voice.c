@@ -520,6 +520,7 @@ int freq_set(int voice, float f) {
   }
 
   sv.freq[voice] = f;
+  osc_update_wavetable_mip(voice);
   return 0;
 }
 
@@ -774,6 +775,7 @@ int voice_copy(int v, int n) {
   sv.one_shot[n] = sv.one_shot[v];
   amp_set(n, sv.user_amp[v]);
   freq_set(n, sv.freq[v]);
+  sv.mip_level[n] = sv.mip_level[v];
   sv.pitch_mode[n] = sv.pitch_mode[v];
   sv.last_midi_note[n] = sv.last_midi_note[v];
   sv.last_midi_cents[n] = sv.last_midi_cents[v];
@@ -926,6 +928,7 @@ void voice_reset(int i) {
   sv.noise_dac[i] = 1;
   sv.noise_lfsr[i] = 1;
   sv.noise_sample[i] = 0.0f;
+  sv.mip_level[i] = -1;
   sv.amp[i] = 1.0f;
   sv.user_amp[i] = 0.0f;
   sv.use_amp_envelope[i] = 1;
@@ -968,6 +971,8 @@ void voice_reset(int i) {
   sv.amp_bend_range[i] = 12.0f;
   sv.amp_bend_offset[i] = 0.0f;
   osc_set_wave_table_index(&skred_global_engine, i, WAVE_TABLE_SINE);
+  sv.mip_level[i] = -1;
+  if (sw.data) sv.table[i] = sw.data[WAVE_TABLE_SINE];
   //
   sv.pan[i] = 0;
   sv.pan_left[i] = 0.5f;

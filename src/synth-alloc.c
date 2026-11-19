@@ -105,6 +105,7 @@ void synth_alloc_voices(int voice_max) {
     VALLOC(phase,            double);
     VALLOC(phase_inc,        float);
     VALLOC(table,            float *);
+    VALLOC(mip_level,        int);
     VALLOC(table_size,       int);
     VALLOC(table_rate,       float);
     VALLOC(table_size_rate,  float);
@@ -263,6 +264,7 @@ void synth_alloc_voices(int voice_max) {
 
 void synth_free_voices(void) {
     VFREE(phase);            VFREE(phase_inc);       VFREE(table);
+    VFREE(mip_level);
     VFREE(table_size);       VFREE(table_rate);      VFREE(table_size_rate);
     VFREE(playback_class);   VFREE(one_shot);        VFREE(latency_timestamp_ns);
     VFREE(noise_type);       VFREE(noise_bits);      VFREE(noise_tap);
@@ -341,6 +343,10 @@ void synth_alloc_waves(int wave_table_max) {
     int w = wave_table_max;
 
     WALLOC(data,         float *);
+    for (int lvl = 0; lvl < WAVETABLE_MIP_LEVELS; lvl++) {
+        sw.mip_data[lvl] = synth_alloc(w, sizeof(float *), "mip_data");
+    }
+    WALLOC(mip_levels,   int);
     WALLOC(size,         int);
     WALLOC(rate,         float);
     WALLOC(one_shot,     int);
@@ -367,6 +373,23 @@ void synth_free_waves(void) {
             }
         }
     }
+    for (int i = 0; i < synth_config.wave_table_max; i++) {
+        if (sw.mip_levels && sw.mip_levels[i] > 0) {
+            for (int lvl = 0; lvl < WAVETABLE_MIP_LEVELS; lvl++) {
+                if (sw.mip_data[lvl] && sw.mip_data[lvl][i]) {
+                    free(sw.mip_data[lvl][i]);
+                    sw.mip_data[lvl][i] = NULL;
+                }
+            }
+        }
+    }
+    for (int lvl = 0; lvl < WAVETABLE_MIP_LEVELS; lvl++) {
+        if (sw.mip_data[lvl]) {
+            free(sw.mip_data[lvl]);
+            sw.mip_data[lvl] = NULL;
+        }
+    }
+    WFREE(mip_levels);
     WFREE(data);         WFREE(size);         WFREE(rate);
     WFREE(one_shot);     WFREE(loop_enabled); WFREE(loop_start);
     WFREE(loop_end);     WFREE(midi_note);    WFREE(offset_hz);

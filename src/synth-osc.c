@@ -51,8 +51,62 @@ float osc_get_phase_inc(skred_engine_t *engine, int v, float f) {
   return (g * (float)sv.table_size[v]) / (float)MAIN_SAMPLE_RATE;
 }
 
+static const float s_mip_freq_thresholds[WAVETABLE_MIP_LEVELS - 1] = {
+    55.0f,    /* Level 0: <= 55 Hz (A1) -> 256 harmonics */
+    110.0f,   /* Level 1: <= 110 Hz (A2) -> 128 harmonics */
+    220.0f,   /* Level 2: <= 220 Hz (A3) -> 64 harmonics */
+    440.0f,   /* Level 3: <= 440 Hz (A4) -> 32 harmonics */
+    880.0f,   /* Level 4: <= 880 Hz (A5) -> 16 harmonics */
+    1760.0f,  /* Level 5: <= 1760 Hz (A6) -> 8 harmonics */
+    3520.0f   /* Level 6: <= 3520 Hz (A7) -> 4 harmonics */
+              /* Level 7: > 3520 Hz -> 1 harmonic (fundamental) */
+};
+
+void osc_update_wavetable_mip(int voice) {
+  if (voice_invalid(voice)) return;
+  int w = sv.wave_table_index[voice];
+  if (w < 0 || w >= synth_config.wave_table_max) return;
+
+  if (!sw.mip_levels || sw.mip_levels[w] <= 0 || sv.one_shot[voice] || sw.one_shot[w]) {
+    sv.mip_level[voice] = -1;
+    sv.table[voice] = sw.data[w];
+    return;
+  }
+
+  float freq = sv.freq[voice];
+  if (sv.table_size[voice] > 0 && fabsf(sv.phase_inc[voice]) > 0.0f) {
+    freq = (fabsf(sv.phase_inc[voice]) * (float)MAIN_SAMPLE_RATE) / (float)sv.table_size[voice];
+  }
+  if (freq < 0.0f) freq = 0.0f;
+
+  int cur_level = sv.mip_level[voice];
+  int level;
+  if (cur_level < 0 || cur_level >= WAVETABLE_MIP_LEVELS) {
+    level = 0;
+    while (level < WAVETABLE_MIP_LEVELS - 1 && freq > s_mip_freq_thresholds[level]) {
+      level++;
+    }
+  } else {
+    level = cur_level;
+    while (level < WAVETABLE_MIP_LEVELS - 1 && freq > s_mip_freq_thresholds[level] * 1.05f) {
+      level++;
+    }
+    while (level > 0 && freq < s_mip_freq_thresholds[level - 1] * 0.95f) {
+      level--;
+    }
+  }
+
+  sv.mip_level[voice] = level;
+  if (sw.mip_data[level] && sw.mip_data[level][w]) {
+    sv.table[voice] = sw.mip_data[level][w];
+  } else {
+    sv.table[voice] = sw.data[w];
+  }
+}
+
 void osc_set_freq(skred_engine_t *engine, int v, float f) {
   sv.phase_inc[v] = osc_get_phase_inc(engine, v, f);
+  osc_update_wavetable_mip(v);
 }
 
 // Fast power approximation using bit manipulation
@@ -586,6 +640,7 @@ void osc_set_wave_table_index(skred_engine_t *engine, int voice, int wave) {
     if (update_freq) {
       osc_set_freq(engine, voice, sv.freq[voice]);
     }
+    osc_update_wavetable_mip(voice);
     osc_reclassify(engine, voice);
   }
 }
@@ -692,6 +747,7 @@ void osc_trigger(skred_engine_t *engine, int voice) {
     sv.loop_release_tail[voice] = 0;
     sv.loop_ended[voice] = 0;
     sv.pingpong_reverse[voice] = sv.direction[voice] == 1;
+    osc_update_wavetable_mip(voice);
     osc_reclassify(engine, voice);
     
     if (sv.one_shot[voice]) {

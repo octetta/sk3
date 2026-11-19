@@ -126,6 +126,14 @@
 @reset      0.0
 @doc        Current output sample held by voice noise generator
 
+@field      mip_level
+@type       int
+@default    -1
+@range      -1 .. 7
+@copy       true
+@reset      -1
+@doc        Active bandlimited wavetable mip level (0=most harmonics, 7=fundamental, -1=none)
+
 @field      one_shot
 @type       int
 @default    0

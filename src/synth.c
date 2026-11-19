@@ -382,6 +382,7 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
               }
             }
         }
+        osc_update_wavetable_mip(n);
       }
       int was_finished = sv.finished[n];
       char is_capture = 0;

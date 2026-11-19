@@ -14,6 +14,239 @@
 #include "esq1_sources.h"
 #include "drums_sources.h"
 
+static const int s_mip_max_harmonics[WAVETABLE_MIP_LEVELS] = {
+    256, 128, 64, 32, 16, 8, 4, 1
+};
+
+typedef struct { float re, im; } synth_cplx_t;
+
+static void synth_fft_radix2(synth_cplx_t *buf, int n, int inverse) {
+    for (int i = 1, j = 0; i < n; i++) {
+        int bit = n >> 1;
+        for (; j & bit; bit >>= 1) j ^= bit;
+        j ^= bit;
+        if (i < j) {
+            synth_cplx_t tmp = buf[i];
+            buf[i] = buf[j];
+            buf[j] = tmp;
+        }
+    }
+    for (int len = 2; len <= n; len <<= 1) {
+        float ang = (inverse ? 2.0f : -2.0f) * (float)M_PI / (float)len;
+        synth_cplx_t wlen = { cosf(ang), sinf(ang) };
+        for (int i = 0; i < n; i += len) {
+            synth_cplx_t w = { 1.0f, 0.0f };
+            for (int k = 0; k < len / 2; k++) {
+                synth_cplx_t u = buf[i + k];
+                synth_cplx_t t = buf[i + k + len / 2];
+                synth_cplx_t v = { t.re * w.re - t.im * w.im, t.re * w.im + t.im * w.re };
+                buf[i + k].re         = u.re + v.re;
+                buf[i + k].im         = u.im + v.im;
+                buf[i + k + len/2].re = u.re - v.re;
+                buf[i + k + len/2].im = u.im - v.im;
+                float nwre = w.re * wlen.re - w.im * wlen.im;
+                float nwim = w.re * wlen.im + w.im * wlen.re;
+                w.re = nwre; w.im = nwim;
+            }
+        }
+    }
+    if (inverse) {
+        float inv_n = 1.0f / (float)n;
+        for (int i = 0; i < n; i++) {
+            buf[i].re *= inv_n;
+            buf[i].im *= inv_n;
+        }
+    }
+}
+
+int wave_generate_mipmaps_ksynth(int w, const double *harmonics, int num_harmonics) {
+    if (wave_invalid(w) || !sw.data[w] || sw.size[w] <= 0 || !harmonics || num_harmonics <= 0) {
+        return -1;
+    }
+    if (!sw.mip_levels || !sw.mip_data[0]) return -1;
+
+    if (sw.mip_levels[w] > 0) {
+        for (int lvl = 0; lvl < WAVETABLE_MIP_LEVELS; lvl++) {
+            if (sw.mip_data[lvl] && sw.mip_data[lvl][w]) {
+                free(sw.mip_data[lvl][w]);
+                sw.mip_data[lvl][w] = NULL;
+            }
+        }
+        sw.mip_levels[w] = 0;
+    }
+
+    int N = sw.size[w];
+    double dot = 0.0;
+    for (int i = 0; i < N; i++) {
+        dot += (double)sw.data[w][i] * sin(2.0 * M_PI * (double)i / (double)N);
+    }
+    double sign = (dot < 0.0) ? -1.0 : 1.0;
+
+    for (int lvl = 0; lvl < WAVETABLE_MIP_LEVELS; lvl++) {
+        int max_h = s_mip_max_harmonics[lvl];
+        int M = num_harmonics < max_h ? num_harmonics : max_h;
+        if (M < 1) M = 1;
+
+        float *buf = (float *)malloc(N * sizeof(float));
+        if (!buf) return -1;
+
+        double pk = 0.0;
+        for (int i = 0; i < N; i++) {
+            double phase = 2.0 * M_PI * (double)i / (double)N;
+            double acc = 0.0;
+            for (int j = 0; j < M; j++) {
+                acc += harmonics[j] * sin(phase * (double)(j + 1));
+            }
+            acc *= sign;
+            buf[i] = (float)acc;
+            if (fabs(acc) > pk) pk = fabs(acc);
+        }
+
+        if (pk > 1e-10) {
+            float scale = (float)(1.0 / pk);
+            for (int i = 0; i < N; i++) {
+                buf[i] *= scale;
+            }
+        }
+        sw.mip_data[lvl][w] = buf;
+    }
+    sw.mip_levels[w] = WAVETABLE_MIP_LEVELS;
+    return 0;
+}
+
+int wave_generate_mipmaps_fft(int w) {
+    if (wave_invalid(w) || !sw.data[w] || sw.size[w] <= 0) return -1;
+    if (!sw.mip_levels || !sw.mip_data[0]) return -1;
+
+    if (sw.mip_levels[w] > 0) {
+        for (int lvl = 0; lvl < WAVETABLE_MIP_LEVELS; lvl++) {
+            if (sw.mip_data[lvl] && sw.mip_data[lvl][w]) {
+                free(sw.mip_data[lvl][w]);
+                sw.mip_data[lvl][w] = NULL;
+            }
+        }
+        sw.mip_levels[w] = 0;
+    }
+
+    int N = sw.size[w];
+    int is_pow2 = (N >= 64) && ((N & (N - 1)) == 0);
+
+    if (is_pow2) {
+        synth_cplx_t *spec = (synth_cplx_t *)malloc(N * sizeof(synth_cplx_t));
+        synth_cplx_t *work = (synth_cplx_t *)malloc(N * sizeof(synth_cplx_t));
+        if (!spec || !work) {
+            free(spec);
+            free(work);
+            return -1;
+        }
+
+        for (int i = 0; i < N; i++) {
+            spec[i].re = sw.data[w][i];
+            spec[i].im = 0.0f;
+        }
+        synth_fft_radix2(spec, N, 0);
+
+        for (int lvl = 0; lvl < WAVETABLE_MIP_LEVELS; lvl++) {
+            int max_h = s_mip_max_harmonics[lvl];
+            int M = max_h < (N / 2) ? max_h : (N / 2 - 1);
+            if (M < 1) M = 1;
+
+            memcpy(work, spec, N * sizeof(synth_cplx_t));
+            work[0].re = 0.0f;
+            work[0].im = 0.0f;
+            for (int k = M + 1; k <= N / 2; k++) {
+                work[k].re = 0.0f;
+                work[k].im = 0.0f;
+                work[N - k].re = 0.0f;
+                work[N - k].im = 0.0f;
+            }
+
+            synth_fft_radix2(work, N, 1);
+
+            float *buf = (float *)malloc(N * sizeof(float));
+            if (!buf) {
+                free(spec);
+                free(work);
+                return -1;
+            }
+
+            float pk = 0.0f;
+            for (int i = 0; i < N; i++) {
+                buf[i] = work[i].re;
+                if (fabsf(work[i].re) > pk) pk = fabsf(work[i].re);
+            }
+
+            if (pk > 1e-10f) {
+                float scale = 1.0f / pk;
+                for (int i = 0; i < N; i++) buf[i] *= scale;
+            }
+            sw.mip_data[lvl][w] = buf;
+        }
+        free(spec);
+        free(work);
+    } else {
+        int max_harm = s_mip_max_harmonics[0];
+        if (max_harm > N / 2) max_harm = N / 2;
+        if (max_harm < 1) max_harm = 1;
+
+        double *a_k = (double *)calloc(max_harm + 1, sizeof(double));
+        double *b_k = (double *)calloc(max_harm + 1, sizeof(double));
+        if (!a_k || !b_k) {
+            free(a_k);
+            free(b_k);
+            return -1;
+        }
+
+        double inv_N = 2.0 / (double)N;
+        for (int k = 1; k <= max_harm; k++) {
+            double re = 0.0, im = 0.0;
+            double w_k = 2.0 * M_PI * (double)k / (double)N;
+            for (int i = 0; i < N; i++) {
+                double ph = w_k * (double)i;
+                re += (double)sw.data[w][i] * cos(ph);
+                im += (double)sw.data[w][i] * sin(ph);
+            }
+            a_k[k] = re * inv_N;
+            b_k[k] = im * inv_N;
+        }
+
+        for (int lvl = 0; lvl < WAVETABLE_MIP_LEVELS; lvl++) {
+            int max_h = s_mip_max_harmonics[lvl];
+            int M = max_h < max_harm ? max_h : max_harm;
+            if (M < 1) M = 1;
+
+            float *buf = (float *)malloc(N * sizeof(float));
+            if (!buf) {
+                free(a_k);
+                free(b_k);
+                return -1;
+            }
+
+            double pk = 0.0;
+            for (int i = 0; i < N; i++) {
+                double acc = 0.0;
+                for (int k = 1; k <= M; k++) {
+                    double ph = 2.0 * M_PI * (double)k * (double)i / (double)N;
+                    acc += a_k[k] * cos(ph) + b_k[k] * sin(ph);
+                }
+                buf[i] = (float)acc;
+                if (fabs(acc) > pk) pk = fabs(acc);
+            }
+
+            if (pk > 1e-10) {
+                float scale = (float)(1.0 / pk);
+                for (int i = 0; i < N; i++) buf[i] *= scale;
+            }
+            sw.mip_data[lvl][w] = buf;
+        }
+        free(a_k);
+        free(b_k);
+    }
+
+    sw.mip_levels[w] = WAVETABLE_MIP_LEVELS;
+    return 0;
+}
+
 #ifdef KSYNTH
 static void synth_eval_and_register_ks_wave(int w, const char *name, const char *ks_code, int is_drum) {
   if (wave_invalid(w)) return;
@@ -100,6 +333,15 @@ static void synth_eval_and_register_ks_wave(int w, const char *name, const char 
       if (one_shot) {
         sw.loop_start[w] = 0;
         sw.loop_end[w] = 0;
+      }
+
+      if (!one_shot && !is_drum) {
+        K k_a = k_get(ctx, 'A');
+        if (k_a && k_a->n > 0) {
+          wave_generate_mipmaps_ksynth(w, k_a->f, k_a->n);
+        } else if (size >= 64) {
+          wave_generate_mipmaps_fft(w);
+        }
       }
     }
   }
@@ -233,6 +475,10 @@ void wave_table_init(int flag) {
     sw.direction[i] = 0;
     sw.readonly[i] = 0;
     sw.refcount[i] = 0;
+    if (sw.mip_levels) sw.mip_levels[i] = 0;
+    for (int lvl = 0; lvl < WAVETABLE_MIP_LEVELS; lvl++) {
+      if (sw.mip_data[lvl]) sw.mip_data[lvl][i] = NULL;
+    }
     if (sw.eval_ms) sw.eval_ms[i] = 0.0f;
     if (sw.source) sw.source[i] = NULL;
     if (sw.source_is_heap) sw.source_is_heap[i] = 0;
@@ -342,11 +588,29 @@ void wave_table_init(int flag) {
   synth_init_centered_krg2();
   synth_init_ksynth_esq1();
   synth_init_ksynth_drums();
+
+  for (int w = WAVE_TABLE_SINE; w <= WAVE_TABLE_KRG32; w++) {
+    if (wave_invalid(w)) continue;
+    if (w == WAVE_TABLE_NOISE || w == WAVE_TABLE_NOISE_ALT) continue;
+    if (w >= WAVE_TABLE_CAP_1 && w <= WAVE_TABLE_CAP_8) continue;
+    if (sw.data[w] && sw.size[w] > 0 && (!sw.mip_levels || sw.mip_levels[w] <= 0)) {
+      wave_generate_mipmaps_fft(w);
+    }
+  }
 }
 
 
 void wave_free_one(int i) {
   if (wave_invalid(i)) return;
+  if (sw.mip_levels && sw.mip_levels[i] > 0) {
+    for (int lvl = 0; lvl < WAVETABLE_MIP_LEVELS; lvl++) {
+      if (sw.mip_data[lvl] && sw.mip_data[lvl][i]) {
+        free(sw.mip_data[lvl][i]);
+        sw.mip_data[lvl][i] = NULL;
+      }
+    }
+    sw.mip_levels[i] = 0;
+  }
   if (sw.data[i]) {
     if (sw.is_heap[i]) {
       free(sw.data[i]);

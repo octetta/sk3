@@ -9,9 +9,9 @@ Generated automatically by `tools/mkopcodes` from modular opcode definitions in 
 
 ## Architecture & System Overview
 
-- **Total Command Words**: 301
-- **Total Dispatch Clauses**: 606
-- **Real-Time Audio Opcode Handlers**: 151 (audio-thread safe, zero allocation, zero string lookup)
+- **Total Command Words**: 302
+- **Total Dispatch Clauses**: 608
+- **Real-Time Audio Opcode Handlers**: 153 (audio-thread safe, zero allocation, zero string lookup)
 - **Immediate / Control Plane Clauses**: 455 (REPL / parser / file system / diagnostics)
 
 ### Functional Command Groups
@@ -20,7 +20,7 @@ Generated automatically by `tools/mkopcodes` from modular opcode definitions in 
 |:---|:---|:---:|:---|
 | voice | `voice` | 25 | Core voice selection, levels, panning, and voice diagnostics |
 | osc | `osc` | 19 | Oscillators, waveforms, frequency, tuning, detune, loops |
-| wave | `wave` | 11 | Wavetable slots, visualizers, WAV import and export |
+| wave | `wave` | 12 | Wavetable slots, visualizers, WAV import and export |
 | filter | `filter` | 7 | Filter cutoff frequency, resonance, modes, wavefolding |
 | env | `env` | 15 | Envelopes, ADSR parameters, curve shaping, segment times |
 | mod | `mod` | 14 | Cross-modulation, FM, AM, ring mod, sample & hold, glissando |
@@ -1614,6 +1614,7 @@ Usage: WS wave
 |:---|:---|:---:|:---:|:---:|:---|
 | [`data_to_sample`](#data_to_sample) | `/d` | 5 | 0..4 | Immediate | load data array into default sample slot |
 | [`voice_wave_display`](#voice_wave_display) | `VW` | 4 | 0..3 | Immediate | render ascii waveform for active voice |
+| [`wave_bandlimit`](#wave_bandlimit) | `WB` | 2 | 0..1 | Real-Time | bandlimit active voice wavetable |
 | [`wave_default`](#wave_default) | `/` | 2 | 0..1 | Real-Time | reset voice waveform to default sine |
 | [`wave_display`](#wave_display) | `W` | 4 | 0..3 | Immediate | render ascii waveform for wave slot |
 | [`wave_expand`](#wave_expand) | `/wex` | 2 | 0..1 | Immediate | dynamically expand wavetable capacity |
@@ -1753,6 +1754,42 @@ Usage: VW width height
 ```text
 Renders ASCII waveform preview for voice with width and height.
 Usage: VW voice width height
+```
+
+---
+
+### `wave_bandlimit`
+
+- **Alias**: `WB`
+- **Group**: `wave`
+- **Clause Count**: 2
+
+#### Clause 1: `wave_bandlimit()`
+
+- **Arity**: `0`
+- **Execution Model**: `realtime (audio thread safe)`
+- **Discrete Opcode ID**: `279` (`skode_clause_wave_bandlimit_0`)
+- **Summary**: bandlimit active voice wavetable
+
+**Description & Details**:
+
+```text
+Generates 8-level harmonic octave mipmaps via Fourier analysis for the active voice's wavetable slot, eliminating aliasing at high frequencies.
+Usage: WB (or wave_bandlimit)
+```
+
+#### Clause 2: `wave_bandlimit(finite)`
+
+- **Arity**: `1`
+- **Execution Model**: `realtime (audio thread safe)`
+- **Discrete Opcode ID**: `280` (`skode_clause_wave_bandlimit_1`)
+- **Summary**: bandlimit specified wavetable slot
+
+**Description & Details**:
+
+```text
+Generates 8-level harmonic octave mipmaps via Fourier analysis for the specified wavetable slot, eliminating aliasing at high frequencies.
+Usage: WB <slot> (or wave_bandlimit <slot>)
 ```
 
 ---

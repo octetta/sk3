@@ -54,6 +54,7 @@ typedef struct {
     double * restrict phase;
     float  * restrict phase_inc;
     float ** restrict table;        /* per-voice pointer to wave data */
+    int    * restrict mip_level;    /* active mip level (0..7) or -1 */
     int    * restrict table_size;
     float  * restrict table_rate;
     float  * restrict table_size_rate;
@@ -217,9 +218,13 @@ typedef struct {
 /* Wave table state                                                    */
 /* ------------------------------------------------------------------ */
 
+#define WAVETABLE_MIP_LEVELS 8
+
 typedef struct {
 
     float      ** restrict data;
+    float      ** restrict mip_data[WAVETABLE_MIP_LEVELS];
+    int         * restrict mip_levels;
     int         * restrict size;
     float       * restrict rate;
     int         * restrict one_shot;
