@@ -14,18 +14,18 @@
 
 `sk3` (formerly skred) is a lightweight, high-performance polyphonic synthesizer, deterministic audio engine, and embedded Forth-inspired domain specific language (`skode`) for generative sound design and sequencing.
 
-Version: `1.3.0`
+Version: `1.3.5`
 
 ## Features
 
 - **Polyphonic Synthesizer Engine**: Multi-voice allocation with dynamic voice pooling and voice groups.
 - **Bandlimited Wavetable Playback & Octave Mipmapping**: Automatic 8-level harmonic mipmap generation via in-place FFT / ksynth analysis, eliminating Nyquist aliasing foldover chirps in the upper register while unleashing 256-harmonic richness in the sub-bass, with $\pm 5\%$ boundary hysteresis and zero inner-loop CPU overhead.
 - **Hardware LFSR Noise Generator**: Configurable Linear Feedback Shift Register noise engine on `w5` with classic vintage chip presets (MOS 6581/8580 SID, Atari POKEY 4/5/9/17-bit, NES 7/15-bit) and full runtime parameter control (`NT`).
-- **Rich DSP Primitives**: Dual-oscillator algorithms, phase distortion (CZ), frequency modulation (FM), resonant filters, exponential envelopes, sub-sample PolyBLEP anti-aliasing for hard sync, and stereo delay lines.
+- **Rich DSP Primitives**: Dual-oscillator algorithms, phase distortion (CZ), frequency modulation (FM), resonant filters with analog hyperbolic saturation drive (`jd`), combined filter modes (`L+B`, mode 6), exponential envelopes, sub-sample PolyBLEP anti-aliasing for hard sync, and stereo delay lines.
 - **Skode Command Language**: Compact, Forth-like reactive language with declarative grammar, pattern matching, guard expressions, and realtime opcode evaluation.
 - **Dual Runtime Targets**:
   - **Native C**: High-performance multi-threaded CLI (`sk3`, with compatibility aliases `skred` / `mini-skred`) and static/shared libraries (`libapi.a`, `libapi.so`) with ALSA, CoreAudio, and MIDI support.
-  - **WebAssembly**: Asynchronous, zero-dependency browser and headless Node.js engine via Emscripten.
+  - **WebAssembly**: Asynchronous, zero-dependency browser and headless Node.js engine via Emscripten, featuring dedicated multi-threaded **AudioWorklet** rendering (`-DMA_ENABLE_AUDIO_WORKLETS=1`, `-sAUDIO_WORKLET=1`) for glitch-free real-time synthesis immune to main-thread UI load.
 - **Code-Generated Contract Architecture**: Synthesizer voice states and opcode dispatch tables are declaratively compiled from `.def` schema specifications via `mksynth` and `mkopcodes`, ensuring 100% boundary invariance and seamless Gleam interop.
 
 ## Quick Start

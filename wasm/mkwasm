@@ -14,7 +14,10 @@ emcc -I"${ROOT_DIR}/src" \
     -I"${ROOT_DIR}/build" \
     -DSKRED_MIDI_ENABLED=1 \
     -DKSYNTH=1 \
+    -DMA_ENABLE_AUDIO_WORKLETS=1 \
     -pthread \
+    -sAUDIO_WORKLET=1 \
+    -sWASM_WORKERS=1 \
     -sASYNCIFY \
     "${ROOT_DIR}/src/ands.c" \
     "${ROOT_DIR}/src/miniaudio.c" \
