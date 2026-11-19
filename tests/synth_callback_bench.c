@@ -30,13 +30,12 @@ int main(int argc, char **argv) {
   if (voices < 1 || callbacks < 1) return 2;
 
   float output[BENCH_FRAMES * BENCH_CHANNELS];
+  synth_init(voices);
   const double deadline_ns =
     (double)BENCH_FRAMES * 1000000000.0 / MAIN_SAMPLE_RATE;
   uint64_t total_ns = 0;
   uint64_t worst_ns = 0;
   int overruns = 0;
-
-  synth_init(voices);
   wave_table_init(0);
   voice_init();
   voices = synth_voice_count();
