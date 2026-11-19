@@ -445,6 +445,11 @@ int wavetable_summary_show(skode_t *ctx, int n) {
     if (sw.one_shot[n]) {
       ctx->printf(ctx, "# W%-3d | %6d smp | %6.1f ms%s | %s | ref#%-2d | 1-shot %5gHz | [%s]\n", 
         n, size, ms, eval_buf, readonly ? "R/O" : "R/W", refcount, rate, sw.name[n]);
+    } else if (sw.mip_levels && sw.mip_levels[n] > 0) {
+      char cycle_buf[20];
+      snprintf(cycle_buf, sizeof(cycle_buf), "cycle (%dtbl)", sw.mip_levels[n]);
+      ctx->printf(ctx, "# W%-3d | %6d smp | %6.1f ms%s | %s | ref#%-2d | %-14s | [%s]\n", 
+        n, size, ms, eval_buf, readonly ? "R/O" : "R/W", refcount, cycle_buf, sw.name[n]);
     } else {
       ctx->printf(ctx, "# W%-3d | %6d smp | %6.1f ms%s | %s | ref#%-2d | cycle          | [%s]\n", 
         n, size, ms, eval_buf, readonly ? "R/O" : "R/W", refcount, sw.name[n]);
@@ -470,11 +475,18 @@ int wavetable_show(skode_t *ctx, int n) {
     WTWFS(wave_samples_to_ms(size, rate));
     if (readonly) ctx->printf(ctx, " R/O"); else ctx->printf(ctx, " R/W");
     ctx->printf(ctx, " ref#%d", refcount);
+    if (sw.mip_levels && sw.mip_levels[n] > 0) {
+      ctx->printf(ctx, " (%d tables)", sw.mip_levels[n]);
+    }
     ctx->printf(ctx, " [%s]", sw.name[n]);
     ctx->puts(ctx, "");
-    ctx->printf(ctx, "# playback rate %gHz offset %+gHz MIDI %g mode %s\n",
+    ctx->printf(ctx, "# playback rate %gHz offset %+gHz MIDI %g mode %s",
       sw.rate[n], sw.offset_hz[n], sw.midi_note[n],
       sw.one_shot[n] ? "one-shot" : "cycle");
+    if (!sw.one_shot[n] && sw.mip_levels && sw.mip_levels[n] > 0) {
+      ctx->printf(ctx, " (%d bandlimited tables)", sw.mip_levels[n]);
+    }
+    ctx->puts(ctx, "");
     ctx->printf(ctx, "# loop %d..%d |%d| %gms\n", loop_start, loop_end, loop_len, wave_samples_to_ms(loop_len, rate));
     ctx->printf(ctx,
       "# min %+0.3f max %+0.3f peak %0.3f rms %0.3f dc %+0.4f zc %d",

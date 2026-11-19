@@ -76,40 +76,53 @@ int wave_generate_mipmaps_ksynth(int w, const double *harmonics, int num_harmoni
     }
 
     int N = sw.size[w];
-    double dot = 0.0;
-    for (int i = 0; i < N; i++) {
-        dot += (double)sw.data[w][i] * sin(2.0 * M_PI * (double)i / (double)N);
+    int is_pow2 = (N >= 64) && ((N & (N - 1)) == 0);
+    if (!is_pow2) {
+        return wave_generate_mipmaps_fft(w);
     }
-    double sign = (dot < 0.0) ? -1.0 : 1.0;
+
+    // Determine fundamental sign from quarter-cycle test without sin() calls
+    int q1 = N / 4;
+    int q3 = (3 * N) / 4;
+    float sign = (sw.data[w][q1] - sw.data[w][q3] < 0.0f) ? -1.0f : 1.0f;
+
+    synth_cplx_t *work = (synth_cplx_t *)calloc(N, sizeof(synth_cplx_t));
+    if (!work) return -1;
 
     for (int lvl = 0; lvl < WAVETABLE_MIP_LEVELS; lvl++) {
         int max_h = s_mip_max_harmonics[lvl];
         int M = num_harmonics < max_h ? num_harmonics : max_h;
+        if (M > N / 2 - 1) M = N / 2 - 1;
         if (M < 1) M = 1;
 
-        float *buf = (float *)malloc(N * sizeof(float));
-        if (!buf) return -1;
-
-        double pk = 0.0;
-        for (int i = 0; i < N; i++) {
-            double phase = 2.0 * M_PI * (double)i / (double)N;
-            double acc = 0.0;
-            for (int j = 0; j < M; j++) {
-                acc += harmonics[j] * sin(phase * (double)(j + 1));
-            }
-            acc *= sign;
-            buf[i] = (float)acc;
-            if (fabs(acc) > pk) pk = fabs(acc);
+        memset(work, 0, N * sizeof(synth_cplx_t));
+        for (int k = 1; k <= M; k++) {
+            float amp = (float)harmonics[k - 1] * sign;
+            work[k].im = -amp;
+            work[N - k].im = amp;
         }
 
-        if (pk > 1e-10) {
-            float scale = (float)(1.0 / pk);
-            for (int i = 0; i < N; i++) {
-                buf[i] *= scale;
-            }
+        synth_fft_radix2(work, N, 1);
+
+        float *buf = (float *)malloc(N * sizeof(float));
+        if (!buf) {
+            free(work);
+            return -1;
+        }
+
+        float pk = 0.0f;
+        for (int i = 0; i < N; i++) {
+            buf[i] = work[i].re;
+            if (fabsf(work[i].re) > pk) pk = fabsf(work[i].re);
+        }
+
+        if (pk > 1e-10f) {
+            float scale = 1.0f / pk;
+            for (int i = 0; i < N; i++) buf[i] *= scale;
         }
         sw.mip_data[lvl][w] = buf;
     }
+    free(work);
     sw.mip_levels[w] = WAVETABLE_MIP_LEVELS;
     return 0;
 }
