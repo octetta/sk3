@@ -10,7 +10,7 @@ import re
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 PARTS_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 DRUMS_DIR = os.path.join(PARTS_DIR, "waves", "drums")
-OUT_FILE = os.path.join(PARTS_DIR, "drums_sources.h")
+OUT_FILE = os.path.join(PARTS_DIR, "src", "drums_sources.h")
 
 def main():
     ks_files = sorted(glob.glob(os.path.join(DRUMS_DIR, "*.ks")),

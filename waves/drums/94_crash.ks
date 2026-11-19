@@ -1,28 +1,18 @@
-/ Classic 808-style Crash Cymbal
+/ 808 Crash v9: 24 fitted cymbal modes via the mb verb + comb-tapered noise bed
 N: 66150
 T: !N
-/ TR-808 6-oscillator metallic cluster
-Z: 300 b T
-
-/ Body filter (Bandpass @ 800Hz)
-C: 800 1.5
-D: C g Z
-
-/ Splash filter (Bandpass @ 3800Hz)
-F: 3800 1.5
-H: F g Z
-
-/ White noise sizzle (Highpass @ 8000Hz)
-I: r T
-W: 8000 1.0
-Y: W g I
-
-/ Envelopes: long metal, shorter noise
-E: e(T*(0-4.0%N))
-G: e(T*(0-10.0%N))
-
-/ Mix
-M: E*(D*0.5 + H*0.5) + G*Y*0.4
+M: 818.3 0.02248 1.23  1205.9 0.03729 1.16  1539.6 0.06169 1.21  1625.8 0.07509 1.24  1733.4 0.08046 1.25  2013.4 0.07171 1.27  2110.3 0.05956 1.21  2454.8 0.1993 1.23  2562.5 0.1098 1.30  2713.2 0.1522 1.28  2820.8 0.1109 1.30  2896.2 0.174 1.28  3305.3 0.141 1.28  3585.3 0.2259 1.22  3628.3 0.1697 1.23  3800.6 0.1626 1.22  3908.3 0.07301 1.17  4080.5 0.1725 1.17  4435.8 0.05636 1.12  4608.1 0.07257 1.06  4888 0.07872 1.00  5717.1 0.1769 0.83  7342.8 0.4263 0.67  7665.8 0.1936 0.74
+Q: T mb M
+R: 1-(e(T*(0-9.1748%N)))
+S: 1-(e(T*(0-325.64499%N)))
+/ noise bed: double highpass then 6 positive-feedback combs taper the top octaves
+X: r T
+B: X-(.95 f X)
+C: B-(.95 f B)
+E: 1 .4
+F: E y (E y (E y (E y (E y (E y C)))))
+A: F*((0.13587*(e(T*(0-16.03813%N))))+(48.7045*(e(T*(0-12.80304%N)))))
+W: w (R*Q)+(S*A)
 
 O: 1
-M
+W
