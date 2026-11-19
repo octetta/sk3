@@ -14,7 +14,7 @@
 
 `sk3` (formerly skred) is a lightweight, high-performance polyphonic synthesizer, deterministic audio engine, and embedded Forth-inspired domain specific language (`skode`) for generative sound design and sequencing.
 
-Version: `1.3.5`
+Version: `1.3.6`
 
 ## Features
 
@@ -25,7 +25,7 @@ Version: `1.3.5`
 - **Skode Command Language**: Compact, Forth-like reactive language with declarative grammar, pattern matching, guard expressions, and realtime opcode evaluation.
 - **Dual Runtime Targets**:
   - **Native C**: High-performance multi-threaded CLI (`sk3`, with compatibility aliases `skred` / `mini-skred`) and static/shared libraries (`libapi.a`, `libapi.so`) with ALSA, CoreAudio, and MIDI support.
-  - **WebAssembly**: Asynchronous, zero-dependency browser and headless Node.js engine via Emscripten, featuring dedicated multi-threaded **AudioWorklet** rendering (`-DMA_ENABLE_AUDIO_WORKLETS=1`, `-sAUDIO_WORKLET=1`) for glitch-free real-time synthesis immune to main-thread UI load.
+  - **WebAssembly**: Asynchronous, zero-dependency browser and headless Node.js engine via Emscripten, featuring dedicated multi-threaded POSIX pthreads and stable WebAudio integration for glitch-free cross-browser real-time synthesis.
 - **Code-Generated Contract Architecture**: Synthesizer voice states and opcode dispatch tables are declaratively compiled from `.def` schema specifications via `mksynth` and `mkopcodes`, ensuring 100% boundary invariance and seamless Gleam interop.
 
 ## Quick Start
