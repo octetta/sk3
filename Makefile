@@ -97,6 +97,9 @@ dist-api-wasm: wasm wasm-test
 	mkdir -p $(DIST_WASM_PREFIX)
 	cp build_wasm/skred_api.js $(DIST_WASM_PREFIX)/
 	cp build_wasm/skred_api.wasm $(DIST_WASM_PREFIX)/
+	cp build_wasm/skred_worklet_engine.js $(DIST_WASM_PREFIX)/
+	cp build_wasm/skred_worklet_engine.wasm $(DIST_WASM_PREFIX)/
+	cp build_wasm/skred_worklet_processor.js $(DIST_WASM_PREFIX)/
 	$(CMAKE) -E chdir $(DIST_WASM_PLATFORM_ROOT) $(CMAKE) -E tar cf skred-$(VERSION)-maxed.zip --format=zip skred-$(VERSION)-maxed
 	cp $(DIST_WASM_ARCHIVE) $(DIST_WASM_RELEASE_ARCHIVE)
 	@echo "==> WASM distribution archives ready at $(DIST_WASM_PLATFORM_ROOT):"
