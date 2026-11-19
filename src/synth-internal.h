@@ -55,6 +55,7 @@ float audio_rng_float(uint64_t *rng);
 float audio_rng_raw_float(uint64_t raw);
 
 float osc_next_at(skred_engine_t *engine, int voice, float phase_inc, float phase_offset, uint64_t current_sample);
+void osc_hard_sync_fire(int master, double d);
 void envelope_release_e_at(envelope_t *e, uint64_t current_sample);
 float quantize_bits_curve(float v, int bits, int curve, uint64_t *rng);
 float mmf_process(skred_engine_t *engine, int n, float input);

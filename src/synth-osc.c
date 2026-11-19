@@ -264,7 +264,7 @@ static inline float osc_lookup_value(int v, double phase) {
     return sv.table[v][idx];
 }
 
-static void osc_hard_sync_fire(int master, double d) {
+void osc_hard_sync_fire(int master, double d) {
     if (d < 0.0) d = 0.0;
     else if (d >= 1.0) d = 1.0 - 1e-6;
 

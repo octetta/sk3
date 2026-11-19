@@ -420,6 +420,8 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
         double phase = sv.phase[n] + (double)fabsf(phase_inc);
         while (phase >= table_sz) {
             phase -= table_sz;
+            double d = (phase_inc > 0.0f) ? (phase / (double)phase_inc) : 0.0;
+            osc_hard_sync_fire(n, d);
             osc_noise_step(n);
         }
         sv.phase[n] = phase;

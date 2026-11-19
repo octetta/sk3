@@ -329,10 +329,24 @@ static void test_realtime_path(void) {
   skred_stop();
 }
 
+static void test_noise_master_sync(void) {
+  setup();
+  cmd("v0 w5 f110 a0 l1");
+  cmd("v1 f337 a0 l1");
+  cmd("v0 HS 1");
+  for (int i = 0; i < 200; i++) render1();
+  int wraps, synced, free_wraps;
+  watch(0, 1, 48000 / 4, &wraps, &synced, &free_wraps);
+  expect(wraps > 20, "noise master completes many cycles");
+  expect(synced >= wraps - 1, "slave phase restarts on every noise master wrap");
+  teardown();
+}
+
 int main(void) {
   test_configuration();
   test_bare_T_still_retriggers();
   test_simple_cycle_sync();
+  test_noise_master_sync();
   test_cleared_stops_syncing();
   test_multiple_targets();
   test_reverse_master_general_path();
