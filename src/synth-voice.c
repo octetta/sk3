@@ -644,6 +644,12 @@ int envelope_set(int voice, float a, float d, float s, float r) {
 
 // Set parameters - only recalculates coefficients if values changed
 void mmf_set_params(skred_engine_t *engine, int n, float f, float resonance) {
+    float max_f = (float)MAIN_SAMPLE_RATE * 0.49f;
+    if (f > max_f) f = max_f;
+    if (f < 10.0f) f = 10.0f;
+    if (resonance < 0.1f) resonance = 0.1f;
+    if (resonance > 20.0f) resonance = 20.0f;
+
     // Only recalculate if parameters changed
     if (
       f == sv.filter[n].last_freq &&
