@@ -3,6 +3,7 @@
 #include "synth-state.h"
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <stdlib.h>
 
 #include "vendor/uedit/uedit.h"
@@ -92,7 +93,14 @@ static int handle_wave_command(const char *line) {
 static int is_zip_file(const char *path) {
   if (!path) return 0;
   const char *ext = strrchr(path, '.');
-  return (ext && (strcmp(ext, ".zip") == 0 || strcmp(ext, ".ZIP") == 0));
+  if (ext && (strcasecmp(ext, ".zip") == 0)) return 1;
+  FILE *f = fopen(path, "rb");
+  if (!f) return 0;
+  unsigned char hdr[4];
+  size_t n = fread(hdr, 1, 4, f);
+  fclose(f);
+  return (n >= 4 && hdr[0] == 'P' && hdr[1] == 'K' &&
+          (hdr[2] == 3 || hdr[2] == 5 || hdr[2] == 7));
 }
 
 static int run_command(const char *line) {

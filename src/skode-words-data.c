@@ -176,7 +176,7 @@ static int word_exec__slashks(const skode_word_t *self, skode_t *ctx, ands_t *s,
         int verbose = 0;
         if (argc) skode_double_to_int(arg[0], &verbose);
         if (strlen(file)) {
-          ksynth_load_name(ctx, file, verbose);
+          return ksynth_load_name(ctx, file, verbose);
         }
       }
       return 0;
@@ -193,7 +193,7 @@ static int word_exec__slashk(const skode_word_t *self, skode_t *ctx, ands_t *s, 
       if (argc) {
         int verbose = 0;
         if (argc > 1) skode_double_to_int(arg[1], &verbose);
-        ksynth_load(ctx, x, verbose);
+        return ksynth_load(ctx, x, verbose);
       }
       return 0;
 }

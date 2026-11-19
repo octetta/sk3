@@ -2,6 +2,7 @@
 #include "miniz_zip.h"
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <dirent.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -61,8 +62,16 @@ struct SkredDir {
 /* --- Internal Helpers --- */
 
 static bool vfs_is_zip(const char *path) {
+    if (!path || path[0] == '\0') return false;
     const char *ext = strrchr(path, '.');
-    return (ext && strcmp(ext, ".zip") == 0);
+    if (ext && (strcasecmp(ext, ".zip") == 0)) return true;
+    FILE *f = fopen(path, "rb");
+    if (!f) return false;
+    unsigned char hdr[4];
+    size_t n = fread(hdr, 1, 4, f);
+    fclose(f);
+    return (n >= 4 && hdr[0] == 'P' && hdr[1] == 'K' &&
+            (hdr[2] == 3 || hdr[2] == 5 || hdr[2] == 7));
 }
 
 static void vfs_disk_root(char *out, size_t out_len, const char *path) {

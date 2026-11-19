@@ -265,9 +265,143 @@ int skode_asset_read(const char *path, skode_asset_kind_t kind,
   return 0;
 }
 
+int skode_is_text(const void *data, size_t size, char *diag, size_t diag_size) {
+  if (diag && diag_size > 0) diag[0] = '\0';
+  if (!data || size == 0) return 1;
+
+  const unsigned char *bytes = (const unsigned char *)data;
+
+  /* Check known binary container / file signatures */
+  if (size >= 4 && bytes[0] == 'P' && bytes[1] == 'K' &&
+      (bytes[2] == 0x03 || bytes[2] == 0x05 || bytes[2] == 0x07)) {
+    if (diag && diag_size > 0) {
+      snprintf(diag, diag_size, "file is a ZIP archive (use %%z or GS< to mount/restore)");
+    }
+    return 0;
+  }
+
+  if (size >= 12 && memcmp(bytes, "RIFF", 4) == 0 && memcmp(bytes + 8, "WAVE", 4) == 0) {
+    if (diag && diag_size > 0) {
+      snprintf(diag, diag_size, "file is a WAV audio file (use w< or /w to load into wave slot)");
+    }
+    return 0;
+  }
+
+  if (size >= 4 && memcmp(bytes, "fLaC", 4) == 0) {
+    if (diag && diag_size > 0) {
+      snprintf(diag, diag_size, "file is a FLAC audio file (use w< or /w to load into wave slot)");
+    }
+    return 0;
+  }
+
+  if ((size >= 3 && memcmp(bytes, "ID3", 3) == 0) ||
+      (size >= 2 && bytes[0] == 0xFF && (bytes[1] & 0xE0) == 0xE0)) {
+    if (diag && diag_size > 0) {
+      snprintf(diag, diag_size, "file is an MP3 audio file (use w< or /w to load into wave slot)");
+    }
+    return 0;
+  }
+
+  if (size >= 4 && memcmp(bytes, "OggS", 4) == 0) {
+    if (diag && diag_size > 0) {
+      snprintf(diag, diag_size, "file is an Ogg audio file (use w< or /w to load into wave slot)");
+    }
+    return 0;
+  }
+
+  if (size >= 4 && memcmp(bytes, "MThd", 4) == 0) {
+    if (diag && diag_size > 0) {
+      snprintf(diag, diag_size, "file is a MIDI file");
+    }
+    return 0;
+  }
+
+  if (size >= 4 && memcmp(bytes, "\x7f\x45\x4c\x46", 4) == 0) {
+    if (diag && diag_size > 0) {
+      snprintf(diag, diag_size, "file is an ELF binary executable");
+    }
+    return 0;
+  }
+
+  if (size >= 4 && (memcmp(bytes, "\xfe\xed\xfa\xce", 4) == 0 ||
+                    memcmp(bytes, "\xce\xfa\xed\xfe", 4) == 0 ||
+                    memcmp(bytes, "\xfe\xed\xfa\xcf", 4) == 0 ||
+                    memcmp(bytes, "\xcf\xfa\xed\xfe", 4) == 0 ||
+                    memcmp(bytes, "\xca\xfe\xba\xbe", 4) == 0)) {
+    if (diag && diag_size > 0) {
+      snprintf(diag, diag_size, "file is a Mach-O binary executable");
+    }
+    return 0;
+  }
+
+  if (size >= 2 && bytes[0] == 0x1F && bytes[1] == 0x8B) {
+    if (diag && diag_size > 0) {
+      snprintf(diag, diag_size, "file is a gzip compressed file");
+    }
+    return 0;
+  }
+
+  /*
+   * Inspection of first line or up to 256 bytes:
+   * Scan until first newline with non-whitespace content, or up to min(size, 256).
+   */
+  size_t inspect_len = size < 256 ? size : 256;
+  size_t line_end = 0;
+  int has_content = 0;
+  for (size_t i = 0; i < inspect_len; i++) {
+    if (bytes[i] == '\n' || bytes[i] == '\r') {
+      if (has_content) {
+        line_end = i + 1;
+        break;
+      }
+    } else if (bytes[i] > ' ') {
+      has_content = 1;
+    }
+  }
+  if (line_end > 0) {
+    inspect_len = line_end;
+  }
+
+  for (size_t i = 0; i < inspect_len; i++) {
+    unsigned char c = bytes[i];
+    if (c == '\0') {
+      if (diag && diag_size > 0) {
+        snprintf(diag, diag_size, "file contains null bytes (binary file)");
+      }
+      return 0;
+    }
+    if (c < 32 && c != '\t' && c != '\n' && c != '\r') {
+      if (diag && diag_size > 0) {
+        snprintf(diag, diag_size, "file contains control characters 0x%02X (binary file)", c);
+      }
+      return 0;
+    }
+    if (c == 127) {
+      if (diag && diag_size > 0) {
+        snprintf(diag, diag_size, "file contains non-printable character 0x7F (binary file)");
+      }
+      return 0;
+    }
+  }
+
+  return 1;
+}
+
 int skode_load_buffer(skode_t *ctx, const char *text, size_t text_len,
     const char *label,
     int verbose) {
+  if (ctx == NULL) return SK_ERR_INVALID_PARAM;
+  if (!text || text_len == 0) return SK_OK;
+
+  char diag[256];
+  if (!skode_is_text(text, text_len, diag, sizeof(diag))) {
+    ctx->printf(ctx, "# cannot load %s: %s\n",
+                label ? label : "(buffer)", diag);
+    skode_set_error(ctx, SK_ERR_INVALID_PARAM, "%s: %s",
+                    label ? label : "(buffer)", diag);
+    return SK_ERR_INVALID_PARAM;
+  }
+
   int r = 0;
   skode_t *loader = (skode_t *)calloc(1, sizeof(*loader));
   if (!loader) {
@@ -374,15 +508,20 @@ int skode_load_name(skode_t *ctx, const char *name, int verbose) {
   }
   if (!name || name[0] == '\0') {
     ctx->printf(ctx, "# cannot load empty filename\n");
-    return -1;
+    skode_set_error(ctx, SK_ERR_INVALID_PARAM, "cannot load empty filename");
+    return SK_ERR_INVALID_PARAM;
   }
   char file[1024];
   char resolved[1024];
   void *data = NULL;
   size_t size = 0;
   snprintf(file, sizeof(file), "%s", name);
-  skode_asset_read(file, SKODE_ASSET_SKODE, &data, &size,
-    resolved, sizeof(resolved));
+  if (!skode_asset_read(file, SKODE_ASSET_SKODE, &data, &size,
+      resolved, sizeof(resolved))) {
+    ctx->printf(ctx, "# cannot load %s\n", file);
+    skode_set_error(ctx, SK_ERR_NOT_FOUND, "cannot load %s", file);
+    return SK_ERR_NOT_FOUND;
+  }
   int r = skode_load_buffer(ctx, (const char *)data, size,
     resolved[0] ? resolved : file, verbose);
   skred_vfs_free_file(data);
@@ -401,8 +540,12 @@ int skode_load(skode_t *ctx, int voice, int n, int verbose) {
   void *data = NULL;
   size_t size = 0;
   sprintf(file, "%d.sk", n);
-  skode_asset_read(file, SKODE_ASSET_SKODE, &data, &size,
-    resolved, sizeof(resolved));
+  if (!skode_asset_read(file, SKODE_ASSET_SKODE, &data, &size,
+      resolved, sizeof(resolved))) {
+    ctx->printf(ctx, "# cannot load %s\n", file);
+    skode_set_error(ctx, SK_ERR_NOT_FOUND, "cannot load %s", file);
+    return SK_ERR_NOT_FOUND;
+  }
   int r = skode_load_buffer(ctx, (const char *)data, size,
     resolved[0] ? resolved : file, verbose);
   skred_vfs_free_file(data);
@@ -577,16 +720,33 @@ int wave_load_string(skode_t *ctx, char *name, int wave_index, int ch, int norma
   if (!skode_asset_read(name, SKODE_ASSET_WAVE, &data, &data_size,
       resolved, sizeof(resolved))) {
     ctx->printf(ctx, "# cannot open %s\n", name);
-    return -1;
+    skode_set_error(ctx, SK_ERR_NOT_FOUND, "cannot open %s", name);
+    return SK_ERR_NOT_FOUND;
+  }
+  if (data_size >= 4 && ((const unsigned char *)data)[0] == 'P' &&
+      ((const unsigned char *)data)[1] == 'K' &&
+      (((const unsigned char *)data)[2] == 3 || ((const unsigned char *)data)[2] == 5 || ((const unsigned char *)data)[2] == 7)) {
+    ctx->printf(ctx, "# cannot load %s: file is a ZIP archive, not an audio file\n", resolved);
+    skode_set_error(ctx, SK_ERR_INVALID_PARAM, "%s: file is a ZIP archive", resolved);
+    skred_vfs_free_file(data);
+    return SK_ERR_INVALID_PARAM;
+  }
+  char text_diag[256];
+  if (skode_is_text(data, data_size, text_diag, sizeof(text_diag))) {
+    ctx->printf(ctx, "# cannot load %s: file is a text script, not an audio file\n", resolved);
+    skode_set_error(ctx, SK_ERR_INVALID_PARAM, "%s: file is a text script", resolved);
+    skred_vfs_free_file(data);
+    return SK_ERR_INVALID_PARAM;
   }
   wav_t wav;
   int len;
   char out[4096];
   float *table = mw_get_mem(data, data_size, resolved, &len, &wav, ch, out, sizeof(out));
   if (table == NULL) {
-    ctx->printf(ctx, "# can not read %s\n", resolved);
+    ctx->printf(ctx, "# cannot read %s\n", resolved);
+    skode_set_error(ctx, SK_ERR_IO, "cannot read %s", resolved);
     skred_vfs_free_file(data);
-    return -1;
+    return SK_ERR_IO;
   } else {
     wave_install_memory(wave_index, table, len, (float)wav.SamplesRate, 1,
       resolved, 69.0f, (float)len / (float)wav.SamplesRate * 440.0f);
@@ -652,16 +812,33 @@ int wave_load(skode_t *ctx, int file_num, int wave_index, int ch, int normalize)
   if (!skode_asset_read(name, SKODE_ASSET_WAVE, &data, &data_size,
       resolved, sizeof(resolved))) {
     ctx->printf(ctx, "# cannot open %s\n", name);
-    return -1;
+    skode_set_error(ctx, SK_ERR_NOT_FOUND, "cannot open %s", name);
+    return SK_ERR_NOT_FOUND;
+  }
+  if (data_size >= 4 && ((const unsigned char *)data)[0] == 'P' &&
+      ((const unsigned char *)data)[1] == 'K' &&
+      (((const unsigned char *)data)[2] == 3 || ((const unsigned char *)data)[2] == 5 || ((const unsigned char *)data)[2] == 7)) {
+    ctx->printf(ctx, "# cannot load %s: file is a ZIP archive, not an audio file\n", resolved);
+    skode_set_error(ctx, SK_ERR_INVALID_PARAM, "%s: file is a ZIP archive", resolved);
+    skred_vfs_free_file(data);
+    return SK_ERR_INVALID_PARAM;
+  }
+  char text_diag[256];
+  if (skode_is_text(data, data_size, text_diag, sizeof(text_diag))) {
+    ctx->printf(ctx, "# cannot load %s: file is a text script, not an audio file\n", resolved);
+    skode_set_error(ctx, SK_ERR_INVALID_PARAM, "%s: file is a text script", resolved);
+    skred_vfs_free_file(data);
+    return SK_ERR_INVALID_PARAM;
   }
   wav_t wav;
   int len;
   char out[4096];
   float *table = mw_get_mem(data, data_size, resolved, &len, &wav, ch, out, sizeof(out));
   if (table == NULL) {
-    ctx->printf(ctx, "# can not read %s\n", resolved);
+    ctx->printf(ctx, "# cannot read %s\n", resolved);
+    skode_set_error(ctx, SK_ERR_IO, "cannot read %s", resolved);
     skred_vfs_free_file(data);
-    return -1;
+    return SK_ERR_IO;
   } else {
     wave_install_memory(wave_index, table, len, (float)wav.SamplesRate, 1,
       resolved, 69.0f, (float)len / (float)wav.SamplesRate * 440.0f);

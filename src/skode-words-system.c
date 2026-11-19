@@ -319,7 +319,7 @@ int skode_exec_slashl(skode_t *ctx, ands_t *s, const double *arg, int argc) {
     int verbose = 0;
     if (!skode_double_to_int(arg[0], &x)) return 0;
     if (argc > 1) skode_double_to_int(arg[1], &verbose);
-    skode_load(ctx, ctx->voice, x, verbose);
+    return skode_load(ctx, ctx->voice, x, verbose);
   }
   return 0;
 }
@@ -329,11 +329,11 @@ int skode_exec_slashls(skode_t *ctx, ands_t *s, const double *arg, int argc) {
   if (strlen(ands_string(ctx->parse))) {
     int verbose = 0;
     if (argc > 0) skode_double_to_int(arg[0], &verbose);
-    skode_load_name(ctx, ands_string(ctx->parse), verbose);
+    return skode_load_name(ctx, ands_string(ctx->parse), verbose);
   } else {
     ctx->printf(ctx, "# /ls requires [filename]\n");
+    return SK_ERR_INVALID_PARAM;
   }
-  return 0;
 }
 
 int skode_exec_gt_u(skode_t *ctx, ands_t *s, const double *arg, int argc) {

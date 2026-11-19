@@ -99,9 +99,18 @@ int skode_ks_bind_values(skode_t *ctx, int variable,
   return 1;
 }
 
-void ksynth_loader(skode_t *ctx, const char *text, size_t text_len,
+int ksynth_loader(skode_t *ctx, const char *text, size_t text_len,
     const char *label, int verbose) {
-  if (!ctx || !text || text_len == 0) return;
+  if (!ctx || !text || text_len == 0) return 0;
+
+  char diag[256];
+  if (!skode_is_text(text, text_len, diag, sizeof(diag))) {
+    ctx->printf(ctx, "# cannot load %s: %s\n",
+                label ? label : "(buffer)", diag);
+    skode_set_error(ctx, SK_ERR_INVALID_PARAM, "%s: %s",
+                    label ? label : "(buffer)", diag);
+    return SK_ERR_INVALID_PARAM;
+  }
 
   struct timespec t0, t1;
   clock_gettime(CLOCK_MONOTONIC, &t0);
@@ -134,19 +143,20 @@ void ksynth_loader(skode_t *ctx, const char *text, size_t text_len,
 
   clock_gettime(CLOCK_MONOTONIC, &t1);
   ctx->ks_last_eval_ms = (float)((t1.tv_sec - t0.tv_sec) * 1000.0 + (t1.tv_nsec - t0.tv_nsec) * 1e-6);
+  return 0;
 }
 
 int ksynth_load_name(skode_t *ctx, char *file, int verbose) {
   void *data = NULL;
   size_t size = 0;
   char resolved[1024];
-  int r = 0;
   if (!skode_asset_read(file, SKODE_ASSET_KSYNTH, &data, &size,
       resolved, sizeof(resolved))) {
     ctx->printf(ctx, "# cannot load %s\n", file ? file : "(null)");
-    return -1;
+    skode_set_error(ctx, SK_ERR_NOT_FOUND, "cannot load %s", file ? file : "(null)");
+    return SK_ERR_NOT_FOUND;
   }
-  ksynth_loader(ctx, (const char *)data, size, resolved, verbose);
+  int r = ksynth_loader(ctx, (const char *)data, size, resolved, verbose);
   skred_vfs_free_file(data);
   return r;
 }
@@ -160,10 +170,10 @@ int ksynth_load(skode_t *ctx, int n, int verbose) {
   if (!skode_asset_read(file, SKODE_ASSET_KSYNTH, &data, &size,
       resolved, sizeof(resolved))) {
     ctx->printf(ctx, "# cannot load %d.ks or ks/%d.ks\n", n, n);
-    return -1;
+    skode_set_error(ctx, SK_ERR_NOT_FOUND, "cannot load %d.ks", n);
+    return SK_ERR_NOT_FOUND;
   }
-  int r = 0;
-  ksynth_loader(ctx, (const char *)data, size, resolved, verbose);
+  int r = ksynth_loader(ctx, (const char *)data, size, resolved, verbose);
   skred_vfs_free_file(data);
   return r;
 }

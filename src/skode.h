@@ -228,6 +228,7 @@ void system_show(skode_t *w);
 int audio_show(skode_t *w);
 int skode_load(skode_t *w, int voice, int n, int verbose);
 int skode_load_name(skode_t *w, const char *name, int verbose);
+int skode_is_text(const void *data, size_t size, char *diag, size_t diag_size);
 int wavetable_show(skode_t *w, int n);
 int wavetable_summary_show(skode_t *w, int n);
 char *skode_err_str(int n);

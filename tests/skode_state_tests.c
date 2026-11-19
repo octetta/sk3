@@ -3964,6 +3964,70 @@ static void test_error_system(void) {
   skode_free(&ctx);
 }
 
+static void test_binary_rejection_and_text_validation(void) {
+  const char *test = "binary rejection and text validation";
+  char diag[256] = "";
+
+  /* 1. skode_is_text on valid text */
+  expect_int(test, skode_is_text("", 0, diag, sizeof(diag)), 1, "empty buffer is valid text");
+  expect_int(test, skode_is_text("# comment\nv0 1 w\n", 17, diag, sizeof(diag)), 1, "standard script is valid text");
+  expect_int(test, skode_is_text("440s", 4, diag, sizeof(diag)), 1, "ksynth snippet is valid text");
+  expect_int(test, skode_is_text("# こんにちは\nv0 440 hz\n", 29, diag, sizeof(diag)), 1, "utf-8 text is valid text");
+
+  /* 2. skode_is_text on binary headers */
+  const unsigned char zip_hdr[] = { 'P', 'K', 0x03, 0x04, 0x14, 0x00, 0x00, 0x00 };
+  expect_int(test, skode_is_text(zip_hdr, sizeof(zip_hdr), diag, sizeof(diag)), 0, "zip header rejected");
+  expect_int(test, strstr(diag, "ZIP") != NULL, 1, "zip diag mentions ZIP");
+
+  const unsigned char wav_hdr[] = "RIFF\x24\x00\x00\x00WAVEfmt ";
+  expect_int(test, skode_is_text(wav_hdr, 16, diag, sizeof(diag)), 0, "wav header rejected");
+  expect_int(test, strstr(diag, "WAV") != NULL, 1, "wav diag mentions WAV");
+
+  const unsigned char flac_hdr[] = { 'f', 'L', 'a', 'C', 0x00, 0x00, 0x00, 0x22 };
+  expect_int(test, skode_is_text(flac_hdr, sizeof(flac_hdr), diag, sizeof(diag)), 0, "flac header rejected");
+  expect_int(test, strstr(diag, "FLAC") != NULL, 1, "flac diag mentions FLAC");
+
+  const unsigned char mp3_hdr[] = { 'I', 'D', '3', 0x03, 0x00, 0x00, 0x00, 0x00 };
+  expect_int(test, skode_is_text(mp3_hdr, sizeof(mp3_hdr), diag, sizeof(diag)), 0, "mp3 header rejected");
+  expect_int(test, strstr(diag, "MP3") != NULL, 1, "mp3 diag mentions MP3");
+
+  const unsigned char bin_null[] = { 'v', '0', 0x00, 'w', '\n' };
+  expect_int(test, skode_is_text(bin_null, sizeof(bin_null), diag, sizeof(diag)), 0, "embedded null rejected");
+  expect_int(test, strstr(diag, "null") != NULL, 1, "diag mentions null");
+
+  const unsigned char bin_ctrl[] = { 0x02, 0x05, 'a', 'b', '\n' };
+  expect_int(test, skode_is_text(bin_ctrl, sizeof(bin_ctrl), diag, sizeof(diag)), 0, "control characters rejected");
+  expect_int(test, strstr(diag, "control") != NULL, 1, "diag mentions control");
+
+  /* 3. skode_load_buffer rejects binary and reports error */
+  skode_t ctx = new_ctx();
+  skode_clear_error(&ctx);
+  int r = skode_load_buffer(&ctx, (const char *)zip_hdr, sizeof(zip_hdr), "bundle.zip", 0);
+  expect_int(test, r, SK_ERR_INVALID_PARAM, "skode_load_buffer returns SK_ERR_INVALID_PARAM on zip");
+  expect_int(test, skode_last_error(&ctx), SK_ERR_INVALID_PARAM, "skode context recorded last_error");
+  expect_int(test, strstr(skode_last_error_msg(&ctx), "ZIP") != NULL, 1, "error msg mentions ZIP");
+
+  /* 4. Valid script loads successfully */
+  skode_clear_error(&ctx);
+  r = skode_load_buffer(&ctx, "v0 0.5 p\n", 9, "valid.sk", 0);
+  expect_int(test, r, SK_OK, "skode_load_buffer succeeds on valid script");
+  expect_int(test, skode_last_error(&ctx), SK_OK, "last_error is SK_OK");
+
+  /* 5. ksynth_loader rejects binary */
+  skode_clear_error(&ctx);
+  r = ksynth_loader(&ctx, (const char *)zip_hdr, sizeof(zip_hdr), "bundle.zip", 0);
+  expect_int(test, r, SK_ERR_INVALID_PARAM, "ksynth_loader returns SK_ERR_INVALID_PARAM on zip");
+  expect_int(test, skode_last_error(&ctx), SK_ERR_INVALID_PARAM, "ksynth recorded last_error");
+
+  /* 6. ksynth_loader succeeds on valid ksynth text */
+  skode_clear_error(&ctx);
+  r = ksynth_loader(&ctx, "440s\n", 5, "valid.ks", 0);
+  expect_int(test, r, SK_OK, "ksynth_loader succeeds on valid ksynth text");
+  expect_int(test, skode_last_error(&ctx), SK_OK, "last_error is SK_OK");
+
+  skode_free(&ctx);
+}
+
 int main(int argc, char **argv) {
   synth_init(8);
   wave_table_init(0);
@@ -4043,6 +4107,7 @@ int main(int argc, char **argv) {
   test_voice_format_pitch_mode();
   test_voice_format_envelopes();
   test_error_system();
+  test_binary_rejection_and_text_validation();
 
   synth_free();
 
