@@ -1,5 +1,6 @@
 #include "synth.h"
 #include "synth-internal.h"
+#include "sk_dsp.h"
 
 delay_bus_t delay_bus[DELAY_BUS_COUNT];
 #include "util.h"
@@ -77,32 +78,15 @@ void delay_cache_params(skred_engine_t *engine, delay_bus_t *bus) {
 }
 
 static float delay_read_buf(const float *buf, int write, float delay_frames) {
-  if (delay_frames < 1.0f) delay_frames = 1.0f;
-  if (delay_frames > (float)(DELAY_MAX_FRAMES - 2))
-    delay_frames = (float)(DELAY_MAX_FRAMES - 2);
-
-  float read = (float)write - delay_frames;
-  while (read < 0.0f) read += (float)DELAY_MAX_FRAMES;
-  int i0 = (int)read;
-  int i1 = i0 + 1;
-  if (i1 >= DELAY_MAX_FRAMES) i1 = 0;
-  float frac = read - (float)i0;
-  return buf[i0] + frac * (buf[i1] - buf[i0]);
+  return sk_delay_read_linear(buf, DELAY_MAX_FRAMES, write, delay_frames);
 }
 
 static float delay_damping_coeff(const delay_bus_t *bus) {
-  float amount = (float)bus->damping / 15.0f;             // 0..1
-  float fc = 20000.0f * powf(500.0f / 20000.0f, amount);   // 20kHz (no damping) -> 500Hz (dark)
-  float x = expf(-2.0f * (float)M_PI * fc / (float)MAIN_SAMPLE_RATE);
-  return 1.0f - x;
+  return sk_delay_damping_coeff((float)bus->damping / 15.0f, (float)MAIN_SAMPLE_RATE);
 }
 
 static float delay_hp_coeff(const delay_bus_t *bus) {
-  float amount = (float)bus->hp / 15.0f;                   // 0..1
-  float fc = 20.0f * powf(2000.0f / 20.0f, amount);          // 20Hz (off) -> 2kHz (thin)
-  float rc = 1.0f / (2.0f * (float)M_PI * fc);
-  float dt = 1.0f / (float)MAIN_SAMPLE_RATE;
-  return rc / (rc + dt);
+  return sk_delay_hp_coeff((float)bus->hp / 15.0f, (float)MAIN_SAMPLE_RATE);
 }
 
 // One-pole lowpass followed by one-pole highpass on the feedback path.

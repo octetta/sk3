@@ -1,5 +1,6 @@
 #include "synth.h"
 #include "synth-internal.h"
+#include "sk_dsp.h"
 #include "util.h"
 #include <math.h>
 #include <string.h>
@@ -471,8 +472,7 @@ int pan_set(int voice, float f) {
   if (voice_invalid(voice) || !isfinite(f)) return SYNTH_INVALID_VOICE;
   if (f >= -1.0f && f <= 1.0f) {
     sv.pan[voice] = f;
-    sv.pan_left[voice] = (1.0f - f) / 2.0f;
-    sv.pan_right[voice] = (1.0f + f) / 2.0f;
+    sk_pan_linear(f, &sv.pan_left[voice], &sv.pan_right[voice]);
   } else {
     return 100; // <--- LAZY! needs ERR_PAN_OUT_OF_RANGE;
   }
@@ -502,16 +502,8 @@ int freq_set(int voice, float f) {
   if (glide_time > 0.0f && sv.phase_inc[voice] > 0.001f) {
     sv.glissando_target[voice] = target_inc;
     float frames = glide_time * MAIN_SAMPLE_RATE;
-    
-    if (sv.glissando_mode[voice] == 2) {
-      float p1 = 1.0f / sv.phase_inc[voice];
-      float p2 = 1.0f / target_inc;
-      sv.glissando_delta[voice] = (p2 - p1) / frames;
-    } else if (sv.glissando_mode[voice] == 1) {
-      sv.glissando_delta[voice] = (target_inc - sv.phase_inc[voice]) / frames;
-    } else {
-      sv.glissando_speed[voice] = powf(target_inc / sv.phase_inc[voice], 1.0f / frames);
-    }
+    sk_glissando_calc(sv.glissando_mode[voice], sv.phase_inc[voice], target_inc, frames,
+                      &sv.glissando_delta[voice], &sv.glissando_speed[voice]);
     sv.glissando_enable[voice] = 1;
   } else {
     // Snap immediately if no glide time or starting from silence

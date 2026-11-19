@@ -137,6 +137,79 @@ static void test_buffer_tools(void) {
     TEST_ASSERT(!isnan(wave[89]), "Crossfade seam finite");
 }
 
+static void test_decibels_and_panning(void) {
+    TEST_ASSERT(fabsf(sk_db_to_linear(0.0f) - 1.0f) < 1e-4f, "sk_db_to_linear(0) == 1");
+    TEST_ASSERT(fabsf(sk_db_to_linear(-6.0206f) - 0.5f) < 1e-3f, "sk_db_to_linear(-6) ~ 0.5");
+    TEST_ASSERT(fabsf(sk_linear_to_db(1.0f)) < 1e-4f, "sk_linear_to_db(1) == 0");
+    TEST_ASSERT(fabsf(sk_linear_to_db(0.5f) - (-6.0206f)) < 1e-3f, "sk_linear_to_db(0.5) ~ -6");
+
+    float l, r;
+    sk_pan_equal_power(-1.0f, &l, &r);
+    TEST_ASSERT(fabsf(l - 1.0f) < 1e-4f && fabsf(r) < 1e-4f, "Equal power pan full left");
+    sk_pan_equal_power(1.0f, &l, &r);
+    TEST_ASSERT(fabsf(l) < 1e-4f && fabsf(r - 1.0f) < 1e-4f, "Equal power pan full right");
+    sk_pan_equal_power(0.0f, &l, &r);
+    TEST_ASSERT(fabsf(l * l + r * r - 1.0f) < 1e-4f, "Equal power pan center sum of squares == 1");
+
+    sk_pan_linear(0.0f, &l, &r);
+    TEST_ASSERT(fabsf(l - 0.5f) < 1e-4f && fabsf(r - 0.5f) < 1e-4f, "Linear pan center");
+}
+
+static void test_retro_lfsr_noise(void) {
+    sk_lfsr_noise_t n;
+    /* Test all presets 0..6 */
+    for (int t = 0; t <= 6; t++) {
+        sk_lfsr_noise_init(&n, t);
+        for (int i = 0; i < 50; i++) {
+            float s = sk_lfsr_noise_step(&n);
+            TEST_ASSERT(s >= -1.0f && s <= 1.0f, "LFSR noise sample bounded");
+        }
+    }
+    /* Custom LFSR */
+    sk_lfsr_noise_set_custom(&n, 12, 5, 1);
+    TEST_ASSERT(n.bits == 12 && n.tap == 5 && n.dac == 1, "Custom LFSR config");
+    float cs = sk_lfsr_noise_step(&n);
+    TEST_ASSERT(cs >= -1.0f && cs <= 1.0f, "Custom LFSR step bounded");
+}
+
+static void test_companded_and_dithered_quantize(void) {
+    float q_lin = sk_quantize_bits_curve(0.35f, 4, 0, NULL);
+    TEST_ASSERT(q_lin >= 0.0f && q_lin <= 1.0f, "Linear quantize bounded");
+
+    float q_comp = sk_quantize_bits_curve(0.35f, 4, 1, NULL);
+    TEST_ASSERT(q_comp >= 0.0f && q_comp <= 1.0f, "Companded quantize bounded");
+
+    uint64_t rng = 987654321ULL;
+    float q_dith = sk_quantize_bits_curve(0.35f, 4, 2, &rng);
+    TEST_ASSERT(q_dith >= -1.0f && q_dith <= 1.0f, "Dithered quantize bounded");
+}
+
+static void test_delay_tools(void) {
+    float d0 = sk_delay_damping_coeff(0.0f, 48000.0f);
+    float d1 = sk_delay_damping_coeff(1.0f, 48000.0f);
+    TEST_ASSERT(d0 > 0.0f && d1 > 0.0f && d0 != d1, "Damping coefficients distinct");
+
+    float hp0 = sk_delay_hp_coeff(0.0f, 48000.0f);
+    float hp1 = sk_delay_hp_coeff(1.0f, 48000.0f);
+    TEST_ASSERT(hp0 > 0.0f && hp1 > 0.0f && hp0 != hp1, "HP coefficients distinct");
+
+    float ring_buf[16] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+    float s = sk_delay_read_linear(ring_buf, 16, 5, 2.5f);
+    /* write_pos 5, delay 2.5 => read 2.5 => lerp(buf[2], buf[3], 0.5) = 2.5 */
+    TEST_ASSERT(fabsf(s - 2.5f) < 1e-4f, "sk_delay_read_linear fractional read");
+}
+
+static void test_glissando_tools(void) {
+    float delta, speed;
+    sk_glissando_calc(1, 0.01f, 0.02f, 10.0f, &delta, &speed);
+    TEST_ASSERT(fabsf(delta - 0.001f) < 1e-5f, "glissando linear delta");
+
+    float cur = 0.01f;
+    int active = sk_glissando_step(&cur, 0.02f, 1, delta, speed);
+    TEST_ASSERT(active == 1, "glissando step active");
+    TEST_ASSERT(cur > 0.01f, "glissando incremented");
+}
+
 int main(void) {
     printf("Running sk_dsp math test suite...\n");
     test_clamping_and_safety();
@@ -147,6 +220,11 @@ int main(void) {
     test_waveshapers_and_cz();
     test_fft();
     test_buffer_tools();
+    test_decibels_and_panning();
+    test_retro_lfsr_noise();
+    test_companded_and_dithered_quantize();
+    test_delay_tools();
+    test_glissando_tools();
     printf("All %d sk_dsp checks passed successfully!\n", g_pass);
     return 0;
 }

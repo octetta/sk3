@@ -19,13 +19,14 @@
 
 #include "portable_atomic.h"
 #include "control-events.h"
+#include "sk_dsp.h"
 
 #define SAMPLE_COUNT_PUT(n) atomic_store_uint64(&synth_sample_count, n)
 #define SAMPLE_COUNT_GET() atomic_load_uint64(&synth_sample_count)
 #define SAMPLE_COUNT_ADD(n) atomic_fetch_add_uint64(&synth_sample_count, n)
 
 #define VOLUME_DEFAULT (-6.0f)
-#define DB_TO_LINEAR(v) powf(10.f, (v) / 20.0f)
+#define DB_TO_LINEAR(v) sk_db_to_linear(v)
 #define SYNTH_INVALID_VOICE (100)
 
 static int verbose = 0;
@@ -355,32 +356,10 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
         continue;
       }  
       if (sv.glissando_enable[n]) {
-        if (sv.glissando_mode[n] == 2) {
-            float p = (1.0f / sv.phase_inc[n]) + sv.glissando_delta[n];
-            sv.phase_inc[n] = 1.0f / p;
-            if ((sv.glissando_delta[n] > 0.0f && sv.phase_inc[n] <= sv.glissando_target[n]) ||
-                (sv.glissando_delta[n] < 0.0f && sv.phase_inc[n] >= sv.glissando_target[n])) {
-                sv.phase_inc[n] = sv.glissando_target[n];
-                sv.glissando_enable[n] = 0;
-            }
-        } else if (sv.glissando_mode[n] == 1) {
-            sv.phase_inc[n] += sv.glissando_delta[n];
-            if ((sv.glissando_delta[n] > 0.0f && sv.phase_inc[n] >= sv.glissando_target[n]) ||
-                (sv.glissando_delta[n] < 0.0f && sv.phase_inc[n] <= sv.glissando_target[n])) {
-                sv.phase_inc[n] = sv.glissando_target[n];
-                sv.glissando_enable[n] = 0;
-            }
-        } else {
-            if (sv.glissando_speed[n] == 1.0f) {
-              sv.glissando_enable[n] = 0;
-            } else {
-              sv.phase_inc[n] *= sv.glissando_speed[n];
-              if ((sv.glissando_speed[n] > 1.0f && sv.phase_inc[n] >= sv.glissando_target[n]) ||
-                  (sv.glissando_speed[n] < 1.0f && sv.phase_inc[n] <= sv.glissando_target[n])) {
-                sv.phase_inc[n] = sv.glissando_target[n];
-                sv.glissando_enable[n] = 0;
-              }
-            }
+        if (!sk_glissando_step(&sv.phase_inc[n], sv.glissando_target[n],
+                               sv.glissando_mode[n], sv.glissando_delta[n],
+                               sv.glissando_speed[n])) {
+          sv.glissando_enable[n] = 0;
         }
         osc_update_wavetable_mip(n);
       }

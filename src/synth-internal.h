@@ -3,6 +3,7 @@
 
 #include "synth.h"
 #include "synth-state.h"
+#include "sk_dsp.h"
 #include "util.h"
 #include <math.h>
 #include <limits.h>
@@ -72,7 +73,7 @@ int osc_loop_crossings(double distance, double loop_length);
 int clampi(int value, int min_value, int max_value);
 
 #define VOLUME_DEFAULT (-6.0f)
-#define DB_TO_LINEAR(v) powf(10.f, (v) / 20.0f)
+#define DB_TO_LINEAR(v) sk_db_to_linear(v)
 #define SYNTH_INVALID_VOICE (100)
 #define SMOOTH_DEFAULT (0.02f)
 #define FILTER_UC (16)

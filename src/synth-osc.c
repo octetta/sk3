@@ -698,194 +698,47 @@ void osc_trigger(skred_engine_t *engine, int voice) {
 }
 
 float quantize_bits_curve(float v, int bits, int curve, uint64_t *rng) {
-  int levels = (1 << bits) - 1;
-  if (levels < 1) levels = 1;
-
-  if (curve == 1) {
-    // Cheap rational compander — no log/exp. Boosts low-level detail
-    // before quantizing, un-boosts after: turns the linear staircase
-    // into something closer to tape/cassette grit at the same bit depth.
-    const float k = 4.0f;
-    float sign = v < 0.0f ? -1.0f : 1.0f;
-    float av = fabsf(v);
-    if (av > 1.0f) av = 1.0f; // Prevent compander wrap-around and div by zero
-    float companded = av * (1.0f + k) / (1.0f + k * av);
-    int iv = (int)roundf(companded * (float)levels);
-    float q = (float)iv * (1.0f / (float)levels);
-    float expanded = q / (1.0f + k * (1.0f - q));
-    return sign * expanded;
-  }
-
-  if (curve == 2) {
-    // Triangular dither before rounding — quantization distortion
-    // becomes broadband noise instead of a tonal buzz.
-    float t1 = audio_rng_float(rng);
-    float t2 = audio_rng_float(rng);
-    float dither = (t1 - t2) * (0.5f / (float)levels);
-    int iv = (int)roundf((v + dither) * (float)levels);
-    return (float)iv * (1.0f / (float)levels);
-  }
-
-  // curve 0 — same math as before, just correctly rounded (was
-  // truncating-toward-zero on negative samples: (int)(x+0.5) only
-  // rounds correctly for x >= 0).
-  int iv = (int)roundf(v * (float)levels);
-  return (float)iv * (1.0f / (float)levels);
+  return sk_quantize_bits_curve(v, bits, curve, rng);
 }
-
-static const uint8_t s_max_lfsr_taps[32] = {
-    0,  0,  1,  1,  1,  2,  1,  1,  2,  4,
-    3,  2,  1,  1,  1,  1,  4,  3,  7,  1,
-    3,  2,  1,  5,  1,  3,  1,  2,  3,  2,
-    1,  3
-};
 
 int osc_noise_set_type(int voice, int type) {
     if (voice_invalid(voice) || type < 0 || type > 7) return -1;
     sv.noise_type[voice] = type;
-    switch (type) {
-        case 0: /* SID 23-bit */
-            sv.noise_bits[voice] = 23;
-            sv.noise_tap[voice] = 17;
-            sv.noise_dac[voice] = 1;
-            break;
-        case 1: /* POKEY 4-bit */
-            sv.noise_bits[voice] = 4;
-            sv.noise_tap[voice] = 2;
-            sv.noise_dac[voice] = 0;
-            break;
-        case 2: /* POKEY 5-bit */
-            sv.noise_bits[voice] = 5;
-            sv.noise_tap[voice] = 2;
-            sv.noise_dac[voice] = 0;
-            break;
-        case 3: /* POKEY 9-bit */
-            sv.noise_bits[voice] = 9;
-            sv.noise_tap[voice] = 4;
-            sv.noise_dac[voice] = 0;
-            break;
-        case 4: /* POKEY 17-bit */
-            sv.noise_bits[voice] = 17;
-            sv.noise_tap[voice] = 4;
-            sv.noise_dac[voice] = 0;
-            break;
-        case 5: /* NES 15-bit */
-            sv.noise_bits[voice] = 15;
-            sv.noise_tap[voice] = 1;
-            sv.noise_dac[voice] = 0;
-            break;
-        case 6: /* NES 7-bit */
-            sv.noise_bits[voice] = 15;
-            sv.noise_tap[voice] = 6;
-            sv.noise_dac[voice] = 0;
-            break;
-        case 7: /* Custom */
-            break;
-    }
+    sk_lfsr_noise_t n;
+    sk_lfsr_noise_init(&n, type);
+    sv.noise_bits[voice] = n.bits;
+    sv.noise_tap[voice] = n.tap;
+    sv.noise_dac[voice] = n.dac;
     if (sv.noise_lfsr[voice] == 0) {
-        sv.noise_lfsr[voice] = (type == 0) ? 0x7FFFFF : 1;
+        sv.noise_lfsr[voice] = (int)n.lfsr;
     }
     return 0;
 }
 
 int osc_noise_set_custom(int voice, int bits, int tap, int dac) {
     if (voice_invalid(voice)) return -1;
-    if (bits < 2) bits = 2;
-    if (bits > 31) bits = 31;
-    if (tap < 1 || tap >= bits) {
-        tap = s_max_lfsr_taps[bits];
-    }
-    sv.noise_type[voice] = 7;
-    sv.noise_bits[voice] = bits;
-    sv.noise_tap[voice] = tap;
-    sv.noise_dac[voice] = (dac != 0) ? 1 : 0;
+    sk_lfsr_noise_t n;
+    n.lfsr = (uint32_t)sv.noise_lfsr[voice];
+    sk_lfsr_noise_set_custom(&n, bits, tap, dac);
+    sv.noise_type[voice] = n.type;
+    sv.noise_bits[voice] = n.bits;
+    sv.noise_tap[voice] = n.tap;
+    sv.noise_dac[voice] = n.dac;
     if (sv.noise_lfsr[voice] == 0) {
-        sv.noise_lfsr[voice] = 1;
+        sv.noise_lfsr[voice] = (int)n.lfsr;
     }
     return 0;
 }
 
 void osc_noise_step(int voice) {
-    uint32_t lfsr = (uint32_t)sv.noise_lfsr[voice];
-    int mode = sv.noise_type[voice];
+    sk_lfsr_noise_t n;
+    n.lfsr = (uint32_t)sv.noise_lfsr[voice];
+    n.type = sv.noise_type[voice];
+    n.bits = sv.noise_bits[voice];
+    n.tap = sv.noise_tap[voice];
+    n.dac = sv.noise_dac[voice];
 
-    if (lfsr == 0) {
-        lfsr = (mode == 0) ? 0x7FFFFF : 1;
-    }
-
-    switch (mode) {
-        case 0: { /* MOS 6581/8580 SID 23-bit */
-            uint32_t feedback = ((lfsr >> 22) ^ (lfsr >> 17)) & 1;
-            lfsr = ((lfsr << 1) | feedback) & 0x7FFFFF;
-            uint8_t dac = (uint8_t)(
-                (((lfsr >> 22) & 1) << 7) |
-                (((lfsr >> 20) & 1) << 6) |
-                (((lfsr >> 16) & 1) << 5) |
-                (((lfsr >> 13) & 1) << 4) |
-                (((lfsr >> 11) & 1) << 3) |
-                (((lfsr >>  7) & 1) << 2) |
-                (((lfsr >>  4) & 1) << 1) |
-                (((lfsr >>  2) & 1) << 0)
-            );
-            sv.noise_sample[voice] = (float)dac * 0.00784313725f - 1.0f;
-            break;
-        }
-        case 1: { /* POKEY 4-bit (15-step) */
-            uint32_t feedback = ((lfsr >> 3) ^ (lfsr >> 2)) & 1;
-            lfsr = ((lfsr << 1) | feedback) & 0x0F;
-            sv.noise_sample[voice] = (lfsr & 1) ? 1.0f : -1.0f;
-            break;
-        }
-        case 2: { /* POKEY 5-bit (31-step) */
-            uint32_t feedback = ((lfsr >> 4) ^ (lfsr >> 2)) & 1;
-            lfsr = ((lfsr << 1) | feedback) & 0x1F;
-            sv.noise_sample[voice] = (lfsr & 1) ? 1.0f : -1.0f;
-            break;
-        }
-        case 3: { /* POKEY 9-bit (511-step) */
-            uint32_t feedback = ((lfsr >> 8) ^ (lfsr >> 4)) & 1;
-            lfsr = ((lfsr << 1) | feedback) & 0x1FF;
-            sv.noise_sample[voice] = (lfsr & 1) ? 1.0f : -1.0f;
-            break;
-        }
-        case 4: { /* POKEY 17-bit (131071-step) */
-            uint32_t feedback = ((lfsr >> 16) ^ (lfsr >> 4)) & 1;
-            lfsr = ((lfsr << 1) | feedback) & 0x1FFFF;
-            sv.noise_sample[voice] = (lfsr & 1) ? 1.0f : -1.0f;
-            break;
-        }
-        case 5: { /* NES 15-bit long */
-            uint32_t feedback = (lfsr ^ (lfsr >> 1)) & 1;
-            lfsr = ((lfsr >> 1) | (feedback << 14)) & 0x7FFF;
-            sv.noise_sample[voice] = (lfsr & 1) ? 1.0f : -1.0f;
-            break;
-        }
-        case 6: { /* NES 7-bit metallic loop */
-            uint32_t feedback = (lfsr ^ (lfsr >> 6)) & 1;
-            lfsr = ((lfsr >> 1) | (feedback << 14)) & 0x7FFF;
-            sv.noise_sample[voice] = (lfsr & 1) ? 1.0f : -1.0f;
-            break;
-        }
-        case 7: /* Custom */
-        default: {
-            int bits = sv.noise_bits[voice];
-            if (bits < 2) bits = 2;
-            else if (bits > 31) bits = 31;
-            int tap = sv.noise_tap[voice];
-            if (tap < 1 || tap >= bits) tap = s_max_lfsr_taps[bits];
-            uint32_t mask = (bits >= 31) ? 0x7FFFFFFF : ((1U << bits) - 1);
-            uint32_t feedback = ((lfsr >> (bits - 1)) ^ (lfsr >> tap)) & 1;
-            lfsr = ((lfsr << 1) | feedback) & mask;
-            if (sv.noise_dac[voice] == 1) {
-                uint8_t dac = (uint8_t)(lfsr & 0xFF);
-                sv.noise_sample[voice] = (float)dac * 0.00784313725f - 1.0f;
-            } else {
-                sv.noise_sample[voice] = (lfsr & 1) ? 1.0f : -1.0f;
-            }
-            break;
-        }
-    }
-
-    sv.noise_lfsr[voice] = (int)lfsr;
+    sv.noise_sample[voice] = sk_lfsr_noise_step(&n);
+    sv.noise_lfsr[voice] = (int)n.lfsr;
 }
 
