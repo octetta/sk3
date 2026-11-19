@@ -428,6 +428,7 @@ int skode_exec_qtime(skode_t *ctx, ands_t *s, const double *arg, int argc);
 int skode_exec_qvoice(skode_t *ctx, ands_t *s, const double *arg, int argc);
 int skode_exec_qpattern(skode_t *ctx, ands_t *s, const double *arg, int argc);
 int skode_exec_qstep(skode_t *ctx, ands_t *s, const double *arg, int argc);
+int skode_exec_qerr(skode_t *ctx, ands_t *s, const double *arg, int argc);
 
 /* DSP execution handlers */
 int skode_exec_ds(skode_t *ctx, ands_t *s, const double *arg, int argc);

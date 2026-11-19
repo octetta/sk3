@@ -1,4 +1,5 @@
 #include "skode-internal.h"
+#include "sk_error.h"
 
 
 #include "miniaudio.h"
@@ -447,7 +448,7 @@ int rec_load(skode_t *ctx, int wave_slot, int one_shot, int channel, int verbose
   int data_len = sampling.len - sampling.offset - sampling.trim;
   if (data_len <= 0) {
     ctx->printf(ctx, "# no data len\n");
-    return 100;
+    return SK_ERR_INVALID_PARAM;
   }
   if (channel < -1 || channel >= channels) {
     ctx->printf(ctx, "# recording channel must be -1..%d\n", channels - 1);
@@ -491,7 +492,7 @@ int rec_load(skode_t *ctx, int wave_slot, int one_shot, int channel, int verbose
 }
 
 int data_load(skode_t *ctx, int wave_slot, int one_shot, float rate, float offset) {
-  if (ctx == NULL) return 100; // fix todo
+  if (ctx == NULL) return SK_ERR_INVALID_PARAM;
   if (0) ctx->printf(ctx, "# data_load(ctx, %d, %d, %g, %g)\n", wave_slot, one_shot, rate, offset);
   if (!skode_wave_valid(wave_slot)) {
     ctx->printf(ctx, "# invalid slot %d\n", wave_slot);
@@ -501,11 +502,11 @@ int data_load(skode_t *ctx, int wave_slot, int one_shot, float rate, float offse
   int data_len = ands_data_len(ctx->parse);
   if (data == NULL) {
     ctx->printf(ctx, "# no data\n");
-    return 100; // fix todo
+    return SK_ERR_NOT_FOUND;
   }
   if (data_len <= 0) {
     ctx->printf(ctx, "# no data len\n");
-    return 100;
+    return SK_ERR_INVALID_PARAM;
   }
   if (sw.readonly[wave_slot] == 1) {
     ctx->printf(ctx, "# cannot write to w%d r/o\n", wave_slot);
@@ -555,7 +556,7 @@ static void wave_load_apply_smpl_loop(skode_t *ctx, const char *name,
 
 int wave_load_string(skode_t *ctx, char *name, int wave_index, int ch, int normalize) {
   (void)normalize;
-  if (ctx == NULL) return 100; // fix todo
+  if (ctx == NULL) return SK_ERR_INVALID_PARAM;
   if (!skode_wave_valid(wave_index)) {
     ctx->printf(ctx, "# invalid slot %d\n", wave_index);
     return -1;
@@ -625,7 +626,7 @@ int wave_try_open_number(int file_num, char *name, int len) {
 
 int wave_load(skode_t *ctx, int file_num, int wave_index, int ch, int normalize) {
   (void)normalize;
-  if (ctx == NULL) return 100; // fix todo
+  if (ctx == NULL) return SK_ERR_INVALID_PARAM;
   if (!skode_wave_valid(wave_index)) {
     ctx->printf(ctx, "# invalid slot %d\n", wave_index);
     return -1;

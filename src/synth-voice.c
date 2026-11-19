@@ -474,7 +474,7 @@ int pan_set(int voice, float f) {
     sv.pan[voice] = f;
     sk_pan_linear(f, &sv.pan_left[voice], &sv.pan_right[voice]);
   } else {
-    return 100; // <--- LAZY! needs ERR_PAN_OUT_OF_RANGE;
+    return SK_ERR_OUT_OF_RANGE;
   }
   return 0;
 }
@@ -490,7 +490,7 @@ int wave_quant(int voice, int n) {
 
 int freq_set(int voice, float f) {
   if (voice_invalid(voice) || !isfinite(f)) return SYNTH_INVALID_VOICE;
-  if (f < 0 || f >= (double)MAIN_SAMPLE_RATE) return 101;
+  if (f < 0 || f >= (double)MAIN_SAMPLE_RATE) return SK_ERR_OUT_OF_RANGE;
   sv.pitch_mode[voice] = PITCH_MODE_FREQ;
 
   float target_inc = osc_get_phase_inc(&skred_global_engine, voice, f);
@@ -551,7 +551,7 @@ int wave_set(int voice, int wave) {
   if (voice_invalid(voice)) return SYNTH_INVALID_VOICE;
   if (!wave_invalid(wave)) {
     osc_set_wave_table_index(&skred_global_engine, voice, wave);
-  } else return 100; // <-- more LAZY!!! ERR_INVALID_WAVE;
+  } else return SK_ERR_INVALID_WAVE;
   return 0;
 }
 
@@ -920,7 +920,7 @@ int freq_midi(int voice, float note, float cents) {
     sv.pitch_mode[voice] = PITCH_MODE_NOTE;
     return rc;
   }
-  return 100; // <-- LAZY  ERR_INVALID_MIDI_NOTE;
+  return SK_ERR_OUT_OF_RANGE;
 }
 
 int envelope_velocity(int voice, float f);

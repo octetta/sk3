@@ -3923,6 +3923,47 @@ static void test_voice_format_envelopes(void) {
   expect_int(test, sv.use_freq_envelope[0], 0, "flat pitch env disabled");
 }
 
+static void test_error_system(void) {
+  const char *test = "error system and reporting";
+  skode_t ctx = new_ctx();
+
+  /* 1. sk_strerror string values */
+  expect_int(test, strcmp(sk_strerror(SK_OK), "Success"), 0, "sk_strerror(SK_OK)");
+  expect_int(test, strcmp(sk_strerror(SK_ERR_INVALID_VOICE), "Invalid voice index"), 0, "sk_strerror(INVALID_VOICE)");
+  expect_int(test, strcmp(sk_strerror(SK_ERR_OUT_OF_RANGE), "Parameter out of range"), 0, "sk_strerror(OUT_OF_RANGE)");
+  expect_int(test, strcmp(sk_strerror(SK_ERR_INVALID_WAVE), "Invalid or unallocated wavetable"), 0, "sk_strerror(INVALID_WAVE)");
+
+  /* 2. Direct API call bounds check: pan_set */
+  expect_int(test, pan_set(-1, 0.0f), SK_ERR_INVALID_VOICE, "pan_set negative voice");
+  expect_int(test, pan_set(0, 2.5f), SK_ERR_OUT_OF_RANGE, "pan_set out of range");
+  expect_int(test, pan_set(0, 0.5f), SK_OK, "pan_set valid");
+
+  /* 3. Direct API call bounds check: wave_set */
+  expect_int(test, wave_set(0, 9999), SK_ERR_INVALID_WAVE, "wave_set out of range");
+
+  /* 4. Skode command error recording and ?e query */
+  skode_clear_error(&ctx);
+  expect_int(test, skode_last_error(&ctx), SK_OK, "initial error is SK_OK");
+
+  /* Running pan out of range in skode */
+  consume(test, &ctx, "v0 p2.5");
+  expect_int(test, skode_last_error(&ctx), SK_ERR_OUT_OF_RANGE, "skode sets SK_ERR_OUT_OF_RANGE on p2.5");
+  if (strlen(skode_last_error_msg(&ctx)) == 0) {
+    fail(test, "expected non-empty last_error_msg");
+  }
+
+  /* Query error code via ?e */
+  consume(test, &ctx, "?e");
+  expect_float(test, (float)ands_return_get(ctx.parse, 0), (float)SK_ERR_OUT_OF_RANGE, 0.01f, "?e return reg has SK_ERR_OUT_OF_RANGE");
+
+  /* Valid command resets or clears */
+  skode_clear_error(&ctx);
+  consume(test, &ctx, "v0 p0 ?e");
+  expect_float(test, (float)ands_return_get(ctx.parse, 0), 0.0f, 0.01f, "?e after clear and success is 0");
+
+  skode_free(&ctx);
+}
+
 int main(int argc, char **argv) {
   synth_init(8);
   wave_table_init(0);
@@ -4001,6 +4042,7 @@ int main(int argc, char **argv) {
   test_voice_format_links();
   test_voice_format_pitch_mode();
   test_voice_format_envelopes();
+  test_error_system();
 
   synth_free();
 

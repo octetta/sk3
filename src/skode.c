@@ -2465,10 +2465,24 @@ int skode_function(ands_t *s, int info) {
     }\
   }
   int dict_result;
-  if (skode_execute_word(ctx, s, atom, arg, argc, &dict_result))
+  if (skode_execute_word(ctx, s, atom, arg, argc, &dict_result)) {
+    if (dict_result < 0) {
+      if (ctx->last_error == SK_OK) {
+        skode_set_error(ctx, dict_result, "%s failed: %s",
+                        name && name[0] ? name : ands_atom_string(s),
+                        sk_strerror(dict_result));
+      }
+      if (ctx->trace || ctx->verbose) {
+        ctx->printf(ctx, "# ERROR %s: %s\n",
+                    name && name[0] ? name : ands_atom_string(s),
+                    skode_last_error_msg(ctx));
+      }
+    }
     return dict_result;
+  }
+  skode_set_error(ctx, SK_ERR_NOT_FOUND, "Unknown function %s", name && name[0] ? name : "?");
   ctx->printf(ctx, "# SKODE_UNKNOWN_FUNCTION %s\n", name && name[0] ? name : "?");
-  return -1;
+  return SK_ERR_NOT_FOUND;
 }
 
 int skode_defer(ands_t *s, int info) {
@@ -2717,6 +2731,35 @@ int audio_show(skode_t *ctx) {
   return 0;
 }
 
+int skode_set_error(skode_t *ctx, int err, const char *fmt, ...) {
+  if (!ctx) return err;
+  ctx->last_error = err;
+  if (fmt) {
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(ctx->last_error_msg, sizeof(ctx->last_error_msg), fmt, ap);
+    va_end(ap);
+  } else {
+    snprintf(ctx->last_error_msg, sizeof(ctx->last_error_msg), "%s", sk_strerror(err));
+  }
+  return err;
+}
+
+int skode_last_error(const skode_t *ctx) {
+  return ctx ? ctx->last_error : SK_OK;
+}
+
+const char *skode_last_error_msg(const skode_t *ctx) {
+  if (!ctx) return "No context";
+  return ctx->last_error_msg[0] ? ctx->last_error_msg : sk_strerror(ctx->last_error);
+}
+
+void skode_clear_error(skode_t *ctx) {
+  if (!ctx) return;
+  ctx->last_error = SK_OK;
+  ctx->last_error_msg[0] = '\0';
+}
+
 void skode_init(skode_t *ctx) {
   skode_global_init();
   skode_dict_init();
@@ -2747,6 +2790,8 @@ void skode_init(skode_t *ctx) {
   ctx->which = 0;
   ctx->ip = 0;
   ctx->port = 0;
+  ctx->last_error = SK_OK;
+  ctx->last_error_msg[0] = '\0';
 }
 
 void skode_free(skode_t *ctx) {

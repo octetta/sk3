@@ -9,6 +9,7 @@
 
 #include <dirent.h>
 #include <sys/types.h>
+#include "sk_error.h"
 
 #define VOICE_STACK_LEN (8)
 
@@ -180,7 +181,14 @@ typedef struct skode_s {
   int which;
   uint32_t ip;
   uint16_t port;
+  int last_error;
+  char last_error_msg[128];
 } skode_t;
+
+int skode_set_error(skode_t *ctx, int err, const char *fmt, ...);
+int skode_last_error(const skode_t *ctx);
+const char *skode_last_error_msg(const skode_t *ctx);
+void skode_clear_error(skode_t *ctx);
 
 int skode_consume(char *line, skode_t *w);
 int skode_execute_event(const event_t *event, skode_t *ctx);
@@ -247,6 +255,8 @@ int null_printf(const char *fmt, ...);
   .log_max = SKODE_LOG_MAX, \
   .ks = NULL, \
   .ks_result = NULL, \
+  .last_error = SK_OK, \
+  .last_error_msg = {0}, \
 }
 
 int skode_double_to_int(double value, int *out);

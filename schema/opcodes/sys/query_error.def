@@ -1,0 +1,28 @@
+@name     query_error
+@alias    ?e
+@group    sys
+@c_name   skode_clause_query_error_0
+@type     immediate
+@arity    0
+@match    ()
+@summary  query last execution error code
+@doc
+Pushes the last execution error code (0 for success, negative for error) to return register.
+Usage: ?e
+@code
+    return skode_exec_qerr(ctx, s, args, argc);
+@end
+
+@name     query_error
+@alias    ?e
+@group    sys
+@c_name   skode_clause_query_error_1
+@type     immediate
+@arity    1
+@match    (any)
+@summary  query last execution error code with argument
+@doc
+Pushes the last execution error code to return register.
+@code
+    return skode_exec_qerr(ctx, s, args, argc);
+@end

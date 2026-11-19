@@ -9,10 +9,10 @@ Generated automatically by `tools/mkopcodes` from modular opcode definitions in 
 
 ## Architecture & System Overview
 
-- **Total Command Words**: 303
-- **Total Dispatch Clauses**: 611
+- **Total Command Words**: 304
+- **Total Dispatch Clauses**: 613
 - **Real-Time Audio Opcode Handlers**: 156 (audio-thread safe, zero allocation, zero string lookup)
-- **Immediate / Control Plane Clauses**: 455 (REPL / parser / file system / diagnostics)
+- **Immediate / Control Plane Clauses**: 457 (REPL / parser / file system / diagnostics)
 
 ### Functional Command Groups
 
@@ -37,7 +37,7 @@ Generated automatically by `tools/mkopcodes` from modular opcode definitions in 
 | macro | `macro` | 7 | User macro definition, storage, and execution |
 | data | `data` | 23 | Variables, Forth stack words, data arrays, string slots |
 | vfs | `vfs` | 10 | Virtual file system, ZIP archives, script loading |
-| sys | `sys` | 31 | Hardware audio I/O, engine lifecycle, system diagnostics |
+| sys | `sys` | 32 | Hardware audio I/O, engine lifecycle, system diagnostics |
 
 ---
 
@@ -274,7 +274,7 @@ Triggers voice gate on.
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `277` (`skode_clause_inst_note_c570`)
+- **Discrete Opcode ID**: `277` (`skode_clause_inst_note_c572`)
 - **Summary**: trigger instrument note
 
 **Description & Details**:
@@ -288,7 +288,7 @@ Usage: i note
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `278` (`skode_clause_inst_note_c571`)
+- **Discrete Opcode ID**: `278` (`skode_clause_inst_note_c573`)
 - **Summary**: trigger instrument note with velocity
 
 **Description & Details**:
@@ -302,7 +302,7 @@ Usage: i note velocity
 
 - **Arity**: `3`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `279` (`skode_clause_inst_note_c572`)
+- **Discrete Opcode ID**: `279` (`skode_clause_inst_note_c574`)
 - **Summary**: trigger instrument note with velocity and cents
 
 **Description & Details**:
@@ -9768,6 +9768,7 @@ Unmounts active VFS bundle.
 | [`map_exec`](#map_exec) | `map!` | 3 | 1..3 | Immediate | map iteration over range 0..count-1 |
 | [`opcode_exec`](#opcode_exec) | `EXEC` | 5 | 1..5 | Immediate | numeric opcode escape |
 | [`performance_reset`](#performance_reset) | `/th!` | 2 | 0..1 | Immediate | reset performance counters |
+| [`query_error`](#query_error) | `?e` | 2 | 0..1 | Immediate | query last execution error code |
 | [`query_pattern`](#query_pattern) | `?p` | 2 | 0..1 | Immediate | query active pattern index |
 | [`query_step`](#query_step) | `?st` | 2 | 0..1 | Immediate | query active step index |
 | [`query_time`](#query_time) | `?t` | 2 | 0..1 | Immediate | query current sample time |
@@ -10289,6 +10290,39 @@ Usage: /th!
 
 ```text
 Resets performance monitor counters.
+```
+
+---
+
+### `query_error`
+
+- **Alias**: `?e`
+- **Group**: `sys`
+- **Clause Count**: 2
+
+#### Clause 1: `query_error()`
+
+- **Arity**: `0`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: query last execution error code
+
+**Description & Details**:
+
+```text
+Pushes the last execution error code (0 for success, negative for error) to return register.
+Usage: ?e
+```
+
+#### Clause 2: `query_error(any)`
+
+- **Arity**: `1`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: query last execution error code with argument
+
+**Description & Details**:
+
+```text
+Pushes the last execution error code to return register.
 ```
 
 ---

@@ -4,6 +4,7 @@
 #include "synth-config.h"
 #include "synth-state.h"
 #include "portable_atomic.h"
+#include "sk_error.h"
 
 #define SAMPLE_COUNT_PUT(n) atomic_store_uint64(&synth_sample_count, n)
 #define SAMPLE_COUNT_GET() atomic_load_uint64(&synth_sample_count)

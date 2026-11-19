@@ -573,6 +573,13 @@ int skode_exec_qstep(skode_t *ctx, ands_t *s, const double *arg, int argc) {
   return 0;
 }
 
+int skode_exec_qerr(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  (void)arg; (void)argc;
+  int err = ctx ? ctx->last_error : 0;
+  ands_return_push(s, (double)err);
+  return 0;
+}
+
 void skode_register_words_system(skode_vocab_t *vocab) {
   (void)vocab;
 }

@@ -253,6 +253,9 @@ int skode_execute_word(skode_t *ctx, ands_t *s, uint32_t atom, double *arg,
       ctx->puts(ctx, "");
     }
     int r = w->execute(w, ctx, s, arg, argc);
+    if (r < 0) {
+      skode_set_error(ctx, r, "%s: %s", w->name, sk_strerror(r));
+    }
     if (out_result) *out_result = r;
     return 1;
   }
@@ -269,14 +272,14 @@ int skode_execute_word(skode_t *ctx, ands_t *s, uint32_t atom, double *arg,
   }
   if (strcmp(name, "EXEC") == 0) {
     if (argc == 0) {
-      if (out_result) *out_result = -1;
+      if (out_result) *out_result = skode_set_error(ctx, SK_ERR_INVALID_PARAM, "EXEC requires opcode argument");
       return 1;
     }
     int opcode_num = (int)arg[0];
     if (opcode_num < 0 || opcode_num > 255 ||
         !skode_opcode_is_realtime((skode_opcode_t)opcode_num) ||
         !skode_opcode_supported((skode_opcode_t)opcode_num)) {
-      if (out_result) *out_result = -1;
+      if (out_result) *out_result = skode_set_error(ctx, SK_ERR_UNSUPPORTED, "Unsupported opcode %d", opcode_num);
       return 1;
     }
     int inner_argc = argc - 1;
@@ -286,6 +289,9 @@ int skode_execute_word(skode_t *ctx, ands_t *s, uint32_t atom, double *arg,
     op.argc = (uint8_t)inner_argc;
     for (int i = 0; i < inner_argc && i < SEQ_OPCODE_ARG_MAX; i++) op.arg[i] = (float)arg[i+1];
     int r = skode_execute_voice_opcode(&op, ctx ? ctx->voice : 0);
+    if (r < 0) {
+      skode_set_error(ctx, r, "EXEC opcode %d: %s", opcode_num, sk_strerror(r));
+    }
     if (out_result) *out_result = r;
     return 1;
   }
@@ -306,6 +312,9 @@ int skode_execute_word(skode_t *ctx, ands_t *s, uint32_t atom, double *arg,
       }
       if (c->imm_handler) {
         int r = c->imm_handler(ctx, s, arg, argc);
+        if (r < 0) {
+          skode_set_error(ctx, r, "%s: %s", gw->name, sk_strerror(r));
+        }
         if (out_result) *out_result = r;
         return 1;
       } else if (c->opcode_id != 0) {
@@ -317,6 +326,9 @@ int skode_execute_word(skode_t *ctx, ands_t *s, uint32_t atom, double *arg,
           op.arg[i] = (float)arg[i];
         }
         int r = skode_execute_voice_opcode(&op, ctx ? ctx->voice : 0);
+        if (r < 0) {
+          skode_set_error(ctx, r, "%s: %s", gw->name, sk_strerror(r));
+        }
         if (out_result) *out_result = r;
         return 1;
       }
@@ -324,7 +336,7 @@ int skode_execute_word(skode_t *ctx, ands_t *s, uint32_t atom, double *arg,
       char reason[128];
       skode_clause_explain_mismatch(gw, argc, arg, reason, sizeof(reason));
       if (ctx) ctx->printf(ctx, "# SKODE_NO_MATCHING_CLAUSE %s (argc=%d: %s)\n", name, argc, reason);
-      if (out_result) *out_result = -1;
+      if (out_result) *out_result = skode_set_error(ctx, SK_ERR_PARSE, "No matching clause for %s: %s", name, reason);
       return 1;
     }
   }

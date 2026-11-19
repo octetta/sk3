@@ -27,7 +27,7 @@
 
 #define VOLUME_DEFAULT (-6.0f)
 #define DB_TO_LINEAR(v) sk_db_to_linear(v)
-#define SYNTH_INVALID_VOICE (100)
+#define SYNTH_INVALID_VOICE SK_ERR_INVALID_VOICE
 
 static int verbose = 0;
 
