@@ -1,6 +1,5 @@
-/ 808 Maracas — 4kHz dominant, 30ms burst
-/ N=3528
-N: 3528
+/ 808 Maracas — 4kHz dominant, 80ms
+N: ms 80
 T: !N
 X: T*e(T*(0-20%N))
 E: w X

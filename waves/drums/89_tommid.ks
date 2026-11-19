@@ -1,11 +1,11 @@
 / Mid Tom
-/ 600ms at (p 0) = 26460 samples
+/ 600ms duration
 
-N: 26460
+N: ms 600
 T: !N
 E: e(T*(0-6.9%N))
 F: 110+90*e(T*(0-120%N))
-D: F*((p 2)%(p 0))
+D: hz F
 P: +\D
 S: (s P)
 Q: e(T*(0-220%N))

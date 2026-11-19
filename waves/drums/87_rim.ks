@@ -1,11 +1,10 @@
 / 808 Rimshot — 1800Hz dominant, dead in 20ms
-/ N=2646 (60ms)
-N: 2646
+N: ms 60
 T: !N
 / very fast overall decay
 E: e(T*(0-6.9%N))
 / 1800Hz tone — the dominant frequency
-F: 1800*((p 2)%(p 0))
+F: hz 1800
 P: +\(N#F)
 S: (s P)
 / broadband noise crack

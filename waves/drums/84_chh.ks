@@ -1,6 +1,5 @@
 / 808 Closed Hi-Hat — very bright, 200ms
-/ N=8820
-N: 8820
+N: ms 200
 T: !N
 E: e(T*(0-6.9%N))
 / m verb = 1-bit noise: bright and metallic

@@ -1,11 +1,10 @@
 / 808 Kick — 141->50Hz sweep, 300ms
-/ N=13230
-N: 13230
+N: ms 300
 T: !N
 E: e(T*(0-6.9%N))
 / pitch sweep 141->50Hz
 F: 50+91*e(T*(0-60%N))
-D: F*((p 2)%(p 0))
+D: hz F
 P: +\D
 S: s P
 / short attack noise thump

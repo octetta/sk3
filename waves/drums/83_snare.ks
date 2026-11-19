@@ -1,11 +1,10 @@
 / 808 Snare — 170Hz body dominant, noise tail, 280ms
-/ N=12348
-N: 12348
+N: ms 280
 T: !N
 / body: 170Hz + 183Hz detuned pair, decay ~20ms
 B: e(T*(0-25%N))
-F: 170*((p 2)%(p 0))
-G: 183*((p 2)%(p 0))
+F: hz 170
+G: hz 183
 P: +\(N#F)
 Q: +\(N#G)
 S: B*(s P+s Q)*.5

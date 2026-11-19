@@ -1,11 +1,11 @@
 / Low Tom
-/ 700ms at (p 0) = 30870 samples
+/ 700ms duration
 
-N: 30870
+N: ms 700
 T: !N
 E: e(T*(0-6.9%N))
 F: 55+75*e(T*(0-140%N))
-D: F*((p 2)%(p 0))
+D: hz F
 P: +\D
 S: (s P)
 Q: e(T*(0-220%N))

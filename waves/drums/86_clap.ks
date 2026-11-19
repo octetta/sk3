@@ -1,8 +1,8 @@
 / 808-style Clap
 / 3 staggered noise bursts, bandpassed 800-1800Hz
-/ 200ms at (p 0) = 8820 samples
+/ 200ms duration
 
-N: 8820
+N: ms 200
 T: !N
 
 / bandpass each noise source: HP at 800Hz, LP at 1800Hz

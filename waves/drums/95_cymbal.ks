@@ -1,5 +1,5 @@
 / Classic Analog Ride Cymbal
-N: 52920
+N: ms 1200
 T: !N
 / Metallic cluster
 Z: 400 b T

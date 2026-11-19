@@ -1,11 +1,10 @@
 / 808 Lo Tom — 80Hz, 640ms
-/ N=28224
-N: 28224
+N: ms 640
 T: !N
 E: e(T*(0-6.9%N))
 / small pitch sweep 125->80Hz
 F: 80+45*e(T*(0-80%N))
-D: F*((p 2)%(p 0))
+D: hz F
 P: +\D
 S: (s P)
 Q: e(T*(0-200%N))

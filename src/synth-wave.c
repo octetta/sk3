@@ -281,7 +281,8 @@ static void synth_eval_and_register_ks_wave(int w, const char *name, const char 
   }
 
   size_t mem_limit = is_drum ? (16 * 1024 * 1024) : (4 * 1024 * 1024);
-  ks_ctx *ctx = ks_create(mem_limit, 1000000000, 44100.0);
+  double sr = (MAIN_SAMPLE_RATE > 0) ? (double)MAIN_SAMPLE_RATE : 44100.0;
+  ks_ctx *ctx = ks_create(mem_limit, 1000000000, sr);
   if (!ctx) return;
 
   K result = NULL;
@@ -335,7 +336,7 @@ static void synth_eval_and_register_ks_wave(int w, const char *name, const char 
       strncpy(sw.name[w], name, WAVE_NAME_MAX);
       sw.data[w] = buf;
       sw.size[w] = size;
-      sw.rate[w] = 44100.0f;
+      sw.rate[w] = (float)sr;
       sw.is_heap[w] = 1;
       sw.readonly[w] = 1;
 

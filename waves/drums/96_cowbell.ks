@@ -1,10 +1,10 @@
 / Classic 808-style Cowbell
-N: 39690
+N: ms 900
 T: !N
 
 / Two distinct square wave frequencies
-F: 540*((p 2)%(p 0))
-G: 800*((p 2)%(p 0))
+F: hz 540
+G: hz 800
 
 / Phase accumulators
 P: +\(N#F)

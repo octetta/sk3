@@ -170,6 +170,7 @@ static void test_skode_wave_round_trip(void) {
   skode_free(&ctx);
   wave_free();
   synth_free();
+  synth_sample_rate_set(44100);
 }
 
 static void test_ksynth_sample_rate_binding_and_scaling(void) {
@@ -201,6 +202,7 @@ static void test_ksynth_sample_rate_binding_and_scaling(void) {
   skode_free(&ctx);
   wave_free();
   synth_free();
+  synth_sample_rate_set(44100);
 }
 
 static void test_runtime_drum_wavetable_initialization(void) {
@@ -254,9 +256,9 @@ static void test_runtime_drum_wavetable_initialization(void) {
                w, sw.size[w], expected_drums[i].expected_min_samples);
       fail(test, msg);
     }
-    if (sw.rate[w] != 44100.0f) {
+    if (sw.rate[w] != (float)MAIN_SAMPLE_RATE) {
       char msg[128];
-      snprintf(msg, sizeof(msg), "drum slot %d sample rate expected 44100, got %.1f", w, sw.rate[w]);
+      snprintf(msg, sizeof(msg), "drum slot %d sample rate expected %.1f, got %.1f", w, (float)MAIN_SAMPLE_RATE, sw.rate[w]);
       fail(test, msg);
     }
     if (!sw.one_shot[w]) {
@@ -350,9 +352,9 @@ static void test_runtime_esq1_wavetable_initialization(void) {
       snprintf(msg, sizeof(msg), "esq1 slot %d size expected 4096, got %d", w, sw.size[w]);
       fail(test, msg);
     }
-    if (sw.rate[w] != 44100.0f) {
+    if (sw.rate[w] != (float)MAIN_SAMPLE_RATE) {
       char msg[128];
-      snprintf(msg, sizeof(msg), "esq1 slot %d sample rate expected 44100, got %.1f", w, sw.rate[w]);
+      snprintf(msg, sizeof(msg), "esq1 slot %d sample rate expected %.1f, got %.1f", w, (float)MAIN_SAMPLE_RATE, sw.rate[w]);
       fail(test, msg);
     }
     if (sw.one_shot[w] != expected_esq1[i].is_oneshot) {
@@ -430,9 +432,9 @@ static void test_runtime_dwg_wavetable_initialization(void) {
       snprintf(msg, sizeof(msg), "dwg slot %d size expected 4096, got %d", w, sw.size[w]);
       fail(test, msg);
     }
-    if (sw.rate[w] != 44100.0f) {
+    if (sw.rate[w] != (float)MAIN_SAMPLE_RATE) {
       char msg[128];
-      snprintf(msg, sizeof(msg), "dwg slot %d sample rate expected 44100, got %.1f", w, sw.rate[w]);
+      snprintf(msg, sizeof(msg), "dwg slot %d sample rate expected %.1f, got %.1f", w, (float)MAIN_SAMPLE_RATE, sw.rate[w]);
       fail(test, msg);
     }
     if (sw.one_shot[w] != 0) {
@@ -478,9 +480,9 @@ static void test_runtime_dwg_wavetable_initialization(void) {
       snprintf(msg, sizeof(msg), "slot 49 size expected 4096, got %d", sw.size[centered]);
       fail(test, msg);
     }
-    if (sw.rate[centered] != 44100.0f) {
+    if (sw.rate[centered] != (float)MAIN_SAMPLE_RATE) {
       char msg[128];
-      snprintf(msg, sizeof(msg), "slot 49 rate expected 44100, got %.1f", sw.rate[centered]);
+      snprintf(msg, sizeof(msg), "slot 49 rate expected %.1f, got %.1f", (float)MAIN_SAMPLE_RATE, sw.rate[centered]);
       fail(test, msg);
     }
     if (sw.one_shot[centered] != 0 || !sw.readonly[centered] || !sw.is_heap[centered]) {

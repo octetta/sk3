@@ -1,11 +1,10 @@
 / 808 Mid Tom — 122Hz, 500ms
-/ N=22050
-N: 22050
+N: ms 500
 T: !N
 E: e(T*(0-6.9%N))
 / small pitch sweep 165->122Hz
 F: 122+43*e(T*(0-80%N))
-D: F*((p 2)%(p 0))
+D: hz F
 P: +\D
 S: (s P)
 Q: e(T*(0-200%N))

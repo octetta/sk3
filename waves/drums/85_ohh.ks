@@ -1,6 +1,5 @@
 / 808 Open Hi-Hat — very bright, looser and much longer (750ms)
-/ N=33075
-N: 33075
+N: ms 750
 T: !N
 E: e(T*(0-6.9%N))
 / m verb = 1-bit noise

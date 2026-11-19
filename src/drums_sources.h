@@ -14,13 +14,12 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
     {
         82, "kick",
         "/ 808 Kick — 141->50Hz sweep, 300ms\n"
-        "/ N=13230\n"
-        "N: 13230\n"
+        "N: ms 300\n"
         "T: !N\n"
         "E: e(T*(0-6.9%N))\n"
         "/ pitch sweep 141->50Hz\n"
         "F: 50+91*e(T*(0-60%N))\n"
-        "D: F*((p 2)%(p 0))\n"
+        "D: hz F\n"
         "P: +\\D\n"
         "S: s P\n"
         "/ short attack noise thump\n"
@@ -35,13 +34,12 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
     {
         83, "snare",
         "/ 808 Snare — 170Hz body dominant, noise tail, 280ms\n"
-        "/ N=12348\n"
-        "N: 12348\n"
+        "N: ms 280\n"
         "T: !N\n"
         "/ body: 170Hz + 183Hz detuned pair, decay ~20ms\n"
         "B: e(T*(0-25%N))\n"
-        "F: 170*((p 2)%(p 0))\n"
-        "G: 183*((p 2)%(p 0))\n"
+        "F: hz 170\n"
+        "G: hz 183\n"
         "P: +\\(N#F)\n"
         "Q: +\\(N#G)\n"
         "S: B*(s P+s Q)*.5\n"
@@ -61,8 +59,7 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
     {
         84, "chh",
         "/ 808 Closed Hi-Hat — very bright, 200ms\n"
-        "/ N=8820\n"
-        "N: 8820\n"
+        "N: ms 200\n"
         "T: !N\n"
         "E: e(T*(0-6.9%N))\n"
         "/ m verb = 1-bit noise: bright and metallic\n"
@@ -80,8 +77,7 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
     {
         85, "ohh",
         "/ 808 Open Hi-Hat — very bright, looser and much longer (750ms)\n"
-        "/ N=33075\n"
-        "N: 33075\n"
+        "N: ms 750\n"
         "T: !N\n"
         "E: e(T*(0-6.9%N))\n"
         "/ m verb = 1-bit noise\n"
@@ -101,9 +97,9 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
         86, "clap",
         "/ 808-style Clap\n"
         "/ 3 staggered noise bursts, bandpassed 800-1800Hz\n"
-        "/ 200ms at (p 0) = 8820 samples\n"
+        "/ 200ms duration\n"
         "\n"
-        "N: 8820\n"
+        "N: ms 200\n"
         "T: !N\n"
         "\n"
         "/ bandpass each noise source: HP at 800Hz, LP at 1800Hz\n"
@@ -133,13 +129,12 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
     {
         87, "rim",
         "/ 808 Rimshot — 1800Hz dominant, dead in 20ms\n"
-        "/ N=2646 (60ms)\n"
-        "N: 2646\n"
+        "N: ms 60\n"
         "T: !N\n"
         "/ very fast overall decay\n"
         "E: e(T*(0-6.9%N))\n"
         "/ 1800Hz tone — the dominant frequency\n"
-        "F: 1800*((p 2)%(p 0))\n"
+        "F: hz 1800\n"
         "P: +\\(N#F)\n"
         "S: (s P)\n"
         "/ broadband noise crack\n"
@@ -154,13 +149,13 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
     {
         88, "tomlo",
         "/ Low Tom\n"
-        "/ 700ms at (p 0) = 30870 samples\n"
+        "/ 700ms duration\n"
         "\n"
-        "N: 30870\n"
+        "N: ms 700\n"
         "T: !N\n"
         "E: e(T*(0-6.9%N))\n"
         "F: 55+75*e(T*(0-140%N))\n"
-        "D: F*((p 2)%(p 0))\n"
+        "D: hz F\n"
         "P: +\\D\n"
         "S: (s P)\n"
         "Q: e(T*(0-220%N))\n"
@@ -174,13 +169,13 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
     {
         89, "tommid",
         "/ Mid Tom\n"
-        "/ 600ms at (p 0) = 26460 samples\n"
+        "/ 600ms duration\n"
         "\n"
-        "N: 26460\n"
+        "N: ms 600\n"
         "T: !N\n"
         "E: e(T*(0-6.9%N))\n"
         "F: 110+90*e(T*(0-120%N))\n"
-        "D: F*((p 2)%(p 0))\n"
+        "D: hz F\n"
         "P: +\\D\n"
         "S: (s P)\n"
         "Q: e(T*(0-220%N))\n"
@@ -194,14 +189,14 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
     {
         90, "tomhi",
         "/ High Tom\n"
-        "/ 500ms at (p 0) = 22050 samples\n"
+        "/ 500ms duration\n"
         "\n"
-        "N: 22050\n"
+        "N: ms 500\n"
         "T: !N\n"
         "E: e(T*(0-6.9%N))\n"
         "/ pitch sweep 300->180 Hz\n"
         "F: 180+120*e(T*(0-100%N))\n"
-        "D: F*((p 2)%(p 0))\n"
+        "D: hz F\n"
         "P: +\\D\n"
         "/ clean fundamental only — parentheses prevent FM parsing\n"
         "S: (s P)\n"
@@ -217,13 +212,12 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
     {
         91, "lotom",
         "/ 808 Lo Tom — 80Hz, 640ms\n"
-        "/ N=28224\n"
-        "N: 28224\n"
+        "N: ms 640\n"
         "T: !N\n"
         "E: e(T*(0-6.9%N))\n"
         "/ small pitch sweep 125->80Hz\n"
         "F: 80+45*e(T*(0-80%N))\n"
-        "D: F*((p 2)%(p 0))\n"
+        "D: hz F\n"
         "P: +\\D\n"
         "S: (s P)\n"
         "Q: e(T*(0-200%N))\n"
@@ -237,13 +231,12 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
     {
         92, "midtom",
         "/ 808 Mid Tom — 122Hz, 500ms\n"
-        "/ N=22050\n"
-        "N: 22050\n"
+        "N: ms 500\n"
         "T: !N\n"
         "E: e(T*(0-6.9%N))\n"
         "/ small pitch sweep 165->122Hz\n"
         "F: 122+43*e(T*(0-80%N))\n"
-        "D: F*((p 2)%(p 0))\n"
+        "D: hz F\n"
         "P: +\\D\n"
         "S: (s P)\n"
         "Q: e(T*(0-200%N))\n"
@@ -257,13 +250,12 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
     {
         93, "hitom",
         "/ 808 Hi Tom — 170Hz, 500ms\n"
-        "/ N=22050\n"
-        "N: 22050\n"
+        "N: ms 500\n"
         "T: !N\n"
         "E: e(T*(0-6.9%N))\n"
         "/ small pitch sweep 212->170Hz\n"
         "F: 170+42*e(T*(0-80%N))\n"
-        "D: F*((p 2)%(p 0))\n"
+        "D: hz F\n"
         "P: +\\D\n"
         "S: (s P)\n"
         "/ short thump\n"
@@ -278,7 +270,7 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
     {
         94, "crash",
         "/ 808 Crash v9: 24 fitted cymbal modes via the mb verb + comb-tapered noise bed\n"
-        "N: 66150\n"
+        "N: ms 1500\n"
         "T: !N\n"
         "M: 818.3 0.02248 1.23  1205.9 0.03729 1.16  1539.6 0.06169 1.21  1625.8 0.07509 1.24  1733.4 0.08046 1.25  2013.4 0.07171 1.27  2110.3 0.05956 1.21  2454.8 0.1993 1.23  2562.5 0.1098 1.30  2713.2 0.1522 1.28  2820.8 0.1109 1.30  2896.2 0.174 1.28  3305.3 0.141 1.28  3585.3 0.2259 1.22  3628.3 0.1697 1.23  3800.6 0.1626 1.22  3908.3 0.07301 1.17  4080.5 0.1725 1.17  4435.8 0.05636 1.12  4608.1 0.07257 1.06  4888 0.07872 1.00  5717.1 0.1769 0.83  7342.8 0.4263 0.67  7665.8 0.1936 0.74\n"
         "Q: T mb M\n"
@@ -299,7 +291,7 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
     {
         95, "cymbal",
         "/ Classic Analog Ride Cymbal\n"
-        "N: 52920\n"
+        "N: ms 1200\n"
         "T: !N\n"
         "/ Metallic cluster\n"
         "Z: 400 b T\n"
@@ -332,12 +324,12 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
     {
         96, "cowbell",
         "/ Classic 808-style Cowbell\n"
-        "N: 39690\n"
+        "N: ms 900\n"
         "T: !N\n"
         "\n"
         "/ Two distinct square wave frequencies\n"
-        "F: 540*((p 2)%(p 0))\n"
-        "G: 800*((p 2)%(p 0))\n"
+        "F: hz 540\n"
+        "G: hz 800\n"
         "\n"
         "/ Phase accumulators\n"
         "P: +\\(N#F)\n"
@@ -370,12 +362,11 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
     {
         97, "clave",
         "/ 808 Clave — 2500Hz dominant, 100ms\n"
-        "/ N=4410\n"
-        "N: 4410\n"
+        "N: ms 100\n"
         "T: !N\n"
         "E: e(T*(0-6.9%N))\n"
-        "F: 2500*((p 2)%(p 0))\n"
-        "G: 2750*((p 2)%(p 0))\n"
+        "F: hz 2500\n"
+        "G: hz 2750\n"
         "P: +\\(N#F)\n"
         "Q: +\\(N#G)\n"
         "S: (s P)+(s Q)*.5\n"
@@ -389,9 +380,8 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
     },
     {
         98, "maracas",
-        "/ 808 Maracas — 4kHz dominant, 30ms burst\n"
-        "/ N=3528\n"
-        "N: 3528\n"
+        "/ 808 Maracas — 4kHz dominant, 80ms\n"
+        "N: ms 80\n"
         "T: !N\n"
         "X: T*e(T*(0-20%N))\n"
         "E: w X\n"
@@ -409,12 +399,11 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
     {
         99, "trigger",
         "/ 808 Trigger Out — low thump ~100Hz, 650ms\n"
-        "/ N=28665\n"
-        "N: 28665\n"
+        "N: ms 650\n"
         "T: !N\n"
         "E: e(T*(0-6.9%N))\n"
         "/ no pitch sweep, fixed ~100Hz\n"
-        "F: 100*((p 2)%(p 0))\n"
+        "F: hz 100\n"
         "P: +\\(N#F)\n"
         "S: (s P)\n"
         "/ brief sub attack\n"
