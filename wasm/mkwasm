@@ -115,11 +115,13 @@ emcc -I"${ROOT_DIR}/src" \
     "${ROOT_DIR}/src/recorder.c" \
     "${ROOT_DIR}/src/vendor/ksynth/ksynth.c" \
     -o skred_worklet_engine.js \
-    -s EXPORTED_FUNCTIONS='["_malloc", "_free", "_skred_start_headless", "_skred_process_stereo", "_skred_process_stereo_with_input", "_skred_command", "_skred_stop", "_skred_version", "_skred_scheduled_event_count", "_skred_scheduled_event_snapshot", "_skred_control_event_poll", "_skred_control_event_snapshot", "_skred_control_event_clear", "_skred_control_event_reset", "_skred_dump_wave_base64"]' \
+    -s EXPORTED_FUNCTIONS='["_malloc", "_free", "_skred_start_headless", "_skred_process_stereo", "_skred_process_stereo_with_input", "_skred_command", "_skred_log", "_skred_logger", "_skred_stop", "_skred_version", "_skred_scheduled_event_count", "_skred_scheduled_event_snapshot", "_skred_control_event_poll", "_skred_control_event_snapshot", "_skred_control_event_clear", "_skred_control_event_reset", "_skred_dump_wave_base64"]' \
     -s EXPORTED_RUNTIME_METHODS='["ccall", "cwrap", "FS", "UTF8ToString", "stringToUTF8", "HEAP32", "HEAPU32", "HEAPF32", "HEAPF64", "HEAPU8", "getValue", "setValue"]' \
     -s FORCE_FILESYSTEM=1 \
+    -s STACK_SIZE=5242880 \
+    -Wl,-z,stack-size=5242880 \
     -s ALLOW_MEMORY_GROWTH=1 \
-    -s INITIAL_MEMORY=64MB \
+    -s INITIAL_MEMORY=128MB \
     -s MAXIMUM_MEMORY=1GB \
     -s MODULARIZE=1 \
     -s EXPORT_ES6=1 \
