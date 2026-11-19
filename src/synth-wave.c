@@ -8,6 +8,7 @@
 #include "control-events.h"
 #include <time.h>
 #define SIZE_SINE (4096)
+#include "sk_dsp.h"
 #include "dwg.h"
 #include "vendor/ksynth/ksynth.h"
 #include "dwg_sources.h"
@@ -18,45 +19,10 @@ static const int s_mip_max_harmonics[WAVETABLE_MIP_LEVELS] = {
     256, 128, 64, 32, 16, 8, 4, 1
 };
 
-typedef struct { float re, im; } synth_cplx_t;
+typedef sk_cplx_t synth_cplx_t;
 
-static void synth_fft_radix2(synth_cplx_t *buf, int n, int inverse) {
-    for (int i = 1, j = 0; i < n; i++) {
-        int bit = n >> 1;
-        for (; j & bit; bit >>= 1) j ^= bit;
-        j ^= bit;
-        if (i < j) {
-            synth_cplx_t tmp = buf[i];
-            buf[i] = buf[j];
-            buf[j] = tmp;
-        }
-    }
-    for (int len = 2; len <= n; len <<= 1) {
-        float ang = (inverse ? 2.0f : -2.0f) * (float)M_PI / (float)len;
-        synth_cplx_t wlen = { cosf(ang), sinf(ang) };
-        for (int i = 0; i < n; i += len) {
-            synth_cplx_t w = { 1.0f, 0.0f };
-            for (int k = 0; k < len / 2; k++) {
-                synth_cplx_t u = buf[i + k];
-                synth_cplx_t t = buf[i + k + len / 2];
-                synth_cplx_t v = { t.re * w.re - t.im * w.im, t.re * w.im + t.im * w.re };
-                buf[i + k].re         = u.re + v.re;
-                buf[i + k].im         = u.im + v.im;
-                buf[i + k + len/2].re = u.re - v.re;
-                buf[i + k + len/2].im = u.im - v.im;
-                float nwre = w.re * wlen.re - w.im * wlen.im;
-                float nwim = w.re * wlen.im + w.im * wlen.re;
-                w.re = nwre; w.im = nwim;
-            }
-        }
-    }
-    if (inverse) {
-        float inv_n = 1.0f / (float)n;
-        for (int i = 0; i < n; i++) {
-            buf[i].re *= inv_n;
-            buf[i].im *= inv_n;
-        }
-    }
+static inline void synth_fft_radix2(synth_cplx_t *buf, int n, int inverse) {
+    sk_fft_radix2(buf, n, inverse);
 }
 
 int wave_generate_mipmaps_ksynth(int w, const double *harmonics, int num_harmonics) {

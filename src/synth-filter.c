@@ -1,6 +1,7 @@
 #include "synth.h"
 #include "synth-internal.h"
 #include "util.h"
+#include "sk_dsp.h"
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
@@ -23,12 +24,9 @@ float mmf_process(skred_engine_t *engine, int n, float input) {
     sv.filter[n].y2 = sv.filter[n].y1;
     sv.filter[n].y1 = output;
     if (sv.filter[n].drive > 0.0f) {
-      // Standard cubic soft-clip: transparent near zero, compresses toward
+      // Standard cubic soft-clip from sk_dsp: transparent near zero, compresses toward
       // the boundary, C1-continuous at the clamp so no audible kink.
-      float d = output * sv.filter[n].drive;
-      if (d > 1.0f) d = 1.0f;
-      else if (d < -1.0f) d = -1.0f;
-      output = (d - (d * d * d) * (1.0f / 3.0f)) * 1.5f; // Scale 2/3 peak to unity, don't divide by drive!
+      output = sk_softclip_cubic(output, sv.filter[n].drive);
     }
     
     return output;

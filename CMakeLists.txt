@@ -254,6 +254,11 @@ target_include_directories(ksynth_bridge_tests PRIVATE "${CMAKE_CURRENT_SOURCE_D
 target_compile_definitions(ksynth_bridge_tests PRIVATE SKRED_TEST_KSYNTH=1)
 add_test(NAME ksynth.array-bridge COMMAND ksynth_bridge_tests)
 
+add_executable(dsp_math_tests tests/dsp_math_tests.c)
+target_link_libraries(dsp_math_tests PRIVATE m)
+target_include_directories(dsp_math_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+add_test(NAME synth.dsp-math COMMAND dsp_math_tests)
+
 add_executable(recording_tests tests/recording_tests.c)
 target_link_libraries(recording_tests PRIVATE api)
 target_include_directories(recording_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}/src/gen")

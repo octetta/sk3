@@ -1,6 +1,7 @@
 #include "synth.h"
 #include "synth-internal.h"
 #include "util.h"
+#include "sk_dsp.h"
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
@@ -8,28 +9,22 @@
 #include "control-events.h"
 
 void audio_rng_init(uint64_t *rng, uint64_t seed) {
-  *rng = seed ? seed : 1; // Ensure non-zero seed
+  sk_rng_init((sk_rng_t *)rng, seed);
 }
 
 // Generate next random number (full 64-bit range)
 uint64_t audio_rng_next(uint64_t *rng) {
-    // High-quality LCG parameters (Knuth's MMIX)
-    *rng = *rng * 6364136223846793005ULL + 1442695040888963407ULL;
-    return *rng;
+  return sk_rng_next((sk_rng_t *)rng);
 }
 
 // Generate random float in range [-1.0, 1.0] for audio
 float audio_rng_float(uint64_t *rng) {
-    uint64_t raw = audio_rng_next(rng);
-    // Use upper 32 bits for better quality
-    uint32_t val = (uint32_t)(raw >> 32);
-    // Convert to signed float [-1.0, 1.0]
-    return (float)((int32_t)val) / 2147483648.0f;
+  return sk_rng_float((sk_rng_t *)rng);
 }
 
 float audio_rng_raw_float(uint64_t raw) {
-    uint32_t val = (uint32_t)(raw >> 32);
-    return (float)((int32_t)val) / 2147483648.0f;
+  uint32_t val = (uint32_t)(raw >> 32);
+  return (float)((int32_t)val) / 2147483648.0f;
 }
 
 float osc_get_phase_inc(skred_engine_t *engine, int v, float f) {
@@ -109,89 +104,13 @@ void osc_set_freq(skred_engine_t *engine, int v, float f) {
   osc_update_wavetable_mip(v);
 }
 
-// Fast power approximation using bit manipulation
-// About 10x faster than powf, ~1-2% max error for your use case
+// Fast power approximation using bit manipulation (delegates to sk_dsp)
 static inline float fast_pow(float a, float b) {
-    // Clamp input to avoid undefined behavior
-    if (a <= 0.0f) return 0.0f;
-    
-    union { float f; int i; } u = { a };
-    u.i = (int)(b * (u.i - 1065353216) + 1065353216);
-    return u.f;
+    return sk_fast_pow(a, b);
 }
 
 float cz_phasor(int n, float p, float d, float active_start, float active_end) {
-    const float length = active_end - active_start;
-    if (length <= 0.0f) return p;
-    float phase = (p - active_start) / length;
-    d = fmaxf(-1.0f, fminf(1.0f, d));
-    const float amount = fabsf(d);
-    
-    switch (n) {
-        case 1: { // saw -> pulse
-            const float breakpoint = 0.5f + 0.499f * d;
-            const float inv_d = 0.5f / breakpoint;
-            const float inv_1_minus_d = 0.5f / (1.0f - breakpoint);
-            if (phase < breakpoint) {
-                phase *= inv_d;
-            } else {
-                phase = 0.5f + (phase - breakpoint) * inv_1_minus_d;
-            }
-            break;
-        }
-        case 2: { // square (folded sine)
-            const float half_d = d * 0.499f;
-            const float scale = 0.5f / (0.5f - half_d);
-            if (phase < 0.5f) {
-                phase *= scale;
-            } else {
-                phase = 1.0f - (1.0f - phase) * scale;
-            }
-            break;
-        }
-        case 3: { // triangle
-            const float half_d = d * 0.499f;
-            const float scale = 0.5f / (0.5f - half_d);
-            if (phase < 0.5f) {
-                phase *= scale;
-            } else {
-                phase = 0.5f + (phase - 0.5f) * scale;
-            }
-            break;
-        }
-        case 4: { // double sine
-            const float doubled = fmodf(phase * 2.0f, 1.0f);
-            const float target = d < 0.0f ? 1.0f - doubled : doubled;
-            phase += amount * (target - phase);
-            break;
-        }
-        case 5: { // saw -> triangle
-            const float half_d = d * 0.499f;
-            const float scale1 = 0.5f / (0.5f - half_d);
-            const float scale2 = 0.5f / (0.5f + half_d);
-            if (phase < 0.5f) {
-                phase *= scale1;
-            } else {
-                phase = 0.5f + (phase - 0.5f) * scale2;
-            }
-            break;
-        }
-        case 6: { // resonant 1
-            float exponent = 1.0f + 4.0f * amount;
-            phase = fast_pow(phase, d < 0.0f ? 1.0f / exponent : exponent);
-            break;
-        }
-        case 7: { // resonant 2
-            float exponent = 1.0f + 8.0f * amount;
-            phase = fast_pow(phase, d < 0.0f ? 1.0f / exponent : exponent);
-            break;
-        }
-        default:
-            return p;
-    }
-
-    phase = fmaxf(0.0f, fminf(1.0f, phase));
-    return active_start + phase * length;
+    return sk_cz_phasor(n, p, d, active_start, active_end);
 }
 
 int osc_loop_crossings(double distance, double loop_length) {
