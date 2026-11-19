@@ -137,6 +137,7 @@ enum {
   FILTER_BANDPASS = 3,
   FILTER_NOTCH = 4,
   FILTER_ALL_PASS = 5,
+  FILTER_LP_BP = 6,
 };
 
 // Low-pass filter state structure

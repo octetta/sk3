@@ -1,0 +1,47 @@
+@name     filter_drive
+@alias    jd
+@group    filter
+@c_name   skode_clause_filter_drive_set
+@type     realtime
+@arity    1
+@match    (finite)
+@summary  set multimode filter drive / saturation (0.0=clean bypass to 5.0+)
+@doc
+Sets the filter drive/saturation amount for the active voice.
+Values > 0.0 activate the cubic soft-clipper, compressing resonant peaks into warm analog saturation.
+Usage: jd amount (or filter_drive amount)
+@code
+    if (voice < 0 || voice >= synth_config.voice_max) return -1;
+    return mmf_set_drive(&skred_global_engine, voice, args[0]);
+@end
+
+@name     filter_drive
+@alias    jd
+@group    filter
+@c_name   skode_clause_filter_drive_reset
+@type     realtime
+@arity    1
+@match    (nan)
+@summary  reset filter drive to 0.0 (clean bypass)
+@doc
+Resets filter drive to 0.0 (bypasses soft-clipper).
+Usage: jd - (or filter_drive -)
+@code
+    if (voice < 0 || voice >= synth_config.voice_max) return -1;
+    return mmf_set_drive(&skred_global_engine, voice, 0.0f);
+@end
+
+@name     filter_drive
+@alias    jd
+@group    filter
+@c_name   skode_clause_filter_drive_default
+@type     realtime
+@arity    0
+@summary  reset filter drive to 0.0 default
+@doc
+Resets filter drive to 0.0 (bypasses soft-clipper).
+Usage: jd (or filter_drive)
+@code
+    if (voice < 0 || voice >= synth_config.voice_max) return -1;
+    return mmf_set_drive(&skred_global_engine, voice, 0.0f);
+@end

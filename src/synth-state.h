@@ -164,6 +164,7 @@ typedef struct {
     float  * restrict filter_freq;
     float  * restrict filter_res;
     int    * restrict filter_mode;
+    float  * restrict filter_drive;
     mmf_t  * restrict filter;
     envelope_t * restrict filter_envelope;
     int        * restrict use_filter_envelope;

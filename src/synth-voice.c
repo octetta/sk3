@@ -726,6 +726,15 @@ void mmf_set_params(skred_engine_t *engine, int n, float f, float resonance) {
           a1 = -2.0f * cos_omega;
           a2 = 1.0f - alpha;
           break;
+
+      case FILTER_LP_BP:
+          b0 = ((1.0f - cos_omega) / 2.0f) + alpha;
+          b1 = 1.0f - cos_omega;
+          b2 = ((1.0f - cos_omega) / 2.0f) - alpha;
+          a0 = 1.0f + alpha;
+          a1 = -2.0f * cos_omega;
+          a2 = 1.0f - alpha;
+          break;
     }
 
     // Normalize coefficients
@@ -737,10 +746,14 @@ void mmf_set_params(skred_engine_t *engine, int n, float f, float resonance) {
 
     // Tier 2, cheap: character sets a post-filter drive amount.
     // drive == 0 lets mmf_process skip the extra work entirely.
-    switch (character) {
-      case 1:  sv.filter[n].drive = 1.5f + resonance * 0.5f; break;  // "driven"/warm
-      case 2:  sv.filter[n].drive = 1.2f; break;                       // a little bite on top of the alpha boost
-      default: sv.filter[n].drive = 0.0f; break;                        // "clean" — zero added cost
+    if (sv.filter_drive && sv.filter_drive[n] > 0.0f) {
+      sv.filter[n].drive = sv.filter_drive[n];
+    } else {
+      switch (character) {
+        case 1:  sv.filter[n].drive = 1.5f + resonance * 0.5f; break;  // "driven"/warm
+        case 2:  sv.filter[n].drive = 1.2f; break;                       // a little bite on top of the alpha boost
+        default: sv.filter[n].drive = 0.0f; break;                        // "clean" — zero added cost
+      }
     }
 }
 
@@ -1109,6 +1122,15 @@ int mmf_set_res(skred_engine_t *engine, int n, float res) {
     sv.filter_res[n] = res;
     mmf_set_params(engine, n, sv.filter_freq[n], res);
   }
+  return 0;
+}
+
+int mmf_set_drive(skred_engine_t *engine, int n, float drive) {
+  if (n < 0 || n >= synth_config.voice_max) return -1;
+  if (drive < 0.0f) drive = 0.0f;
+  if (drive > 10.0f) drive = 10.0f;
+  if (sv.filter_drive) sv.filter_drive[n] = drive;
+  sv.filter[n].drive = drive;
   return 0;
 }
 

@@ -25,6 +25,7 @@ void mmf_init(skred_engine_t *engine, int voice, float freq, float res);
 void mmf_set_params(skred_engine_t *engine, int voice, float freq, float res);
 int mmf_set_freq(skred_engine_t *engine, int voice, float freq);
 int mmf_set_res(skred_engine_t *engine, int voice, float res);
+int mmf_set_drive(skred_engine_t *engine, int voice, float drive);
 float mmf_process(skred_engine_t *engine, int n, float input);
 
 float cz_phasor(int n, float p, float d, float active_start, float active_end);
@@ -164,6 +165,7 @@ float envelope_step_e(envelope_t *e, uint64_t current_sample);
 #define synth_filter_set_params mmf_set_params
 #define synth_filter_set_freq mmf_set_freq
 #define synth_filter_set_res mmf_set_res
+#define synth_filter_set_drive mmf_set_drive
 #define synth_filter_process mmf_process
 
 /* Canonical synth_envelope_* function aliases */

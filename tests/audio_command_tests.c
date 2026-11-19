@@ -201,6 +201,19 @@ int main(void) {
     skode_free(&sk_demo); wave_free(); synth_free();
   }
 
+  // Verify filter drive jd and combined LP+BP filter mode j6
+  {
+    synth_init(8); wave_table_init(0); voice_init();
+    skode_t sk_filt = SKODE_EMPTY();
+    skode_init(&sk_filt);
+    skode_consume("v0 j6 k1200 q7 jd 1.5", &sk_filt);
+    expect(sv.filter_mode[0] % 10 == FILTER_LP_BP, "j6 sets FILTER_LP_BP combined mode");
+    expect(sv.filter[0].drive == 1.5f, "jd 1.5 sets voice filter drive");
+    skode_consume("v0 jd 0.0", &sk_filt);
+    expect(sv.filter[0].drive == 0.0f, "jd 0.0 resets voice filter drive to clean");
+    skode_free(&sk_filt); wave_free(); synth_free();
+  }
+
   if (failures) {
     fprintf(stderr, "%d audio command test failure(s)\n", failures);
     return 1;
