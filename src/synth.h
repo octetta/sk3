@@ -52,6 +52,7 @@ void osc_hard_sync_sanitize(int voice);
 int osc_noise_set_type(int voice, int type);
 int osc_noise_set_custom(int voice, int bits, int tap, int dac);
 void osc_noise_step(int voice);
+int wave_generate_mipmaps(int w);
 int wave_generate_mipmaps_ksynth(int w, const double *harmonics, int num_harmonics);
 int wave_generate_mipmaps_fft(int w);
 void osc_update_wavetable_mip(int voice);

@@ -347,6 +347,8 @@ void synth_alloc_waves(int wave_table_max) {
         sw.mip_data[lvl] = synth_alloc(w, sizeof(float *), "mip_data");
     }
     WALLOC(mip_levels,   int);
+    sw.harmonics = synth_alloc(w, sizeof(double *), "harmonics");
+    WALLOC(num_harmonics, int);
     WALLOC(size,         int);
     WALLOC(rate,         float);
     WALLOC(one_shot,     int);
@@ -389,6 +391,17 @@ void synth_free_waves(void) {
             sw.mip_data[lvl] = NULL;
         }
     }
+    if (sw.harmonics) {
+        for (int i = 0; i < synth_config.wave_table_max; i++) {
+            if (sw.harmonics[i]) {
+                free(sw.harmonics[i]);
+                sw.harmonics[i] = NULL;
+            }
+        }
+        free(sw.harmonics);
+        sw.harmonics = NULL;
+    }
+    WFREE(num_harmonics);
     WFREE(mip_levels);
     WFREE(data);         WFREE(size);         WFREE(rate);
     WFREE(one_shot);     WFREE(loop_enabled); WFREE(loop_start);

@@ -155,6 +155,21 @@ int main(void) {
   expect(sv.mip_level[1] == 7, "voice playing custom table at 5000 Hz selects level 7");
   expect(sv.table[1] == sw.mip_data[7][custom_slot], "voice table points to custom mip level 7");
 
+#ifdef KSYNTH
+  /* Test 7: Ksynth k>w auto-stores harmonics and WB uses them */
+  cmd("[P: ~2048; H: !16; H: H+1; A: 1%H; W: w P $ A] k!");
+  cmd("101 k>w");
+  expect(sw.harmonics != NULL && sw.harmonics[101] != NULL, "k>w auto-stores harmonics array in sw.harmonics");
+  expect(sw.num_harmonics != NULL && sw.num_harmonics[101] == 16, "k>w auto-stores harmonic count (16)");
+
+  // Run WB on slot 101
+  cmd("101 WB");
+  expect(sw.mip_levels[101] == 8, "WB generates 8 mip levels from auto-stored harmonics");
+  for (int lvl = 0; lvl < 8; lvl++) {
+    expect(sw.mip_data[lvl][101] != NULL, "slot 101 mip table allocated");
+  }
+#endif
+
   teardown();
 
   if (failures > 0) {

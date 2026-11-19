@@ -260,6 +260,14 @@ int wave_generate_mipmaps_fft(int w) {
     return 0;
 }
 
+int wave_generate_mipmaps(int w) {
+    if (wave_invalid(w)) return -1;
+    if (sw.num_harmonics && sw.num_harmonics[w] > 0 && sw.harmonics && sw.harmonics[w]) {
+        return wave_generate_mipmaps_ksynth(w, sw.harmonics[w], sw.num_harmonics[w]);
+    }
+    return wave_generate_mipmaps_fft(w);
+}
+
 #ifdef KSYNTH
 static void synth_eval_and_register_ks_wave(int w, const char *name, const char *ks_code, int is_drum) {
   if (wave_invalid(w)) return;
@@ -351,6 +359,14 @@ static void synth_eval_and_register_ks_wave(int w, const char *name, const char 
       if (!one_shot && !is_drum) {
         K k_a = k_get(ctx, 'A');
         if (k_a && k_a->n > 0) {
+          if (sw.harmonics) {
+            if (sw.harmonics[w]) free(sw.harmonics[w]);
+            sw.harmonics[w] = (double *)malloc(k_a->n * sizeof(double));
+            if (sw.harmonics[w]) {
+              memcpy(sw.harmonics[w], k_a->f, k_a->n * sizeof(double));
+              if (sw.num_harmonics) sw.num_harmonics[w] = k_a->n;
+            }
+          }
           wave_generate_mipmaps_ksynth(w, k_a->f, k_a->n);
         } else if (size >= 64) {
           wave_generate_mipmaps_fft(w);

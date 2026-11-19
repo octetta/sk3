@@ -13,7 +13,7 @@ Usage: WB (or wave_bandlimit)
     if (voice < 0 || voice >= synth_config.voice_max) return -1;
     int w = sv.wave_table_index[voice];
     if (w < 0 || w >= synth_config.wave_table_max) return -1;
-    int rc = wave_generate_mipmaps_fft(w);
+    int rc = wave_generate_mipmaps(w);
     if (rc == 0) {
         osc_update_wavetable_mip(voice);
     }
@@ -34,7 +34,7 @@ Usage: WB <slot> (or wave_bandlimit <slot>)
 @code
     int w = (int)args[0];
     if (w < 0 || w >= synth_config.wave_table_max) return -1;
-    int rc = wave_generate_mipmaps_fft(w);
+    int rc = wave_generate_mipmaps(w);
     if (rc == 0 && voice >= 0 && voice < synth_config.voice_max) {
         if (sv.wave_table_index[voice] == w) {
             osc_update_wavetable_mip(voice);

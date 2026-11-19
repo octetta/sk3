@@ -225,6 +225,8 @@ typedef struct {
     float      ** restrict data;
     float      ** restrict mip_data[WAVETABLE_MIP_LEVELS];
     int         * restrict mip_levels;
+    double     ** restrict harmonics;
+    int         * restrict num_harmonics;
     int         * restrict size;
     float       * restrict rate;
     int         * restrict one_shot;
