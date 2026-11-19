@@ -118,6 +118,9 @@ sync-skode: $(SYNTH_GEN_OUTPUTS) wasm
 	mkdir -p $(CURDIR)/../skode/app/editor/wasm
 	cp -f build_wasm/skred_api.js $(CURDIR)/../skode/app/editor/wasm/
 	cp -f build_wasm/skred_api.wasm $(CURDIR)/../skode/app/editor/wasm/
+	cp -f build_wasm/skred_worklet_processor.js $(CURDIR)/../skode/app/editor/wasm/
+	cp -f build_wasm/skred_worklet_engine.js $(CURDIR)/../skode/app/editor/wasm/
+	cp -f build_wasm/skred_worklet_engine.wasm $(CURDIR)/../skode/app/editor/wasm/
 	@echo "==> Running Skode tests..."
 	@if command -v gleam >/dev/null 2>&1 && [ -d "$(CURDIR)/../skode" ]; then \
 		(cd $(CURDIR)/../skode && gleam test && gleam test --target javascript); \

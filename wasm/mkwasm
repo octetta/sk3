@@ -68,3 +68,63 @@ emcc -I"${ROOT_DIR}/src" \
     -Oz
 
 echo "==> Built WASM in ${OUT_DIR}/skred_api.js"
+
+echo "==> Building standalone single-threaded AudioWorklet engine..."
+emcc -I"${ROOT_DIR}/src" \
+    -I"${ROOT_DIR}/src/exp-vfs" \
+    -I"${ROOT_DIR}/src/gen" \
+    -I"${ROOT_DIR}/build" \
+    -DSKRED_MIDI_ENABLED=1 \
+    -DKSYNTH=1 \
+    "${ROOT_DIR}/src/ands.c" \
+    "${ROOT_DIR}/src/miniaudio.c" \
+    "${ROOT_DIR}/src/midi.c" \
+    "${ROOT_DIR}/src/util.c" \
+    "${ROOT_DIR}/src/exp-vfs/miniz.c" \
+    "${ROOT_DIR}/src/exp-vfs/miniz_tdef.c" \
+    "${ROOT_DIR}/src/exp-vfs/miniz_tinfl.c" \
+    "${ROOT_DIR}/src/exp-vfs/miniz_zip.c" \
+    "${ROOT_DIR}/src/exp-vfs/skred_vfs.c" \
+    "${ROOT_DIR}/src/skode-event.c" \
+    "${ROOT_DIR}/src/skode-dict.c" \
+    "${ROOT_DIR}/src/gen/skred_opcodes_gen.c" \
+    "${ROOT_DIR}/src/skqueue.c" \
+    "${ROOT_DIR}/src/seq.c" \
+    "${ROOT_DIR}/src/api.c" \
+    "${ROOT_DIR}/src/synth.c" \
+    "${ROOT_DIR}/src/synth-delay.c" \
+    "${ROOT_DIR}/src/synth-osc.c" \
+    "${ROOT_DIR}/src/synth-filter.c" \
+    "${ROOT_DIR}/src/synth-env.c" \
+    "${ROOT_DIR}/src/synth-voice.c" \
+    "${ROOT_DIR}/src/synth-wave.c" \
+    "${ROOT_DIR}/src/skode.c" \
+    "${ROOT_DIR}/src/skode-session.c" \
+    "${ROOT_DIR}/src/skode-ksynth-bridge.c" \
+    "${ROOT_DIR}/src/skode-loader.c" \
+    "${ROOT_DIR}/src/skode-opcode-exec.c" \
+    "${ROOT_DIR}/src/skode-display-wave.c" \
+    "${ROOT_DIR}/src/skode-diagnostics.c" \
+    "${ROOT_DIR}/src/skode-audio-export.c" \
+    "${ROOT_DIR}/src/skode-words-dsp.c" \
+    "${ROOT_DIR}/src/skode-words-seq.c" \
+    "${ROOT_DIR}/src/skode-words-data.c" \
+    "${ROOT_DIR}/src/skode-words-system.c" \
+    "${ROOT_DIR}/src/polyphony.c" \
+    "${ROOT_DIR}/src/synth-alloc.c" \
+    "${ROOT_DIR}/src/recorder.c" \
+    "${ROOT_DIR}/src/vendor/ksynth/ksynth.c" \
+    -o skred_worklet_engine.js \
+    -s EXPORTED_FUNCTIONS='["_malloc", "_free", "_skred_start_headless", "_skred_process_stereo", "_skred_process_stereo_with_input", "_skred_command", "_skred_stop", "_skred_version", "_skred_scheduled_event_count", "_skred_scheduled_event_snapshot", "_skred_control_event_poll", "_skred_control_event_snapshot", "_skred_control_event_clear", "_skred_control_event_reset", "_skred_dump_wave_base64"]' \
+    -s EXPORTED_RUNTIME_METHODS='["ccall", "cwrap", "FS", "UTF8ToString", "stringToUTF8", "HEAP32", "HEAPU32", "HEAPF32", "HEAPF64", "HEAPU8", "getValue", "setValue"]' \
+    -s FORCE_FILESYSTEM=1 \
+    -s ALLOW_MEMORY_GROWTH=1 \
+    -s INITIAL_MEMORY=64MB \
+    -s MAXIMUM_MEMORY=1GB \
+    -s MODULARIZE=1 \
+    -s EXPORT_ES6=1 \
+    -s MALLOC='emmalloc' \
+    -Oz
+
+echo "==> Built AudioWorklet engine in ${OUT_DIR}/skred_worklet_engine.js"
+cp -f "${SCRIPT_DIR}/skred_worklet_processor.js" "${OUT_DIR}/skred_worklet_processor.js"
