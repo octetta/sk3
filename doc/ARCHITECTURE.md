@@ -483,6 +483,66 @@ so it finishes at that natural end. Unbounded one-shot loops do not have a
 natural end, so they keep normal held ADSR behavior until `l0`; that release
 then exits the loop in the current direction and plays the remaining wave tail.
 
+#### Bandlimited Wavetable Playback & Octave Mipmapping (v1.3.0)
+
+In digital wavetable synthesis, naive playback of a single static single-cycle
+table creates a fundamental conflict between low-register warmth and high-register
+aliasing. A table with 64 harmonics played at A7 ($3,520\text{ Hz}$) produces
+partials exceeding $225\text{ kHz}$ that fold across the Nyquist boundary back into
+the audible band, generating dissonant, inharmonic screeching ("mirror chirps").
+Conversely, capping tables to 16 harmonics to protect the high register starves
+low bass notes ($55\text{ Hz}$), leaving them dull and muffled above $880\text{ Hz}$.
+
+`sk3` resolves this with an **8-level octave mipmapping architecture**:
+
+1. **Octave Harmonic Tiers**:
+   Each cyclic waveform can maintain up to 8 precomputed bandlimited tables, all
+   sharing identical lengths (e.g. 2,048 or 4,096 samples) and exact Fourier phase
+   alignment:
+   - **Level 0** ($f \le 55\text{ Hz}$ / A1): 256 harmonics ($14.08\text{ kHz}$ cutoff at $55\text{ Hz}$)
+   - **Level 1** ($55 < f \le 110\text{ Hz}$ / A2): 128 harmonics
+   - **Level 2** ($110 < f \le 220\text{ Hz}$ / A3): 64 harmonics
+   - **Level 3** ($220 < f \le 440\text{ Hz}$ / A4): 32 harmonics
+   - **Level 4** ($440 < f \le 880\text{ Hz}$ / A5): 16 harmonics
+   - **Level 5** ($880 < f \le 1,760\text{ Hz}$ / A6): 8 harmonics
+   - **Level 6** ($1,760 < f \le 3,520\text{ Hz}$ / A7): 4 harmonics
+   - **Level 7** ($f > 3,520\text{ Hz}$ / A8+): 1 harmonic (pure fundamental sine wave)
+
+2. **Zero Audio Callback Overhead**:
+   The active table pointer `sv.table[voice]` is redirected exclusively outside
+   the inner audio loop—specifically during note triggers, pitch updates (`freq_set`,
+   `osc_set_freq`), wave changes (`wave_set`), and active glissando steps. Inside
+   `synth.c`, the sample render loop accesses `sv.table[voice][idx]` directly:
+   **zero branches, zero bounds checks, and zero pointer indirections** are added
+   to the per-sample inner loop.
+
+3. **Boundary Hysteresis & Phase Continuity**:
+   To prevent rapid chattering or zipper artifacts during fast vibrato, pitch
+   bends, or microtuning near octave boundaries, `osc_update_wavetable_mip()` enforces
+   a **$\pm 5\%$ hysteresis window**:
+   - Upward transitions require $f > \text{threshold} \times 1.05$.
+   - Downward transitions require $f < \text{threshold} \times 0.95$.
+   Because all mip levels are synthesized from the same Fourier components
+   $\sin(\text{phase} \cdot h)$ with zero DC offset, transitions between octave
+   levels produce zero audible clicks or DC thumps. Reversible playback (`b0`, `b1`,
+   `b2`) calculates frequency from `fabsf(phase_inc)`, ensuring bidirectional
+   playback is fully supported.
+
+4. **Synthesis Pipelines & Opcode `WB`**:
+   - **ksynth Pipeline**: `synth_eval_and_register_ks_wave()` automatically inspects
+     the evaluated ksynth context for harmonic amplitude vectors (`A`). When found,
+     `wave_generate_mipmaps_ksynth()` synthesizes all 8 levels directly via Inverse
+     FFT in under 0.05 ms per wave.
+   - **Arbitrary Waveform Pipeline & Opcode `WB`**: Any arbitrary waveform (loaded
+     samples, Korg DW-8000 ROMs, ESQ-1 tables, or user-defined buffers) can be
+     analyzed and mipmapped on demand via `wave_generate_mipmaps_fft()`. In Skode,
+     calling `WB` (or `WB <slot>`) decomposes the target wavetable slot into its
+     Fourier coefficients via forward FFT, zeroes out ultrasonic bins per octave tier,
+     and reconstructs 8 peak-normalized mip levels via Inverse FFT.
+   - **Inspection**: The `W` command displays `cycle (8tbl)` for mipmapped waves, and
+     detailed wave inspection (`<slot> W`) displays the table count and bandlimited
+     tier status.
+
 #### FM and Lookup-Phase Modulation
 
 The optional `FM` feature has three render modes. `FF0` adds a relative

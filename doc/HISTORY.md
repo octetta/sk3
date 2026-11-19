@@ -114,3 +114,9 @@ As `skred` grew in capability, `pulp` was created to solve architectural modular
 - Vendors and tightly integrates **[k-synth](https://github.com/octetta/k-synth)** for lightning-fast array math and vector DSP.
 - Adopts **Osko** as its official mascot.
 - Standardizes on clean semantic versioning, strict backward compatibility, and rock-solid WASM/native dual distribution.
+
+### Milestones & Releases
+
+- **v1.1.0 — PolyBLEP Hard Sync**: Sub-sample anti-aliased oscillator synchronization (`HS` / `HSM`), eliminating harsh edge foldover on phase resets.
+- **v1.2.0 — Hardware LFSR Noise Generator**: Configurable Linear Feedback Shift Register noise generator on `w5` with classic vintage chip presets (MOS 6581/8580 SID 23-bit, Atari POKEY 4/5/9/17-bit, NES 7/15-bit) and full runtime parameter control (`NT`).
+- **v1.3.0 — Bandlimited Wavetable Playback & Opcode `WB`**: 8-level harmonic octave mipmaps via fast frequency-domain IFFT synthesis, eliminating Nyquist foldover distortion in the upper registers while providing 256-harmonic bass richness in the sub-register, with $\pm 5\%$ boundary hysteresis, zero inner-loop CPU overhead, and runtime user ergonomics (`WB`).
