@@ -51,6 +51,20 @@ if (typeof TextEncoder === "undefined") {
   };
 }
 
+if (typeof URL === "undefined") {
+  globalThis.URL = class URL {
+    constructor(url, base) {
+      if (!base) {
+        this.href = String(url);
+      } else {
+        const b = String(base).replace(/\/[^\/]*$/, '/');
+        this.href = b + String(url).replace(/^\/+/, '');
+      }
+    }
+    toString() { return this.href; }
+  };
+}
+
 import createModule from "./skred_worklet_engine.js";
 
 const MAX_EVENTS_BATCH = 64;
@@ -79,13 +93,11 @@ class SkredWorkletProcessor extends AudioWorkletProcessor {
 
   async init(wasmBinary) {
     try {
-      const moduleConfig = {};
+      const moduleConfig = {
+        locateFile: (path) => path
+      };
       if (wasmBinary) {
         moduleConfig.wasmBinary = wasmBinary;
-      } else {
-        moduleConfig.locateFile = (path) => {
-          return new URL(path, import.meta.url).href;
-        };
       }
       this.module = await createModule(moduleConfig);
       const startRes = this.module._skred_start_headless(128, Math.floor(this.sampleRate));
