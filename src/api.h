@@ -70,6 +70,8 @@ char *skred_log(void);
 
 // dump a wavetable as a chunked base64 stream directly to skred_log/stdout
 void skred_dump_wave_base64(int wave_idx);
+float *skred_wave_data(int wave_idx);
+int skred_wave_size(int wave_idx);
 float skred_wave_eval_ms(int wave_idx);
 const char *skred_wave_source(int wave_idx);
 

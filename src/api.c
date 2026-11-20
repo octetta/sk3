@@ -2409,6 +2409,16 @@ void skred_dump_wave_base64(int wave_idx) {
     fflush(stdout);
 }
 
+float *skred_wave_data(int wave_idx) {
+    if (wave_idx < 0 || wave_idx >= synth_config.wave_table_max || !sw.data) return NULL;
+    return sw.data[wave_idx];
+}
+
+int skred_wave_size(int wave_idx) {
+    if (wave_idx < 0 || wave_idx >= synth_config.wave_table_max || !sw.size) return 0;
+    return sw.size[wave_idx];
+}
+
 float skred_wave_eval_ms(int wave_idx) {
     if (wave_idx < 0 || wave_idx >= synth_config.wave_table_max || !sw.eval_ms) return 0.0f;
     return sw.eval_ms[wave_idx];
