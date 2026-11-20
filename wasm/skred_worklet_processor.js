@@ -65,6 +65,29 @@ if (typeof URL === "undefined") {
   };
 }
 
+if (typeof performance === "undefined") {
+  const perfEpoch = Date.now();
+  globalThis.performance = {
+    timeOrigin: perfEpoch,
+    now: () => {
+      if (typeof currentTime === "number" && currentTime > 0) {
+        return currentTime * 1000.0;
+      }
+      return Date.now() - perfEpoch;
+    }
+  };
+}
+
+if (typeof setTimeout === "undefined") {
+  globalThis.setTimeout = (cb, ms, ...args) => { cb(...args); return 0; };
+  globalThis.clearTimeout = () => {};
+}
+
+if (typeof setInterval === "undefined") {
+  globalThis.setInterval = () => 0;
+  globalThis.clearInterval = () => {};
+}
+
 import createModule from "./skred_worklet_engine.js";
 
 const MAX_EVENTS_BATCH = 64;
