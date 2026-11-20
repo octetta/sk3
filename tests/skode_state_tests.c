@@ -2971,6 +2971,8 @@ static void test_sample_accurate_sequence_boundaries(void) {
   seq_state_set(13, 1);
   seq_rewind();
   now = SAMPLE_COUNT_GET();
+  seq(now, ignore_queued_event, count_pattern_program);
+  expect_u64(test, seq_master_tick(), 1, "120 BPM initial tick dispatch");
   expect_int(test, seq_next_boundary(now, now + 6000, &boundary), 1,
              "find 120 BPM tick");
   expect_u64(test, boundary, now + 5513, "120 BPM tick sample");
@@ -2980,6 +2982,8 @@ static void test_sample_accurate_sequence_boundaries(void) {
   expect_int(test, tempo_set(123.0f), 0, "set fractional boundary tempo");
   seq_rewind();
   now = SAMPLE_COUNT_GET();
+  seq(now, ignore_queued_event, count_pattern_program);
+  expect_u64(test, seq_master_tick(), 1, "fractional initial tick dispatch");
   expect_int(test, seq_next_boundary(now, now + 6000, &boundary), 1,
              "find fractional tick");
   expect_u64(test, boundary, now + 5379, "fractional tick sample");

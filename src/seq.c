@@ -400,7 +400,7 @@ int seq_next_boundary(uint64_t now, uint64_t limit, uint64_t *boundary) {
       if (seq_state[p] != SEQ_RUNNING || seq_pattern_length[p] == 0) continue;
       uint64_t modulo = (uint64_t)seq_modulo[p];
       uint64_t remainder = master_tick % modulo;
-      uint64_t candidate = master_tick + (remainder ? modulo - remainder : modulo);
+      uint64_t candidate = master_tick + (remainder ? modulo - remainder : 0);
       if (candidate < pattern_tick) pattern_tick = candidate;
     }
     if (samples_per_step > 0.0 && pattern_tick != UINT64_MAX) {
