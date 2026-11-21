@@ -40,6 +40,27 @@ static inline const char *sk3_theme_name(sk3_theme_t th) {
     }
 }
 
+/* Format status text omitting ports that were not opened */
+static inline void sk3_gui_format_status(int audio_ok, int udp_port_opened, int tcp_port_opened,
+                                         const char *version, char *out_status, size_t out_status_sz) {
+    if (!audio_ok) {
+        snprintf(out_status, out_status_sz, "AUDIO START FAILED");
+        return;
+    }
+    if (udp_port_opened > 0 && tcp_port_opened > 0) {
+        snprintf(out_status, out_status_sz, "RUNNING: sk3 v%s (UDP: %d, TCP: %d)",
+                 version, udp_port_opened, tcp_port_opened);
+    } else if (udp_port_opened > 0) {
+        snprintf(out_status, out_status_sz, "RUNNING: sk3 v%s (UDP: %d)",
+                 version, udp_port_opened);
+    } else if (tcp_port_opened > 0) {
+        snprintf(out_status, out_status_sz, "RUNNING: sk3 v%s (TCP: %d)",
+                 version, tcp_port_opened);
+    } else {
+        snprintf(out_status, out_status_sz, "RUNNING: sk3 v%s", version);
+    }
+}
+
 /* Helper to inspect a dropped file path and format a helpful Skode command or action */
 static inline void sk3_gui_format_file_drop(const char *filepath, char *out_log, size_t out_log_sz,
                                             char *out_cmd, size_t out_cmd_sz) {
@@ -50,7 +71,6 @@ static inline void sk3_gui_format_file_drop(const char *filepath, char *out_log,
     }
     
     if (out_cmd && out_cmd_sz > 0) {
-        /* Check extension */
         const char *dot = strrchr(filepath, '.');
         if (dot) {
             if (strcasecmp(dot, ".skode") == 0 || strcasecmp(dot, ".sk") == 0) {
@@ -62,7 +82,6 @@ static inline void sk3_gui_format_file_drop(const char *filepath, char *out_log,
                 return;
             }
         }
-        /* Default fallback: insert escaped path */
         snprintf(out_cmd, out_cmd_sz, "\"%s\"", filepath);
     }
 }

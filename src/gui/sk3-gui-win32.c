@@ -50,7 +50,7 @@ static HFONT g_hFontMono = NULL;
 
 static sk3_font_size_t g_curFontSize = SK3_FONT_SIZE_MEDIUM;
 static sk3_theme_t g_curTheme = SK3_THEME_DARK;
-static int g_isCollapsed = 0;
+static int g_isCollapsed = 1; /* Start collapsed by default */
 static int g_prevExpandedH = DEFAULT_HEIGHT;
 
 typedef struct {
@@ -256,8 +256,8 @@ static void start_engine(HWND hwnd) {
     
     int udp_port = atoi(udp_str);
     int tcp_port = atoi(tcp_str);
-    if (udp_port <= 0) udp_port = 60440;
-    if (tcp_port <= 0) tcp_port = 60440;
+    if (udp_port < 0) udp_port = 0;
+    if (tcp_port < 0) tcp_port = 0;
     
     skred_stop();
     skred_set_audio_device(-1, -1);
@@ -267,24 +267,30 @@ static void start_engine(HWND hwnd) {
         hp = skred_http_start(tcp_port);
     }
     skred_logger(1);
+
+    int active_udp = (r == 0 && udp_port > 0) ? udp_port : 0;
+    int active_tcp = (hp > 0) ? hp : 0;
     
     char status[256];
     if (r == 0) {
-        snprintf(status, sizeof(status), "● RUNNING: sk3 v%s (UDP: %d, TCP: %d)",
-                 skred_version(), udp_port, hp > 0 ? hp : tcp_port);
+        sk3_gui_format_status(1, active_udp, active_tcp, skred_version(), status, sizeof(status));
         SetDlgItemTextA(hwnd, IDC_STATUS_TEXT, status);
         
         char banner[512];
+        char b_udp[64] = "UDP Port: (not opened)\r\n";
+        char b_tcp[64] = "TCP Port: (not opened)\r\n";
+        if (active_udp > 0) snprintf(b_udp, sizeof(b_udp), "UDP Port: %d (Opcode dispatch & datagrams)\r\n", active_udp);
+        if (active_tcp > 0) snprintf(b_tcp, sizeof(b_tcp), "TCP Port: %d (Raw TCP, HTTP/1.1, WebSocket)\r\n", active_tcp);
+
         snprintf(banner, sizeof(banner),
             "=== sk3 v%s Audio Engine ===\r\n"
             "Status: Active (256 voices, 48kHz audio)\r\n"
-            "UDP Port: %d (Opcode dispatch & datagrams)\r\n"
-            "TCP Port: %d (Raw TCP, HTTP/1.1, WebSocket)\r\n"
+            "%s%s"
             "Engine ready for Skode commands.\r\n",
-            skred_version(), udp_port, hp > 0 ? hp : tcp_port);
+            skred_version(), b_udp, b_tcp);
         append_log(g_hLogOutput, banner);
     } else {
-        snprintf(status, sizeof(status), "○ AUDIO START FAILED (Error %d)", r);
+        sk3_gui_format_status(0, 0, 0, skred_version(), status, sizeof(status));
         SetDlgItemTextA(hwnd, IDC_STATUS_TEXT, status);
         append_log(g_hLogOutput, "Error: Failed to initialize audio output device.\r\n");
     }
@@ -299,11 +305,12 @@ static void toggle_console(HWND hwnd) {
     if (g_isCollapsed) {
         g_prevExpandedH = rc.bottom - rc.top;
         SetWindowPos(hwnd, NULL, 0, 0, cur_w, COLLAPSED_HEIGHT, SWP_NOMOVE | SWP_NOZORDER);
-        SetWindowTextA(g_hBtnToggle, "Console ▼");
+        SetWindowTextA(g_hBtnToggle, "Console [Show]");
     } else {
         int target_h = (g_prevExpandedH > COLLAPSED_HEIGHT + 100) ? g_prevExpandedH : DEFAULT_HEIGHT;
         SetWindowPos(hwnd, NULL, 0, 0, cur_w, target_h, SWP_NOMOVE | SWP_NOZORDER);
-        SetWindowTextA(g_hBtnToggle, "Console ▲");
+        SetWindowTextA(g_hBtnToggle, "Console [Hide]");
+        SetFocus(g_hCmdInput);
     }
 }
 
@@ -351,9 +358,9 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
                 232, 45, 68, 26, hwnd, (HMENU)IDC_BTN_RESTART, NULL, NULL);
             SendMessageA(hBtnRestart, WM_SETFONT, (WPARAM)g_hFontUI, TRUE);
 
-            g_hBtnToggle = CreateWindowExA(0, "BUTTON", "Console ▲",
+            g_hBtnToggle = CreateWindowExA(0, "BUTTON", "Console [Show]",
                 WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP,
-                306, 45, 88, 26, hwnd, (HMENU)IDC_BTN_TOGGLE, NULL, NULL);
+                306, 45, 95, 26, hwnd, (HMENU)IDC_BTN_TOGGLE, NULL, NULL);
             SendMessageA(g_hBtnToggle, WM_SETFONT, (WPARAM)g_hFontUI, TRUE);
 
             g_hBtnTheme = CreateWindowExA(0, "BUTTON", "Theme: Dark",
@@ -566,7 +573,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     }
 
     int width = DEFAULT_WIDTH;
-    int height = DEFAULT_HEIGHT;
+    int height = COLLAPSED_HEIGHT;
     int screenW = GetSystemMetrics(SM_CXSCREEN);
     int screenH = GetSystemMetrics(SM_CYSCREEN);
     int x = (screenW - width) / 2;

@@ -117,8 +117,8 @@
 - (void)startEngine {
     int udpPort = [self.udpField.stringValue intValue];
     int tcpPort = [self.tcpField.stringValue intValue];
-    if (udpPort <= 0) udpPort = 60440;
-    if (tcpPort <= 0) tcpPort = 60440;
+    if (udpPort < 0) udpPort = 0;
+    if (tcpPort < 0) tcpPort = 0;
 
     skred_stop();
     skred_set_audio_device(-1, -1);
@@ -129,20 +129,29 @@
     }
     skred_logger(1);
 
+    int activeUdp = (r == 0 && udpPort > 0) ? udpPort : 0;
+    int activeTcp = (hp > 0) ? hp : 0;
+
+    char statusBuf[256];
     if (r == 0) {
-        self.statusLabel.stringValue = [NSString stringWithFormat:@"● RUNNING: sk3 v%s (UDP: %d, TCP: %d)",
-                                         skred_version(), udpPort, hp > 0 ? hp : tcpPort];
+        sk3_gui_format_status(1, activeUdp, activeTcp, skred_version(), statusBuf, sizeof(statusBuf));
+        self.statusLabel.stringValue = [NSString stringWithUTF8String:statusBuf];
+
+        char bUdp[64] = "UDP Port: (not opened)\n";
+        char bTcp[64] = "TCP Port: (not opened)\n";
+        if (activeUdp > 0) snprintf(bUdp, sizeof(bUdp), "UDP Port: %d (Opcode dispatch & datagrams)\n", activeUdp);
+        if (activeTcp > 0) snprintf(bTcp, sizeof(bTcp), "TCP Port: %d (Raw TCP, HTTP/1.1, WebSocket)\n", activeTcp);
 
         NSString *banner = [NSString stringWithFormat:
             @"=== sk3 v%s Audio Engine ===\n"
             "Status: Active (256 voices, 48kHz audio)\n"
-            "UDP Port: %d (Opcode dispatch & datagrams)\n"
-            "TCP Port: %d (Raw TCP, HTTP/1.1, WebSocket)\n"
+            "%s%s"
             "Engine ready for Skode commands.\n",
-            skred_version(), udpPort, hp > 0 ? hp : tcpPort];
+            skred_version(), bUdp, bTcp];
         [self appendLog:banner];
     } else {
-        self.statusLabel.stringValue = [NSString stringWithFormat:@"○ AUDIO START FAILED (Error %d)", r];
+        sk3_gui_format_status(0, 0, 0, skred_version(), statusBuf, sizeof(statusBuf));
+        self.statusLabel.stringValue = [NSString stringWithUTF8String:statusBuf];
         self.statusLabel.textColor = [NSColor systemRedColor];
         [self appendLog:@"Error: Failed to initialize audio output device.\n"];
     }
@@ -186,7 +195,7 @@
         CGFloat diff = frame.size.height - COLLAPSED_HEIGHT;
         frame.origin.y += diff;
         frame.size.height = COLLAPSED_HEIGHT;
-        self.toggleBtn.title = @"Console ▼";
+        self.toggleBtn.title = @"Console [Show]";
         self.cmdLbl.hidden = YES;
         self.cmdInput.hidden = YES;
         self.sendBtn.hidden = YES;
@@ -200,7 +209,7 @@
         CGFloat diff = targetH - frame.size.height;
         frame.origin.y -= diff;
         frame.size.height = targetH;
-        self.toggleBtn.title = @"Console ▲";
+        self.toggleBtn.title = @"Console [Hide]";
         self.cmdLbl.hidden = NO;
         self.cmdInput.hidden = NO;
         self.sendBtn.hidden = NO;
@@ -209,6 +218,7 @@
         self.copyLogBtn.hidden = NO;
         self.clearBtn.hidden = NO;
         self.logScroll.hidden = NO;
+        [self.window makeFirstResponder:self.cmdInput];
     }
     [self.window setFrame:frame display:YES animate:YES];
 }
@@ -331,11 +341,11 @@
     self.currentDraft = @"";
     self.curFontSize = SK3_FONT_SIZE_MEDIUM;
     self.curTheme = SK3_THEME_DARK;
-    self.isCollapsed = NO;
+    self.isCollapsed = YES;
     self.prevExpandedH = DEFAULT_HEIGHT;
 
-    // Create Main Window
-    NSRect frame = NSMakeRect(0, 0, DEFAULT_WIDTH, DEFAULT_HEIGHT);
+    // Create Main Window (Collapsed by default!)
+    NSRect frame = NSMakeRect(0, 0, DEFAULT_WIDTH, COLLAPSED_HEIGHT);
     NSUInteger styleMask = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable |
                            NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable;
     self.window = [[NSWindow alloc] initWithContentRect:frame
@@ -402,8 +412,8 @@
     [content addSubview:self.restartBtn];
 
     // Console Toggle Button
-    self.toggleBtn = [NSButton buttonWithTitle:@"Console ▲" target:self action:@selector(toggleConsole:)];
-    self.toggleBtn.frame = NSMakeRect(318, 504, 95, 28);
+    self.toggleBtn = [NSButton buttonWithTitle:@"Console [Show]" target:self action:@selector(toggleConsole:)];
+    self.toggleBtn.frame = NSMakeRect(318, 504, 110, 28);
     self.toggleBtn.bezelStyle = NSBezelStyleRounded;
     self.toggleBtn.autoresizingMask = NSViewMinYMargin;
     [content addSubview:self.toggleBtn];
@@ -494,6 +504,16 @@
 
     self.logScroll.documentView = self.logView;
     [content addSubview:self.logScroll];
+
+    // Hide console elements initially because we start collapsed
+    self.cmdLbl.hidden = YES;
+    self.cmdInput.hidden = YES;
+    self.sendBtn.hidden = YES;
+    self.testBtn.hidden = YES;
+    self.silenceBtn.hidden = YES;
+    self.copyLogBtn.hidden = YES;
+    self.clearBtn.hidden = YES;
+    self.logScroll.hidden = YES;
 
     [self applyTheme];
 

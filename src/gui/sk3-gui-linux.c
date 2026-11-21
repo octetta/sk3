@@ -7,14 +7,16 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/time.h>
+#include <sys/select.h>
 
 #include "api.h"
 #include "skred.h"
+#include "udp.h"
 #include "sk3_gui_common.h"
 
 /* UI Dimensions */
-#define DEFAULT_WIDTH  640
-#define DEFAULT_HEIGHT 580
+#define DEFAULT_WIDTH    640
+#define DEFAULT_HEIGHT   580
 #define COLLAPSED_HEIGHT 115
 
 /* Atoms */
@@ -42,8 +44,8 @@ static GC gc = 0;
 static Visual *visual = NULL;
 static Colormap cmap = 0;
 static int win_w = DEFAULT_WIDTH;
-static int win_h = DEFAULT_HEIGHT;
-static int is_collapsed = 0;
+static int win_h = COLLAPSED_HEIGHT; /* Start COLLAPSED by default! */
+static int is_collapsed = 1;          /* Default: NO output area initially */
 static int prev_expanded_h = DEFAULT_HEIGHT;
 
 /* Fonts */
@@ -60,13 +62,15 @@ typedef struct {
     unsigned long border_pixel;
     unsigned long btn_pixel;
     unsigned long btn_active_pixel;
+    unsigned long input_bg_pixel;
+    unsigned long cursor_pixel;
+    unsigned long status_ok_pixel;
+    unsigned long status_err_pixel;
+    unsigned long sel_bg_pixel;
     XftColor text_color;
     XftColor text_dim;
     XftColor status_ok;
     XftColor status_err;
-    XftColor input_bg;
-    XftColor input_border;
-    XftColor cursor_color;
 } gui_palette_t;
 
 static gui_palette_t pal;
@@ -76,12 +80,15 @@ static char udp_port_str[16] = "60440";
 static char tcp_port_str[16] = "60440";
 static char status_banner[256] = "Starting audio engine...";
 static int server_running = 0;
+static int active_udp_port = 0;
+static int active_tcp_port = 0;
 
-/* Command Input */
+/* Command Input & Blinking Cursor */
 #define MAX_CMD_LEN 2048
 static char cmd_buf[MAX_CMD_LEN] = {0};
 static int cursor_pos = 0;
-static int active_focus = 2; /* 0: udp, 1: tcp, 2: cmd input */
+static int cursor_visible = 1;
+static int active_focus = 2; /* 0: udp, 1: tcp, 2: cmd input, 3: log */
 
 /* Command History */
 #define MAX_HISTORY 128
@@ -94,8 +101,18 @@ static char current_draft[MAX_CMD_LEN] = {0};
 #define LOG_MAX_LINES 2000
 static char *log_lines[LOG_MAX_LINES];
 static int log_line_count = 0;
-static int scroll_offset = 0; /* from top */
+static int scroll_offset = 0;
 static int lines_per_page = 20;
+
+/* Text Selection in Log */
+static int sel_active = 0;
+static int sel_start_line = -1;
+static int sel_start_col = -1;
+static int sel_end_line = -1;
+static int sel_end_col = -1;
+static int drag_anchor_line = -1;
+static int drag_anchor_col = -1;
+static int is_mouse_dragging = 0;
 
 /* Clipboard Buffer */
 static char *clipboard_owned_text = NULL;
@@ -110,7 +127,6 @@ static void append_log(const char *text);
 static void set_clipboard(const char *text);
 static void request_paste(void);
 
-/* Color helper */
 static XftColor parse_xft_color(const char *name) {
     XftColor col;
     XftColorAllocName(dpy, visual, cmap, name, &col);
@@ -132,13 +148,15 @@ static void update_palette(void) {
             pal.border_pixel = parse_pixel("#403014");
             pal.btn_pixel = parse_pixel("#281e0e");
             pal.btn_active_pixel = parse_pixel("#3c2c16");
+            pal.input_bg_pixel = parse_pixel("#181208");
+            pal.cursor_pixel = parse_pixel("#ffb000");
+            pal.status_ok_pixel = parse_pixel("#ffc020");
+            pal.status_err_pixel = parse_pixel("#ff3333");
+            pal.sel_bg_pixel = parse_pixel("#503408");
             pal.text_color = parse_xft_color("#ffb000");
             pal.text_dim = parse_xft_color("#996600");
             pal.status_ok = parse_xft_color("#ffc020");
             pal.status_err = parse_xft_color("#ff3333");
-            pal.input_bg = parse_xft_color("#161006");
-            pal.input_border = parse_xft_color("#ffb000");
-            pal.cursor_color = parse_xft_color("#ffb000");
             break;
         case SK3_THEME_GREEN:
             pal.bg_pixel = parse_pixel("#081208");
@@ -146,13 +164,15 @@ static void update_palette(void) {
             pal.border_pixel = parse_pixel("#143c14");
             pal.btn_pixel = parse_pixel("#122a12");
             pal.btn_active_pixel = parse_pixel("#1c421c");
+            pal.input_bg_pixel = parse_pixel("#0c1a0c");
+            pal.cursor_pixel = parse_pixel("#39ff14");
+            pal.status_ok_pixel = parse_pixel("#00ff66");
+            pal.status_err_pixel = parse_pixel("#ff3333");
+            pal.sel_bg_pixel = parse_pixel("#004d1a");
             pal.text_color = parse_xft_color("#39ff14");
             pal.text_dim = parse_xft_color("#1c8008");
             pal.status_ok = parse_xft_color("#00ff66");
             pal.status_err = parse_xft_color("#ff3333");
-            pal.input_bg = parse_xft_color("#0a180a");
-            pal.input_border = parse_xft_color("#39ff14");
-            pal.cursor_color = parse_xft_color("#39ff14");
             break;
         case SK3_THEME_LIGHT:
             pal.bg_pixel = parse_pixel("#f2f3f5");
@@ -160,13 +180,15 @@ static void update_palette(void) {
             pal.border_pixel = parse_pixel("#cccccc");
             pal.btn_pixel = parse_pixel("#e4e6eb");
             pal.btn_active_pixel = parse_pixel("#d0d3d9");
+            pal.input_bg_pixel = parse_pixel("#ffffff");
+            pal.cursor_pixel = parse_pixel("#000000");
+            pal.status_ok_pixel = parse_pixel("#008020");
+            pal.status_err_pixel = parse_pixel("#cc0000");
+            pal.sel_bg_pixel = parse_pixel("#b3d7ff");
             pal.text_color = parse_xft_color("#1a1a1a");
             pal.text_dim = parse_xft_color("#666666");
             pal.status_ok = parse_xft_color("#008020");
             pal.status_err = parse_xft_color("#cc0000");
-            pal.input_bg = parse_xft_color("#ffffff");
-            pal.input_border = parse_xft_color("#999999");
-            pal.cursor_color = parse_xft_color("#000000");
             break;
         case SK3_THEME_DARK:
         default:
@@ -175,13 +197,15 @@ static void update_palette(void) {
             pal.border_pixel = parse_pixel("#3a3a40");
             pal.btn_pixel = parse_pixel("#2e2e34");
             pal.btn_active_pixel = parse_pixel("#42424b");
+            pal.input_bg_pixel = parse_pixel("#202024");
+            pal.cursor_pixel = parse_pixel("#39ff14");
+            pal.status_ok_pixel = parse_pixel("#39ff14");
+            pal.status_err_pixel = parse_pixel("#ff4444");
+            pal.sel_bg_pixel = parse_pixel("#264f78");
             pal.text_color = parse_xft_color("#e0e0e0");
             pal.text_dim = parse_xft_color("#88888e");
             pal.status_ok = parse_xft_color("#39ff14");
             pal.status_err = parse_xft_color("#ff4444");
-            pal.input_bg = parse_xft_color("#202024");
-            pal.input_border = parse_xft_color("#4a4a52");
-            pal.cursor_color = parse_xft_color("#39ff14");
             break;
     }
 }
@@ -227,7 +251,6 @@ static void append_log(const char *text) {
         if (!next) break;
         p = next + 1;
     }
-    // Auto-scroll to bottom
     if (log_line_count > lines_per_page) {
         scroll_offset = log_line_count - lines_per_page;
     } else {
@@ -238,11 +261,9 @@ static void append_log(const char *text) {
 
 static void execute_command(const char *raw_cmd) {
     if (!raw_cmd) return;
-    // Trim
     while (*raw_cmd == ' ' || *raw_cmd == '\t') raw_cmd++;
     if (!raw_cmd[0]) return;
 
-    // Add to history
     if (history_count == 0 || strcmp(history[history_count - 1], raw_cmd) != 0) {
         if (history_count < MAX_HISTORY) {
             history[history_count++] = strdup(raw_cmd);
@@ -274,40 +295,51 @@ static void execute_command(const char *raw_cmd) {
 
     cmd_buf[0] = '\0';
     cursor_pos = 0;
+    cursor_visible = 1;
     render_all();
 }
 
 static void start_engine(void) {
-    int udp_port = atoi(udp_port_str);
-    int tcp_port = atoi(tcp_port_str);
-    if (udp_port <= 0) udp_port = 60440;
-    if (tcp_port <= 0) tcp_port = 60440;
+    int req_udp = atoi(udp_port_str);
+    int req_tcp = atoi(tcp_port_str);
+    if (req_udp < 0) req_udp = 0;
+    if (req_tcp < 0) req_tcp = 0;
 
     skred_stop();
     skred_set_audio_device(-1, -1);
-    int r = skred_start(128, 256, udp_port);
+    int r = skred_start(128, 256, req_udp);
     int hp = 0;
-    if (tcp_port > 0) {
-        hp = skred_http_start(tcp_port);
+    if (req_tcp > 0) {
+        hp = skred_http_start(req_tcp);
     }
     skred_logger(1);
 
     if (r == 0) {
         server_running = 1;
-        snprintf(status_banner, sizeof(status_banner), "● RUNNING: sk3 v%s (UDP: %d, TCP: %d)",
-                 skred_version(), udp_port, hp > 0 ? hp : tcp_port);
+        active_udp_port = (req_udp > 0) ? skred_udp_info() : 0;
+        active_tcp_port = (hp > 0) ? hp : 0;
+
+        sk3_gui_format_status(1, active_udp_port, active_tcp_port, skred_version(),
+                              status_banner, sizeof(status_banner));
+
         char banner[512];
+        char banner_udp[64] = "UDP Port: (not opened)\n";
+        char banner_tcp[64] = "TCP Port: (not opened)\n";
+        if (active_udp_port > 0) snprintf(banner_udp, sizeof(banner_udp), "UDP Port: %d (Opcode dispatch & datagrams)\n", active_udp_port);
+        if (active_tcp_port > 0) snprintf(banner_tcp, sizeof(banner_tcp), "TCP Port: %d (Raw TCP, HTTP/1.1, WebSocket)\n", active_tcp_port);
+
         snprintf(banner, sizeof(banner),
             "=== sk3 v%s Audio Engine ===\n"
             "Status: Active (256 voices, 48kHz audio)\n"
-            "UDP Port: %d (Opcode dispatch & datagrams)\n"
-            "TCP Port: %d (Raw TCP, HTTP/1.1, WebSocket)\n"
+            "%s%s"
             "Engine ready for Skode commands.",
-            skred_version(), udp_port, hp > 0 ? hp : tcp_port);
+            skred_version(), banner_udp, banner_tcp);
         append_log(banner);
     } else {
         server_running = 0;
-        snprintf(status_banner, sizeof(status_banner), "○ AUDIO START FAILED (Error %d)", r);
+        active_udp_port = 0;
+        active_tcp_port = 0;
+        snprintf(status_banner, sizeof(status_banner), "AUDIO START FAILED (Error %d)", r);
         append_log("Error: Failed to initialize audio output device.");
     }
     render_all();
@@ -316,7 +348,7 @@ static void start_engine(void) {
 /* Button bounds */
 typedef struct {
     int x, y, w, h;
-    const char *label;
+    char label[32];
     int id;
 } btn_t;
 
@@ -336,16 +368,23 @@ enum {
 static btn_t buttons[MAX_BUTTONS];
 static int num_buttons = 0;
 
-static void add_btn(int id, int x, int y, int w, int h, const char *label) {
-    if (num_buttons < MAX_BUTTONS) {
-        buttons[num_buttons].id = id;
-        buttons[num_buttons].x = x;
-        buttons[num_buttons].y = y;
-        buttons[num_buttons].w = w;
-        buttons[num_buttons].h = h;
-        buttons[num_buttons].label = label;
-        num_buttons++;
-    }
+static void add_btn_auto(int id, int x, int y, const char *label) {
+    if (num_buttons >= MAX_BUTTONS) return;
+
+    XGlyphInfo ext;
+    XftTextExtentsUtf8(dpy, xft_font_ui, (const FcChar8 *)label, (int)strlen(label), &ext);
+    int w = ext.width + 18;
+    if (w < 60) w = 60;
+    int h = xft_font_ui->height + 8;
+    if (h < 26) h = 26;
+
+    buttons[num_buttons].id = id;
+    buttons[num_buttons].x = x;
+    buttons[num_buttons].y = y;
+    buttons[num_buttons].w = w;
+    buttons[num_buttons].h = h;
+    snprintf(buttons[num_buttons].label, sizeof(buttons[num_buttons].label), "%s", label);
+    num_buttons++;
 }
 
 static void draw_button(const btn_t *b) {
@@ -364,91 +403,126 @@ static void draw_button(const btn_t *b) {
 static void render_all(void) {
     if (!backbuffer || win_w <= 0 || win_h <= 0) return;
 
-    // Fill background
     XSetForeground(dpy, gc, pal.bg_pixel);
     XFillRectangle(dpy, backbuffer, gc, 0, 0, win_w, win_h);
     num_buttons = 0;
 
-    // Status Banner (Top)
-    XftDrawStringUtf8(xft_draw, server_running ? &pal.status_ok : &pal.status_err,
-                      xft_font_ui, 20, 26, (const FcChar8 *)status_banner, (int)strlen(status_banner));
+    // Draw graphical circle for status indicator (NO UNICODE SYMBOLS!)
+    XSetForeground(dpy, gc, server_running ? pal.status_ok_pixel : pal.status_err_pixel);
+    XFillArc(dpy, backbuffer, gc, 20, 16, 12, 12, 0, 360 * 64);
+    XSetForeground(dpy, gc, pal.border_pixel);
+    XDrawArc(dpy, backbuffer, gc, 20, 16, 12, 12, 0, 360 * 64);
 
-    // Server Controls Row (y = 48)
-    XftDrawStringUtf8(xft_draw, &pal.text_dim, xft_font_ui, 20, 68, (const FcChar8 *)"UDP:", 4);
+    // Status Banner Text
+    XftDrawStringUtf8(xft_draw, server_running ? &pal.status_ok : &pal.status_err,
+                      xft_font_ui, 40, 26, (const FcChar8 *)status_banner, (int)strlen(status_banner));
+
+    // Server Controls Row (y = 50)
+    int cy = 50;
+    XftDrawStringUtf8(xft_draw, &pal.text_dim, xft_font_ui, 20, cy + 18, (const FcChar8 *)"UDP:", 4);
     
     // UDP Input box
-    XSetForeground(dpy, gc, (active_focus == 0) ? pal.border_pixel : pal.panel_pixel);
-    XFillRectangle(dpy, backbuffer, gc, 55, 50, 65, 26);
-    XSetForeground(dpy, gc, (active_focus == 0) ? pal.status_ok.color.alpha : pal.border_pixel);
-    XDrawRectangle(dpy, backbuffer, gc, 55, 50, 65, 26);
-    XftDrawStringUtf8(xft_draw, &pal.text_color, xft_font_mono, 60, 68, (const FcChar8 *)udp_port_str, (int)strlen(udp_port_str));
+    XSetForeground(dpy, gc, (active_focus == 0) ? pal.input_bg_pixel : pal.panel_pixel);
+    XFillRectangle(dpy, backbuffer, gc, 55, cy, 60, 26);
+    XSetForeground(dpy, gc, (active_focus == 0) ? pal.status_ok_pixel : pal.border_pixel);
+    XDrawRectangle(dpy, backbuffer, gc, 55, cy, 60, 26);
+    XftDrawStringUtf8(xft_draw, &pal.text_color, xft_font_mono, 60, cy + 18, (const FcChar8 *)udp_port_str, (int)strlen(udp_port_str));
 
-    XftDrawStringUtf8(xft_draw, &pal.text_dim, xft_font_ui, 130, 68, (const FcChar8 *)"TCP:", 4);
+    XftDrawStringUtf8(xft_draw, &pal.text_dim, xft_font_ui, 122, cy + 18, (const FcChar8 *)"TCP:", 4);
     
     // TCP Input box
-    XSetForeground(dpy, gc, (active_focus == 1) ? pal.border_pixel : pal.panel_pixel);
-    XFillRectangle(dpy, backbuffer, gc, 165, 50, 65, 26);
-    XSetForeground(dpy, gc, (active_focus == 1) ? pal.status_ok.color.alpha : pal.border_pixel);
-    XDrawRectangle(dpy, backbuffer, gc, 165, 50, 65, 26);
-    XftDrawStringUtf8(xft_draw, &pal.text_color, xft_font_mono, 170, 68, (const FcChar8 *)tcp_port_str, (int)strlen(tcp_port_str));
+    XSetForeground(dpy, gc, (active_focus == 1) ? pal.input_bg_pixel : pal.panel_pixel);
+    XFillRectangle(dpy, backbuffer, gc, 155, cy, 60, 26);
+    XSetForeground(dpy, gc, (active_focus == 1) ? pal.status_ok_pixel : pal.border_pixel);
+    XDrawRectangle(dpy, backbuffer, gc, 155, cy, 60, 26);
+    XftDrawStringUtf8(xft_draw, &pal.text_color, xft_font_mono, 160, cy + 18, (const FcChar8 *)tcp_port_str, (int)strlen(tcp_port_str));
 
-    // Server Action Buttons
-    add_btn(BTN_RESTART, 240, 50, 80, 26, "Restart");
-    add_btn(BTN_TOGGLE_CONSOLE, 330, 50, 110, 26, is_collapsed ? "Console ▼" : "Console ▲");
-    add_btn(BTN_THEME, 450, 50, 95, 26, sk3_theme_name(cur_theme));
-    add_btn(BTN_FONT, 555, 50, 65, 26, (cur_font_size == SK3_FONT_SIZE_SMALL) ? "Font: S" :
-                                        (cur_font_size == SK3_FONT_SIZE_LARGE) ? "Font: L" : "Font: M");
+    // Dynamic button positions on top row
+    int bx = 224;
+    add_btn_auto(BTN_RESTART, bx, cy, "Restart");
+    bx += buttons[num_buttons - 1].w + 8;
 
-    if (!is_collapsed && win_h > COLLAPSED_HEIGHT + 100) {
+    add_btn_auto(BTN_TOGGLE_CONSOLE, bx, cy, is_collapsed ? "Console [Show]" : "Console [Hide]");
+    bx += buttons[num_buttons - 1].w + 8;
+
+    add_btn_auto(BTN_THEME, bx, cy, sk3_theme_name(cur_theme));
+    bx += buttons[num_buttons - 1].w + 8;
+
+    const char *f_name = (cur_font_size == SK3_FONT_SIZE_SMALL) ? "Font: S" :
+                         (cur_font_size == SK3_FONT_SIZE_LARGE) ? "Font: L" : "Font: M";
+    add_btn_auto(BTN_FONT, bx, cy, f_name);
+
+    if (!is_collapsed && win_h > COLLAPSED_HEIGHT + 80) {
         // Divider
         XSetForeground(dpy, gc, pal.border_pixel);
-        XDrawLine(dpy, backbuffer, gc, 20, 90, win_w - 20, 90);
+        XDrawLine(dpy, backbuffer, gc, 20, 88, win_w - 20, 88);
 
         // Skode Command Input Label
-        XftDrawStringUtf8(xft_draw, &pal.text_dim, xft_font_ui, 20, 114,
+        XftDrawStringUtf8(xft_draw, &pal.text_dim, xft_font_ui, 20, 108,
                           (const FcChar8 *)"Skode Command (Enter to run, Up/Down for history):", 51);
 
-        // Command Input Field (Monospaced)
-        int input_w = win_w - 120;
-        XSetForeground(dpy, gc, pal.input_bg.color.alpha);
-        XFillRectangle(dpy, backbuffer, gc, 20, 124, input_w, 28);
-        XSetForeground(dpy, gc, (active_focus == 2) ? pal.btn_active_pixel : pal.border_pixel);
-        XDrawRectangle(dpy, backbuffer, gc, 20, 124, input_w, 28);
+        // Command Input Field
+        int send_w = 70;
+        int input_w = win_w - 40 - send_w - 10;
+        if (input_w < 100) input_w = 100;
+        int input_y = 118;
+        int input_h = xft_font_mono->height + 10;
+        if (input_h < 28) input_h = 28;
+
+        XSetForeground(dpy, gc, pal.input_bg_pixel);
+        XFillRectangle(dpy, backbuffer, gc, 20, input_y, input_w, input_h);
+        XSetForeground(dpy, gc, (active_focus == 2) ? pal.status_ok_pixel : pal.border_pixel);
+        XDrawRectangle(dpy, backbuffer, gc, 20, input_y, input_w, input_h);
 
         // Render command text
         if (cmd_buf[0]) {
-            XftDrawStringUtf8(xft_draw, &pal.text_color, xft_font_mono, 26, 143,
+            XftDrawStringUtf8(xft_draw, &pal.text_color, xft_font_mono, 26, input_y + xft_font_mono->ascent + 5,
                               (const FcChar8 *)cmd_buf, (int)strlen(cmd_buf));
         }
 
-        // Draw cursor if input is focused
-        if (active_focus == 2) {
+        // Draw blinking cursor if input is focused
+        if (active_focus == 2 && cursor_visible) {
             XGlyphInfo ext_cursor = {0};
             if (cursor_pos > 0) {
                 XftTextExtentsUtf8(dpy, xft_font_mono, (const FcChar8 *)cmd_buf, cursor_pos, &ext_cursor);
             }
             int cx = 26 + ext_cursor.width;
-            XSetForeground(dpy, gc, pal.cursor_color.color.alpha);
-            XFillRectangle(dpy, backbuffer, gc, cx, 128, 2, 20);
+            XSetForeground(dpy, gc, pal.cursor_pixel);
+            XFillRectangle(dpy, backbuffer, gc, cx, input_y + 4, 2, input_h - 8);
         }
 
         // Send Button
-        add_btn(BTN_SEND, win_w - 90, 124, 70, 28, "Send");
+        add_btn_auto(BTN_SEND, 20 + input_w + 10, input_y, "Send");
 
         // Quick Actions Row
-        add_btn(BTN_TEST, 20, 162, 90, 26, "Test Tone");
-        add_btn(BTN_SILENCE, 120, 162, 120, 26, "Silence (O Z0)");
-        add_btn(BTN_COPY_LOG, win_w - 180, 162, 80, 26, "Copy Log");
-        add_btn(BTN_CLEAR_LOG, win_w - 90, 162, 70, 26, "Clear Log");
+        int qy = input_y + input_h + 10;
+        int qx = 20;
+        add_btn_auto(BTN_TEST, qx, qy, "Test Tone");
+        qx += buttons[num_buttons - 1].w + 8;
+        add_btn_auto(BTN_SILENCE, qx, qy, "Silence (O Z0)");
 
-        // Output Log Area (Monospace)
-        int log_y = 198;
+        // Right-aligned buttons: Clear Log and Copy Log
+        int right_x = win_w - 20;
+        add_btn_auto(BTN_CLEAR_LOG, 0, qy, "Clear Log");
+        buttons[num_buttons - 1].x = right_x - buttons[num_buttons - 1].w;
+        right_x = buttons[num_buttons - 1].x - 8;
+
+        add_btn_auto(BTN_COPY_LOG, 0, qy, "Copy Log");
+        buttons[num_buttons - 1].x = right_x - buttons[num_buttons - 1].w;
+
+        // Output Log Area
+        int log_y = qy + buttons[num_buttons - 1].h + 10;
         int log_h = win_h - log_y - 15;
         if (log_h > 40) {
             XSetForeground(dpy, gc, pal.panel_pixel);
             XFillRectangle(dpy, backbuffer, gc, 20, log_y, win_w - 40, log_h);
             XSetForeground(dpy, gc, pal.border_pixel);
             XDrawRectangle(dpy, backbuffer, gc, 20, log_y, win_w - 40, log_h);
+
+            XGlyphInfo ext_m;
+            XftTextExtentsUtf8(dpy, xft_font_mono, (const FcChar8 *)"M", 1, &ext_m);
+            int char_w = ext_m.xOff > 0 ? ext_m.xOff : ext_m.width;
+            if (char_w <= 0) char_w = 8;
 
             int line_h = xft_font_mono->height + 2;
             if (line_h <= 0) line_h = 16;
@@ -466,12 +540,28 @@ static void render_all(void) {
                 if (l_idx >= log_line_count) break;
                 const char *line = log_lines[l_idx];
                 if (line) {
+                    int line_len = (int)strlen(line);
+                    // Draw text selection highlight if active!
+                    if (sel_active && l_idx >= sel_start_line && l_idx <= sel_end_line) {
+                        int c1 = (l_idx == sel_start_line) ? sel_start_col : 0;
+                        int c2 = (l_idx == sel_end_line) ? sel_end_col : line_len;
+                        if (c1 < 0) c1 = 0;
+                        if (c2 > line_len) c2 = line_len;
+                        if (c1 < c2) {
+                            int hx = 28 + c1 * char_w;
+                            int hw = (c2 - c1) * char_w;
+                            int hy = draw_y - xft_font_mono->ascent;
+                            XSetForeground(dpy, gc, pal.sel_bg_pixel);
+                            XFillRectangle(dpy, backbuffer, gc, hx, hy, hw, line_h);
+                        }
+                    }
+
                     XftColor *tc = &pal.text_color;
                     if (line[0] == '>') tc = &pal.status_ok;
                     else if (strncmp(line, "Error", 5) == 0) tc = &pal.status_err;
                     else if (line[0] == '[') tc = &pal.text_dim;
                     XftDrawStringUtf8(xft_draw, tc, xft_font_mono, 28, draw_y,
-                                      (const FcChar8 *)line, (int)strlen(line));
+                                      (const FcChar8 *)line, line_len);
                 }
                 draw_y += line_h;
             }
@@ -501,7 +591,6 @@ static void render_all(void) {
         draw_button(&buttons[i]);
     }
 
-    // Blit to screen
     XCopyArea(dpy, backbuffer, win, gc, 0, 0, win_w, win_h, 0, 0);
     XFlush(dpy);
 }
@@ -549,15 +638,15 @@ static void handle_paste_notify(XSelectionEvent *sev) {
     int format;
     unsigned long nitems, bytes_after;
     unsigned char *prop = NULL;
-    if (XGetWindowProperty(dpy, win, sev->property, 0, 4096, True, AnyPropertyType,
+    if (XGetWindowProperty(dpy, win, atom_sk3_paste, 0, 4096, True, AnyPropertyType,
                            &type, &format, &nitems, &bytes_after, &prop) == Success && prop) {
-        // Insert paste text at cursor in cmd_buf
         size_t plen = strlen((char *)prop);
         size_t cur_len = strlen(cmd_buf);
         if (cur_len + plen < MAX_CMD_LEN - 1) {
             memmove(cmd_buf + cursor_pos + plen, cmd_buf + cursor_pos, cur_len - cursor_pos + 1);
             memcpy(cmd_buf + cursor_pos, prop, plen);
             cursor_pos += (int)plen;
+            cursor_visible = 1;
         }
         XFree(prop);
         render_all();
@@ -579,7 +668,7 @@ static void handle_xdnd_position(XClientMessageEvent *cme) {
     resp.message_type = atom_xdnd_status;
     resp.format = 32;
     resp.data.l[0] = win;
-    resp.data.l[1] = 1; /* accept flag */
+    resp.data.l[1] = 1;
     resp.data.l[2] = 0;
     resp.data.l[3] = 0;
     resp.data.l[4] = atom_xdnd_action_copy;
@@ -605,7 +694,6 @@ static void handle_dropped_uri_list(const char *uri_data) {
             strncpy(uri, p, len);
             uri[len] = '\0';
 
-            // Decode file:// URI to path
             char path[1024] = {0};
             const char *src = uri + 7;
             char *dst = path;
@@ -629,6 +717,7 @@ static void handle_dropped_uri_list(const char *uri_data) {
             if (cmd[0]) {
                 snprintf(cmd_buf, sizeof(cmd_buf), "%s", cmd);
                 cursor_pos = (int)strlen(cmd_buf);
+                cursor_visible = 1;
                 active_focus = 2;
                 render_all();
             }
@@ -653,7 +742,53 @@ static void handle_dropped_uri_list(const char *uri_data) {
     }
 }
 
+static char *get_selected_log_text(void) {
+    if (!sel_active || sel_start_line < 0 || sel_end_line >= log_line_count) return NULL;
+    size_t cap = 2048;
+    char *res = (char *)malloc(cap);
+    if (!res) return NULL;
+    res[0] = '\0';
+    size_t cur_len = 0;
+
+    for (int l = sel_start_line; l <= sel_end_line; l++) {
+        const char *line = log_lines[l];
+        if (!line) continue;
+        int llen = (int)strlen(line);
+        int c1 = (l == sel_start_line) ? sel_start_col : 0;
+        int c2 = (l == sel_end_line) ? sel_end_col : llen;
+        if (c1 < 0) c1 = 0;
+        if (c2 > llen) c2 = llen;
+        if (c1 < c2) {
+            int seg_len = c2 - c1;
+            while (cur_len + seg_len + 2 >= cap) {
+                cap *= 2;
+                char *n = (char *)realloc(res, cap);
+                if (!n) { free(res); return NULL; }
+                res = n;
+            }
+            memcpy(res + cur_len, line + c1, seg_len);
+            cur_len += seg_len;
+            if (l < sel_end_line) {
+                res[cur_len++] = '\n';
+            }
+            res[cur_len] = '\0';
+        }
+    }
+    return res;
+}
+
 static void copy_full_log(void) {
+    if (sel_active) {
+        char *sel_text = get_selected_log_text();
+        if (sel_text && sel_text[0]) {
+            set_clipboard(sel_text);
+            free(sel_text);
+            append_log("[Selection copied to clipboard]");
+            return;
+        }
+        if (sel_text) free(sel_text);
+    }
+
     size_t total_len = 0;
     for (int i = 0; i < log_line_count; i++) {
         if (log_lines[i]) total_len += strlen(log_lines[i]) + 1;
@@ -680,6 +815,8 @@ static void toggle_console(void) {
         win_h = COLLAPSED_HEIGHT;
     } else {
         win_h = (prev_expanded_h > COLLAPSED_HEIGHT + 100) ? prev_expanded_h : DEFAULT_HEIGHT;
+        active_focus = 2; /* Automatically focus input when expanded */
+        cursor_visible = 1;
     }
     XResizeWindow(dpy, win, win_w, win_h);
 }
@@ -698,7 +835,6 @@ int main(int argc, char **argv) {
     visual = DefaultVisual(dpy, screen);
     cmap = DefaultColormap(dpy, screen);
 
-    // Initialize Atoms
     atom_wm_delete_window = XInternAtom(dpy, "WM_DELETE_WINDOW", False);
     atom_clipboard = XInternAtom(dpy, "CLIPBOARD", False);
     atom_utf8_string = XInternAtom(dpy, "UTF8_STRING", False);
@@ -718,30 +854,50 @@ int main(int argc, char **argv) {
     update_palette();
     load_fonts();
 
-    // Create Window
+    // Create Window with COLLAPSED_HEIGHT by default (no output area initially!)
+    win_w = DEFAULT_WIDTH;
+    win_h = COLLAPSED_HEIGHT;
+    is_collapsed = 1;
+
     XSetWindowAttributes swa;
     swa.background_pixel = pal.bg_pixel;
     swa.event_mask = ExposureMask | KeyPressMask | ButtonPressMask | ButtonReleaseMask |
-                     StructureNotifyMask | PointerMotionMask;
+                     StructureNotifyMask | PointerMotionMask | FocusChangeMask;
 
     win = XCreateWindow(dpy, root, 100, 100, win_w, win_h, 0,
                         CopyFromParent, InputOutput, visual,
                         CWBackPixel | CWEventMask, &swa);
 
-    // Set Window Title and WM_CLASS
     XStoreName(dpy, win, "sk3 - Audio Engine & Control Server");
     XClassHint class_hint = { "sk3-gui", "Sk3" };
     XSetClassHint(dpy, win, &class_hint);
 
-    // Enable WM close notification
+    // Set WM hints to accept keyboard input
+    XWMHints *hints = XAllocWMHints();
+    if (hints) {
+        hints->flags = InputHint | StateHint;
+        hints->input = True;
+        hints->initial_state = NormalState;
+        XSetWMHints(dpy, win, hints);
+        XFree(hints);
+    }
+
+    // Set Window Size Hints
+    XSizeHints *sh = XAllocSizeHints();
+    if (sh) {
+        sh->flags = PMinSize;
+        sh->min_width = 540;
+        sh->min_height = COLLAPSED_HEIGHT;
+        XSetWMNormalHints(dpy, win, sh);
+        XFree(sh);
+    }
+
     XSetWMProtocols(dpy, win, &atom_wm_delete_window, 1);
 
-    // Register XDnD Awareness (version 5)
     Atom xdnd_version = 5;
     XChangeProperty(dpy, win, atom_xdnd_aware, XA_ATOM, 32,
                     PropModeReplace, (unsigned char *)&xdnd_version, 1);
 
-    // Create GC and Backbuffer
     gc = XCreateGC(dpy, win, 0, NULL);
     backbuffer = XCreatePixmap(dpy, win, win_w, win_h, DefaultDepth(dpy, screen));
     xft_draw = XftDrawCreate(dpy, backbuffer, visual, cmap);
@@ -750,11 +906,44 @@ int main(int argc, char **argv) {
     start_engine();
 
     int running = 1;
-    XEvent ev;
+    int x11_fd = ConnectionNumber(dpy);
+    struct timeval last_blink;
+    gettimeofday(&last_blink, NULL);
+
     while (running) {
+        // Handle cursor blinking timer when no events are queued
+        while (XPending(dpy) == 0) {
+            struct timeval now;
+            gettimeofday(&now, NULL);
+            long elapsed_ms = (now.tv_sec - last_blink.tv_sec) * 1000 + (now.tv_usec - last_blink.tv_usec) / 1000;
+            long remain_ms = 500 - elapsed_ms;
+            if (remain_ms <= 0) {
+                cursor_visible = !cursor_visible;
+                last_blink = now;
+                if (!is_collapsed && active_focus == 2) {
+                    render_all();
+                }
+                remain_ms = 500;
+            }
+
+            fd_set fds;
+            FD_ZERO(&fds);
+            FD_SET(x11_fd, &fds);
+            struct timeval tv;
+            tv.tv_sec = remain_ms / 1000;
+            tv.tv_usec = (remain_ms % 1000) * 1000;
+            int sr = select(x11_fd + 1, &fds, NULL, NULL, &tv);
+            if (sr > 0) break;
+        }
+
+        XEvent ev;
         XNextEvent(dpy, &ev);
         switch (ev.type) {
             case Expose:
+                render_all();
+                break;
+
+            case FocusIn:
                 render_all();
                 break;
 
@@ -771,22 +960,21 @@ int main(int argc, char **argv) {
                 break;
 
             case ButtonPress: {
+                XSetInputFocus(dpy, win, RevertToParent, CurrentTime);
                 int mx = ev.xbutton.x;
                 int my = ev.xbutton.y;
 
-                // Mouse wheel scrolling in log view
-                if (ev.xbutton.button == 4) { // Scroll Up
+                if (ev.xbutton.button == 4) {
                     if (scroll_offset > 0) scroll_offset -= 3;
                     if (scroll_offset < 0) scroll_offset = 0;
                     render_all();
                     break;
-                } else if (ev.xbutton.button == 5) { // Scroll Down
+                } else if (ev.xbutton.button == 5) {
                     if (scroll_offset + lines_per_page < log_line_count) scroll_offset += 3;
                     render_all();
                     break;
                 }
 
-                // Check clicks on buttons
                 int clicked_btn = 0;
                 for (int i = 0; i < num_buttons; i++) {
                     btn_t *b = &buttons[i];
@@ -810,24 +998,109 @@ int main(int argc, char **argv) {
                     render_all();
                 } else if (clicked_btn == BTN_SEND) {
                     execute_command(cmd_buf);
+                    active_focus = 2;
                 } else if (clicked_btn == BTN_TEST) {
                     execute_command("v0 w1 f440 a-6 l1;");
+                    active_focus = 2;
                 } else if (clicked_btn == BTN_SILENCE) {
                     execute_command("O Z0; S-1;");
+                    active_focus = 2;
                 } else if (clicked_btn == BTN_COPY_LOG) {
                     copy_full_log();
+                    active_focus = 2;
                 } else if (clicked_btn == BTN_CLEAR_LOG) {
                     for (int i = 0; i < log_line_count; i++) free(log_lines[i]);
                     log_line_count = 0;
                     scroll_offset = 0;
+                    sel_active = 0;
                     render_all();
+                    active_focus = 2;
                 } else {
-                    // Focus checking
-                    if (my >= 50 && my <= 76) {
+                    if (my >= 45 && my <= 80) {
                         if (mx >= 55 && mx <= 120) active_focus = 0; // UDP
-                        else if (mx >= 165 && mx <= 230) active_focus = 1; // TCP
-                    } else if (!is_collapsed && my >= 124 && my <= 152 && mx >= 20 && mx <= win_w - 100) {
+                        else if (mx >= 155 && mx <= 220) active_focus = 1; // TCP
+                        sel_active = 0;
+                    } else if (!is_collapsed && my >= 110 && my <= 155) {
                         active_focus = 2; // Command input
+                        cursor_visible = 1;
+                        gettimeofday(&last_blink, NULL);
+                        sel_active = 0;
+                    } else if (!is_collapsed && my > 190 && my < win_h - 15 && mx >= 20 && mx <= win_w - 40) {
+                        active_focus = 3; // Log area selection
+                        int line_h = xft_font_mono->height + 2;
+                        if (line_h <= 0) line_h = 16;
+                        XGlyphInfo ext_m;
+                        XftTextExtentsUtf8(dpy, xft_font_mono, (const FcChar8 *)"M", 1, &ext_m);
+                        int char_w = ext_m.xOff > 0 ? ext_m.xOff : ext_m.width;
+                        if (char_w <= 0) char_w = 8;
+
+                        int qy = 118 + xft_font_mono->height + 20;
+                        int log_y = qy + 36;
+                        int cl = scroll_offset + (my - log_y) / line_h;
+                        if (cl < 0) cl = 0;
+                        if (cl >= log_line_count) cl = log_line_count > 0 ? log_line_count - 1 : 0;
+                        int cc = (mx - 28) / char_w;
+                        if (cc < 0) cc = 0;
+
+                        drag_anchor_line = cl;
+                        drag_anchor_col = cc;
+                        sel_start_line = cl;
+                        sel_start_col = cc;
+                        sel_end_line = cl;
+                        sel_end_col = cc;
+                        sel_active = 0;
+                        is_mouse_dragging = 1;
+                    }
+                    render_all();
+                }
+                break;
+            }
+
+            case MotionNotify: {
+                if (is_mouse_dragging && (ev.xmotion.state & Button1Mask)) {
+                    int my = ev.xmotion.y;
+                    int mx = ev.xmotion.x;
+                    int line_h = xft_font_mono->height + 2;
+                    if (line_h <= 0) line_h = 16;
+                    XGlyphInfo ext_m;
+                    XftTextExtentsUtf8(dpy, xft_font_mono, (const FcChar8 *)"M", 1, &ext_m);
+                    int char_w = ext_m.xOff > 0 ? ext_m.xOff : ext_m.width;
+                    if (char_w <= 0) char_w = 8;
+
+                    int qy = 118 + xft_font_mono->height + 20;
+                    int log_y = qy + 36;
+                    int cur_l = scroll_offset + (my - log_y) / line_h;
+                    if (cur_l < 0) cur_l = 0;
+                    if (cur_l >= log_line_count) cur_l = log_line_count > 0 ? log_line_count - 1 : 0;
+                    int cur_c = (mx - 28) / char_w;
+                    if (cur_c < 0) cur_c = 0;
+
+                    if (drag_anchor_line < cur_l || (drag_anchor_line == cur_l && drag_anchor_col <= cur_c)) {
+                        sel_start_line = drag_anchor_line;
+                        sel_start_col = drag_anchor_col;
+                        sel_end_line = cur_l;
+                        sel_end_col = cur_c;
+                    } else {
+                        sel_start_line = cur_l;
+                        sel_start_col = cur_c;
+                        sel_end_line = drag_anchor_line;
+                        sel_end_col = drag_anchor_col;
+                    }
+                    sel_active = (sel_start_line != sel_end_line || sel_start_col != sel_end_col);
+                    render_all();
+                }
+                break;
+            }
+
+            case ButtonRelease: {
+                if (ev.xbutton.button == 1 && is_mouse_dragging) {
+                    is_mouse_dragging = 0;
+                    if (sel_active) {
+                        char *sel_text = get_selected_log_text();
+                        if (sel_text) {
+                            set_clipboard(sel_text);
+                            free(sel_text);
+                        }
                     }
                     render_all();
                 }
@@ -835,16 +1108,33 @@ int main(int argc, char **argv) {
             }
 
             case KeyPress: {
-                char kbuf[32] = {0};
+                char kbuf[64] = {0};
                 KeySym ksym = 0;
                 int len = XLookupString(&ev.xkey, kbuf, sizeof(kbuf) - 1, &ksym, NULL);
                 int is_ctrl = (ev.xkey.state & ControlMask) != 0;
 
-                if (active_focus == 2) { // Command input
+                cursor_visible = 1;
+                gettimeofday(&last_blink, NULL);
+
+                if (is_ctrl && (ksym == XK_c || ksym == XK_C)) {
+                    if (sel_active) {
+                        char *sel_text = get_selected_log_text();
+                        if (sel_text) {
+                            set_clipboard(sel_text);
+                            free(sel_text);
+                            append_log("[Selection copied to clipboard]");
+                        }
+                    } else if (active_focus == 2) {
+                        set_clipboard(cmd_buf);
+                    } else {
+                        copy_full_log();
+                    }
+                    break;
+                }
+
+                if (active_focus == 2) {
                     if (is_ctrl && (ksym == XK_v || ksym == XK_V)) {
                         request_paste();
-                    } else if (is_ctrl && (ksym == XK_c || ksym == XK_C)) {
-                        set_clipboard(cmd_buf);
                     } else if (is_ctrl && (ksym == XK_x || ksym == XK_X)) {
                         set_clipboard(cmd_buf);
                         cmd_buf[0] = '\0';
@@ -858,12 +1148,12 @@ int main(int argc, char **argv) {
                     } else if (ksym == XK_Up) {
                         if (history_count > 0) {
                             if (history_idx == -1) {
-                                strncpy(current_draft, cmd_buf, sizeof(current_draft));
+                                snprintf(current_draft, sizeof(current_draft), "%s", cmd_buf);
                                 history_idx = history_count - 1;
                             } else if (history_idx > 0) {
                                 history_idx--;
                             }
-                            strncpy(cmd_buf, history[history_idx], sizeof(cmd_buf) - 1);
+                            snprintf(cmd_buf, sizeof(cmd_buf), "%s", history[history_idx]);
                             cursor_pos = (int)strlen(cmd_buf);
                             render_all();
                         }
@@ -902,16 +1192,16 @@ int main(int argc, char **argv) {
                             memmove(cmd_buf + cursor_pos, cmd_buf + cursor_pos + 1, strlen(cmd_buf) - cursor_pos);
                             render_all();
                         }
-                    } else if (len > 0 && (unsigned char)kbuf[0] >= 32) {
+                    } else if (!is_ctrl && len > 0 && (unsigned char)kbuf[0] >= 32) {
                         size_t clen = strlen(cmd_buf);
-                        if (clen < MAX_CMD_LEN - 2) {
-                            memmove(cmd_buf + cursor_pos + 1, cmd_buf + cursor_pos, clen - cursor_pos + 1);
-                            cmd_buf[cursor_pos] = kbuf[0];
-                            cursor_pos++;
+                        if (clen + len < MAX_CMD_LEN - 1) {
+                            memmove(cmd_buf + cursor_pos + len, cmd_buf + cursor_pos, clen - cursor_pos + 1);
+                            memcpy(cmd_buf + cursor_pos, kbuf, len);
+                            cursor_pos += len;
                             render_all();
                         }
                     }
-                } else if (active_focus == 0 || active_focus == 1) { // Ports
+                } else if (active_focus == 0 || active_focus == 1) {
                     char *p_str = (active_focus == 0) ? udp_port_str : tcp_port_str;
                     if (ksym == XK_BackSpace) {
                         size_t l = strlen(p_str);
