@@ -18,6 +18,19 @@ BUILD_DIR ?= build
 BUILD_TYPE ?= Release
 DIST_DIR ?= dist
 
+HOST_OS ?= $(shell uname -s | tr '[:upper:]' '[:lower:]')
+HOST_ARCH ?= $(shell uname -m)
+MACOS_UNIVERSAL ?= 0
+MACOS_UNIVERSAL_ARCHS ?= x86_64;arm64
+DIST_PLATFORM ?= $(if $(filter 1 true yes,$(MACOS_UNIVERSAL)),macos-universal,$(HOST_OS)-$(HOST_ARCH))
+DIST_PLATFORM_ROOT ?= $(DIST_DIR)/$(DIST_PLATFORM)
+DIST_PREFIX ?= $(DIST_PLATFORM_ROOT)/skred-$(VERSION)-maxed
+CMAKE_PLATFORM_ARGS ?= $(if $(filter 1 true yes,$(MACOS_UNIVERSAL)),-DCMAKE_OSX_ARCHITECTURES="$(MACOS_UNIVERSAL_ARCHS)",)
+
+ZIG_LOCAL_CACHE_DIR ?= /tmp/sk3-zig-cache
+ZIG_GLOBAL_CACHE_DIR ?= /tmp/sk3-zig-global-cache
+ZIG_ENV = $(CMAKE) -E env ZIG_LOCAL_CACHE_DIR=$(ZIG_LOCAL_CACHE_DIR) ZIG_GLOBAL_CACHE_DIR=$(ZIG_GLOBAL_CACHE_DIR)
+
 DIST_WASM_PLATFORM_ROOT ?= $(DIST_DIR)/wasm
 DIST_WASM_PREFIX ?= $(DIST_WASM_PLATFORM_ROOT)/skred-$(VERSION)-maxed
 DIST_WASM_ARCHIVE ?= $(DIST_WASM_PLATFORM_ROOT)/skred-$(VERSION)-maxed.zip
@@ -27,7 +40,7 @@ DIST_LINUX_PLATFORM_ROOT ?= $(DIST_DIR)/linux-x86_64
 DIST_LINUX_PREFIX ?= $(DIST_LINUX_PLATFORM_ROOT)/skred-$(VERSION)-maxed
 DIST_LINUX_ARCHIVE ?= $(DIST_LINUX_PLATFORM_ROOT)/skred-$(VERSION)-maxed-linux-x86_64.tar.gz
 
-.PHONY: default help all gen test test-schema native clean wasm wasm-test dist-api dist-api-wasm sync-skode dsp-demos dsp-experiments
+.PHONY: default help all gen test test-schema native clean wasm wasm-test dist-api dist-api-wasm dist-api-linux-armhf dist-api-linux-aarch64 dist-api-windows windows-cross-libs sync-skode dsp-demos dsp-experiments
 
 default: help
 
@@ -79,7 +92,7 @@ test-schema: $(SYNTH_GEN_OUTPUTS)
 	./src/gen/test_schema_bounds
 
 native: gen
-	$(CMAKE) -B $(BUILD_DIR) -S . -DCMAKE_BUILD_TYPE=$(BUILD_TYPE)
+	$(CMAKE) -B $(BUILD_DIR) -S . -DCMAKE_BUILD_TYPE=$(BUILD_TYPE) $(CMAKE_PLATFORM_ARGS)
 	$(CMAKE) --build $(BUILD_DIR)
 
 dsp-experiments: native
@@ -114,10 +127,35 @@ dist-api-wasm: wasm wasm-test
 	@ls -la $(DIST_WASM_ARCHIVE) $(DIST_WASM_RELEASE_ARCHIVE)
 
 dist-api: native
-	mkdir -p $(DIST_LINUX_PREFIX)
-	$(CMAKE) --install $(BUILD_DIR) --prefix $(DIST_LINUX_PREFIX)
-	$(CMAKE) -E chdir $(DIST_LINUX_PLATFORM_ROOT) $(CMAKE) -E tar czf skred-$(VERSION)-maxed-linux-x86_64.tar.gz --format=gnutar skred-$(VERSION)-maxed
-	@echo "==> Linux distribution archive ready at $(DIST_LINUX_ARCHIVE)"
+	mkdir -p $(DIST_PREFIX)
+	$(CMAKE) --install $(BUILD_DIR) --prefix $(DIST_PREFIX)
+	@if [ "$(DIST_PLATFORM)" = "macos-universal" ]; then \
+		$(CMAKE) -E chdir $(DIST_PLATFORM_ROOT) $(CMAKE) -E tar czf skred-$(VERSION)-maxed.tar.gz --format=gnutar skred-$(VERSION)-maxed; \
+	else \
+		$(CMAKE) -E chdir $(DIST_PLATFORM_ROOT) $(CMAKE) -E tar czf skred-$(VERSION)-maxed-linux-x86_64.tar.gz --format=gnutar skred-$(VERSION)-maxed; \
+	fi
+	@echo "==> Distribution archive ready at $(DIST_PLATFORM_ROOT)"
+
+dist-api-linux-armhf: gen
+	$(CMAKE) -B build_linux_armhf -S . -DCMAKE_BUILD_TYPE=$(BUILD_TYPE) -DCMAKE_C_COMPILER="arm-linux-gnueabihf-gcc"
+	$(CMAKE) --build build_linux_armhf --target api api_shared mini-skred
+	$(CMAKE) --install build_linux_armhf --prefix $(DIST_DIR)/linux-armhf/skred-$(VERSION)-maxed
+	$(CMAKE) -E chdir $(DIST_DIR)/linux-armhf $(CMAKE) -E tar czf skred-$(VERSION)-maxed-linux-armhf.tar.gz --format=gnutar skred-$(VERSION)-maxed
+
+dist-api-linux-aarch64: gen
+	$(CMAKE) -B build_linux_aarch64 -S . -DCMAKE_BUILD_TYPE=$(BUILD_TYPE) -DCMAKE_C_COMPILER="aarch64-linux-gnu-gcc"
+	$(CMAKE) --build build_linux_aarch64 --target api api_shared mini-skred
+	$(CMAKE) --install build_linux_aarch64 --prefix $(DIST_DIR)/linux-aarch64/skred-$(VERSION)-maxed
+	$(CMAKE) -E chdir $(DIST_DIR)/linux-aarch64 $(CMAKE) -E tar czf skred-$(VERSION)-maxed-linux-aarch64.tar.gz --format=gnutar skred-$(VERSION)-maxed
+
+windows-cross-libs: gen
+	$(ZIG_ENV) $(CMAKE) --preset cross-windows-zig-maxed
+	$(ZIG_ENV) $(CMAKE) --build --preset cross-windows-zig-maxed --target api api_shared mini-skred
+	$(CMAKE) --install build_cross_windows_zig_maxed --prefix $(DIST_DIR)/windows-x86_64/skred-$(VERSION)-maxed
+
+dist-api-windows: windows-cross-libs
+	$(CMAKE) -E chdir $(DIST_DIR)/windows-x86_64 $(CMAKE) -E tar cf skred-$(VERSION)-maxed.zip \
+		--format=zip skred-$(VERSION)-maxed
 
 sync-skode: $(SYNTH_GEN_OUTPUTS) wasm
 	@echo "==> Synchronizing Gleam code in skode with skred..."
@@ -139,4 +177,4 @@ sync-skode: $(SYNTH_GEN_OUTPUTS) wasm
 	@echo "==> skred and skode are synchronized!"
 
 clean:
-	rm -rf $(BUILD_DIR) build_wasm $(DIST_DIR) src/gen/test_schema_bounds tools/mksynth tools/mkopcodes *-history.txt .skred_history .sk3_history
+	rm -rf $(BUILD_DIR) build_wasm build_linux_armhf build_linux_aarch64 build_cross_windows_zig_maxed $(DIST_DIR) src/gen/test_schema_bounds tools/mksynth tools/mkopcodes *-history.txt .skred_history .sk3_history

@@ -86,6 +86,181 @@ jobs:
           path: release-assets/*
           if-no-files-found: error
 
+  linux-armhf:
+    needs: metadata
+    runs-on: ubuntu-24.04
+    env:
+      VERSION: ${{ needs.metadata.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ARM32 cross-build dependencies
+        run: |
+          sudo dpkg --add-architecture armhf
+          sudo dpkg --add-architecture arm64
+          distro="$(. /etc/os-release && echo "${UBUNTU_CODENAME:-noble}")"
+          if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+            sudo sed -i 's/^Types: deb/Types: deb\nArchitectures: amd64/g' /etc/apt/sources.list.d/ubuntu.sources
+            cat << APT | sudo tee /etc/apt/sources.list.d/ports.sources
+          Types: deb
+          URIs: http://ports.ubuntu.com/ubuntu-ports
+          Suites: ${distro} ${distro}-updates ${distro}-backports ${distro}-security
+          Components: main universe restricted multiverse
+          Architectures: armhf arm64
+          APT
+          else
+            sudo sed -i 's/^deb http/deb [arch=amd64] http/g' /etc/apt/sources.list
+            cat << APT | sudo tee /etc/apt/sources.list.d/ports.list
+          deb [arch=armhf,arm64] http://ports.ubuntu.com/ubuntu-ports ${distro} main restricted universe multiverse
+          deb [arch=armhf,arm64] http://ports.ubuntu.com/ubuntu-ports ${distro}-updates main restricted universe multiverse
+          deb [arch=armhf,arm64] http://ports.ubuntu.com/ubuntu-ports ${distro}-backports main restricted universe multiverse
+          deb [arch=armhf,arm64] http://ports.ubuntu.com/ubuntu-ports ${distro}-security main restricted universe multiverse
+          APT
+          fi
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-linux-gnueabihf libasound2-dev:armhf ninja-build cmake
+
+      - name: Build maxed Linux ARM32 API distribution
+        run: make dist-api-linux-armhf
+
+      - name: Verify and name release asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          source="dist/linux-armhf/skred-${VERSION}-maxed-linux-armhf.tar.gz"
+          asset="skred-${VERSION}-maxed-linux-armhf.tar.gz"
+          test -f "$source"
+          tar -tzf "$source" > archive-contents.txt
+          grep -q "skred-${VERSION}-maxed/include/skred/api.h" archive-contents.txt
+          mkdir -p release-assets
+          cp "$source" "release-assets/$asset"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: api-linux-armhf
+          path: release-assets/*
+          if-no-files-found: error
+
+  linux-aarch64:
+    needs: metadata
+    runs-on: ubuntu-24.04
+    env:
+      VERSION: ${{ needs.metadata.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ARM64 cross-build dependencies
+        run: |
+          sudo dpkg --add-architecture armhf
+          sudo dpkg --add-architecture arm64
+          distro="$(. /etc/os-release && echo "${UBUNTU_CODENAME:-noble}")"
+          if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+            sudo sed -i 's/^Types: deb/Types: deb\nArchitectures: amd64/g' /etc/apt/sources.list.d/ubuntu.sources
+            cat << APT | sudo tee /etc/apt/sources.list.d/ports.sources
+          Types: deb
+          URIs: http://ports.ubuntu.com/ubuntu-ports
+          Suites: ${distro} ${distro}-updates ${distro}-backports ${distro}-security
+          Components: main universe restricted multiverse
+          Architectures: armhf arm64
+          APT
+          else
+            sudo sed -i 's/^deb http/deb [arch=amd64] http/g' /etc/apt/sources.list
+            cat << APT | sudo tee /etc/apt/sources.list.d/ports.list
+          deb [arch=armhf,arm64] http://ports.ubuntu.com/ubuntu-ports ${distro} main restricted universe multiverse
+          deb [arch=armhf,arm64] http://ports.ubuntu.com/ubuntu-ports ${distro}-updates main restricted universe multiverse
+          deb [arch=armhf,arm64] http://ports.ubuntu.com/ubuntu-ports ${distro}-backports main restricted universe multiverse
+          deb [arch=armhf,arm64] http://ports.ubuntu.com/ubuntu-ports ${distro}-security main restricted universe multiverse
+          APT
+          fi
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu libasound2-dev:arm64 ninja-build cmake
+
+      - name: Build maxed Linux ARM64 API distribution
+        run: make dist-api-linux-aarch64
+
+      - name: Verify and name release asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          source="dist/linux-aarch64/skred-${VERSION}-maxed-linux-aarch64.tar.gz"
+          asset="skred-${VERSION}-maxed-linux-aarch64.tar.gz"
+          test -f "$source"
+          tar -tzf "$source" > archive-contents.txt
+          grep -q "skred-${VERSION}-maxed/include/skred/api.h" archive-contents.txt
+          mkdir -p release-assets
+          cp "$source" "release-assets/$asset"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: api-linux-aarch64
+          path: release-assets/*
+          if-no-files-found: error
+
+  macos:
+    needs: metadata
+    runs-on: macos-latest
+    env:
+      VERSION: ${{ needs.metadata.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build maxed universal macOS API distribution
+        run: make dist-api MACOS_UNIVERSAL=1
+
+      - name: Verify and name release asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          source="dist/macos-universal/skred-${VERSION}-maxed.tar.gz"
+          asset="skred-${VERSION}-maxed-macos-universal.tar.gz"
+          test -f "$source"
+          tar -tzf "$source" > archive-contents.txt
+          grep -q "skred-${VERSION}-maxed/include/skred/api.h" archive-contents.txt
+          mkdir -p release-assets
+          cp "$source" "release-assets/$asset"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: api-macos-universal
+          path: release-assets/*
+          if-no-files-found: error
+
+  windows:
+    needs: metadata
+    runs-on: ubuntu-24.04
+    env:
+      VERSION: ${{ needs.metadata.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Install Windows cross-build dependencies
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: Build maxed Windows API distribution
+        run: make dist-api-windows
+
+      - name: Verify and name release asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          source="dist/windows-x86_64/skred-${VERSION}-maxed.zip"
+          asset="skred-${VERSION}-maxed-windows-x86_64.zip"
+          test -f "$source"
+          unzip -l "$source" > archive-contents.txt
+          grep -q "skred-${VERSION}-maxed/include/skred/api.h" archive-contents.txt
+          mkdir -p release-assets
+          cp "$source" "release-assets/$asset"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: api-windows-x86_64
+          path: release-assets/*
+          if-no-files-found: error
+
   wasm:
     needs: metadata
     runs-on: ubuntu-24.04
@@ -127,6 +302,10 @@ jobs:
       - metadata
       - test
       - linux
+      - linux-armhf
+      - linux-aarch64
+      - macos
+      - windows
       - wasm
     runs-on: ubuntu-24.04
     permissions:
@@ -152,6 +331,10 @@ jobs:
           set -euo pipefail
           expected=(
             "skred-${VERSION}-maxed-linux-x86_64.tar.gz"
+            "skred-${VERSION}-maxed-linux-armhf.tar.gz"
+            "skred-${VERSION}-maxed-linux-aarch64.tar.gz"
+            "skred-${VERSION}-maxed-macos-universal.tar.gz"
+            "skred-${VERSION}-maxed-windows-x86_64.zip"
             "skred-${VERSION}-maxed-wasm.zip"
           )
           for asset in "${expected[@]}"; do
