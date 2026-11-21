@@ -393,7 +393,7 @@
     // Create Main Window
     NSRect frame = NSMakeRect(0, 0, initW, initH);
     NSUInteger styleMask = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable |
-                           NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable;
+                           NSWindowStyleMaskResizable;
     self.window = [[NSWindow alloc] initWithContentRect:frame
                                               styleMask:styleMask
                                                 backing:NSBackingStoreBuffered

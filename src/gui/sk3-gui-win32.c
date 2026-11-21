@@ -649,7 +649,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         WS_EX_APPWINDOW | WS_EX_ACCEPTFILES,
         "Sk3GuiClass",
         win_title,
-        WS_OVERLAPPEDWINDOW,
+        WS_OVERLAPPEDWINDOW & ~WS_MINIMIZEBOX,
         x, y, width, height,
         NULL, NULL, hInstance, NULL
     );
