@@ -1185,7 +1185,7 @@ int main(int argc, char **argv) {
     XSetWindowAttributes swa;
     swa.background_pixel = pal.bg_pixel;
     swa.event_mask = ExposureMask | KeyPressMask | ButtonPressMask | ButtonReleaseMask |
-                     StructureNotifyMask | PointerMotionMask | FocusChangeMask | PropertyChangeMask;
+                     StructureNotifyMask | PointerMotionMask | FocusChangeMask;
 
     win = XCreateWindow(dpy, root, 100, 100, win_w, win_h, 0,
                         CopyFromParent, InputOutput, visual,
