@@ -831,6 +831,312 @@ static inline int sk_glissando_step(float *current_inc, float target_inc, int mo
     }
 }
 
+/* =========================================================================
+ * 9. Physical Modeling & Plucked String Synthesis (Karplus-Strong)
+ * ========================================================================= */
+
+#define SK_KARPLUS_MAX_LEN 2048
+
+typedef struct {
+    float buffer[SK_KARPLUS_MAX_LEN];
+    int size;               /* Buffer length (must be <= SK_KARPLUS_MAX_LEN) */
+    int write_pos;
+    int int_delay;          /* Integer delay portion */
+    float frac_delay;       /* Sub-sample delay [0.0, 1.0) */
+    float damping;          /* 1-pole lowpass filter weight (0.0 to 1.0) */
+    float feedback;         /* Loop decay gain (typically 0.98 to 0.9995) */
+    float filter_state;     /* 1-pole lowpass memory */
+    float allpass_in;       /* Fractional allpass input memory x[n-1] */
+    float allpass_out;      /* Fractional allpass output memory y[n-1] */
+    float allpass_coeff;    /* Allpass 'a' coefficient */
+    float dc_x;             /* DC blocker input memory */
+    float dc_y;             /* DC blocker output memory */
+    float sample_rate;
+} sk_karplus_t;
+
+/* Initialize Karplus-Strong string engine */
+static inline void sk_karplus_init(sk_karplus_t *ks, float sample_rate) {
+    if (!ks) return;
+    memset(ks, 0, sizeof(*ks));
+    ks->size = SK_KARPLUS_MAX_LEN;
+    ks->sample_rate = sample_rate > 1000.0f ? sample_rate : 48000.0f;
+    ks->damping = 0.5f;
+    ks->feedback = 0.992f;
+}
+
+/* Tune Karplus-Strong to target frequency */
+static inline void sk_karplus_tune(sk_karplus_t *ks, float freq) {
+    if (!ks) return;
+    if (freq < 20.0f) freq = 20.0f;
+    float max_freq = ks->sample_rate * 0.45f;
+    if (freq > max_freq) freq = max_freq;
+
+    /* Total loop delay in samples D = Fs / f */
+    float total_delay = ks->sample_rate / freq;
+
+    /* Subtract lowpass filter delay (approximately damping * 0.5) */
+    float lp_delay = ks->damping * 0.5f;
+    float delay_needed = total_delay - lp_delay;
+    if (delay_needed < 2.0f) delay_needed = 2.0f;
+    if (delay_needed > (float)(ks->size - 4)) delay_needed = (float)(ks->size - 4);
+
+    int idelay = (int)delay_needed;
+    float frac = delay_needed - (float)idelay;
+
+    if (frac < 0.1f && idelay > 2) {
+        idelay -= 1;
+        frac += 1.0f;
+    }
+    float ap_coeff = (1.0f - frac) / (1.0f + frac + 1e-6f);
+    if (ap_coeff > 0.99f) ap_coeff = 0.99f;
+    if (ap_coeff < -0.99f) ap_coeff = -0.99f;
+
+    ks->int_delay = idelay;
+    ks->frac_delay = frac;
+    ks->allpass_coeff = ap_coeff;
+}
+
+/* Pluck the string with noise burst, pick position, and strike brightness */
+static inline void sk_karplus_pluck(sk_karplus_t *ks, float freq, float velocity, float pick_pos, float brightness, sk_rng_t *rng) {
+    if (!ks) return;
+    sk_karplus_tune(ks, freq);
+
+    velocity = sk_clampf(velocity, 0.0f, 1.0f);
+    pick_pos = sk_clampf(pick_pos, 0.02f, 0.98f);
+    brightness = sk_clampf(brightness, 0.0f, 1.0f);
+
+    /* Burst length corresponds to one string period */
+    int burst_len = ks->int_delay;
+    if (burst_len < 4) burst_len = 4;
+    if (burst_len > ks->size) burst_len = ks->size;
+
+    int pick_delay = (int)(pick_pos * (float)burst_len);
+    if (pick_delay < 1) pick_delay = 1;
+    if (pick_delay >= burst_len) pick_delay = burst_len - 1;
+
+    /* Reset loop state; set write_pos to int_delay so read_pos starts at index 0 */
+    ks->write_pos = ks->int_delay;
+    ks->filter_state = 0.0f;
+    ks->allpass_in = 0.0f;
+    ks->allpass_out = 0.0f;
+    ks->dc_x = 0.0f;
+    ks->dc_y = 0.0f;
+
+    /* Lowpass filter for excitation brightness */
+    float exc_filter = 0.0f;
+    float exc_coeff = 0.1f + 0.85f * brightness;
+
+    float raw_burst[SK_KARPLUS_MAX_LEN];
+    for (int i = 0; i < burst_len; i++) {
+        float noise = rng ? sk_rng_float(rng) : (((float)rand() / (float)RAND_MAX) * 2.0f - 1.0f);
+        exc_filter = (1.0f - exc_coeff) * exc_filter + exc_coeff * noise;
+        raw_burst[i] = exc_filter;
+    }
+
+    /* Fill delay buffer with pick-comb-filtered burst */
+    for (int i = 0; i < ks->size; i++) {
+        if (i < burst_len) {
+            float prev = (i >= pick_delay) ? raw_burst[i - pick_delay] : 0.0f;
+            ks->buffer[i] = (raw_burst[i] - prev) * velocity;
+        } else {
+            ks->buffer[i] = 0.0f;
+        }
+    }
+}
+
+/* Step Karplus-Strong string synthesis by 1 sample */
+static inline float sk_karplus_step(sk_karplus_t *ks) {
+    if (!ks) return 0.0f;
+
+    /* Read from delay line */
+    int read_pos = ks->write_pos - ks->int_delay;
+    if (read_pos < 0) read_pos += ks->size;
+
+    float sample = ks->buffer[read_pos];
+
+    /* 1-pole lowpass loss filter */
+    float lp_out = (1.0f - ks->damping) * sample + ks->damping * ks->filter_state;
+    ks->filter_state = lp_out;
+
+    /* 1st-order allpass fractional delay filter: y[n] = a * (x[n] - y[n-1]) + x[n-1] */
+    float ap_out = ks->allpass_coeff * (lp_out - ks->allpass_out) + ks->allpass_in;
+    ks->allpass_in = lp_out;
+    ks->allpass_out = ap_out;
+
+    /* Feedback attenuation */
+    float next_sample = ap_out * ks->feedback;
+
+    /* DC blocker to prevent integration drift (y[n] = x[n] - x[n-1] + R * y[n-1], R = 0.995) */
+    float dc_out = next_sample - ks->dc_x + 0.995f * ks->dc_y;
+    ks->dc_x = next_sample;
+    ks->dc_y = dc_out;
+
+    /* Write back into delay line */
+    ks->buffer[ks->write_pos] = dc_out;
+    ks->write_pos++;
+    if (ks->write_pos >= ks->size) ks->write_pos = 0;
+
+    return sample;
+}
+
+/* =========================================================================
+ * 10. Vocal Tract & Formant Synthesis
+ * ========================================================================= */
+
+#define SK_FORMANTS_COUNT 4
+
+typedef enum {
+    SK_VOWEL_A = 0, /* /ɑ/ father */
+    SK_VOWEL_E = 1, /* /e/ bed */
+    SK_VOWEL_I = 2, /* /i/ meet */
+    SK_VOWEL_O = 3, /* /o/ boat */
+    SK_VOWEL_U = 4, /* /u/ boot */
+    SK_VOWEL_COUNT = 5
+} sk_vowel_id_t;
+
+/* Single formant bandpass resonator (constant 0 dB peak) */
+typedef struct {
+    float freq;
+    float bandwidth;
+    float gain;
+    float a1, a2, b0;
+    float y1, y2;
+} sk_formant_resonator_t;
+
+typedef struct {
+    sk_formant_resonator_t formants[SK_FORMANTS_COUNT];
+    float sample_rate;
+    float current_x;
+    float current_y;
+} sk_formant_bank_t;
+
+/* Rosenberg polynomial glottal pulse generator for natural voiced excitation */
+static inline float sk_glottal_pulse(float phase, float open_quotient) {
+    phase = sk_clampf(phase, 0.0f, 1.0f);
+    open_quotient = sk_clampf(open_quotient, 0.2f, 0.85f);
+
+    if (phase > open_quotient) {
+        return 0.0f; /* Glottis closed */
+    }
+
+    /* Normalized time in glottal opening/closing phase */
+    float tn = phase / open_quotient;
+    /* Rosenberg polynomial: g(t) = 3*t^2 - 2*t^3 */
+    return (3.0f * tn * tn) - (2.0f * tn * tn * tn);
+}
+
+/* Initialize single formant resonator */
+static inline void sk_formant_resonator_set(sk_formant_resonator_t *res, float freq, float bw, float gain, float sample_rate) {
+    if (!res) return;
+    if (sample_rate < 1000.0f) sample_rate = 48000.0f;
+    if (freq < 50.0f) freq = 50.0f;
+    if (freq > sample_rate * 0.45f) freq = sample_rate * 0.45f;
+    if (bw < 10.0f) bw = 10.0f;
+
+    res->freq = freq;
+    res->bandwidth = bw;
+    res->gain = gain;
+
+    float r = expf(-(float)M_PI * bw / sample_rate);
+    float omega = 2.0f * (float)M_PI * freq / sample_rate;
+
+    res->a1 = -2.0f * r * cosf(omega);
+    res->a2 = r * r;
+    res->b0 = 1.0f - r;
+}
+
+static inline float sk_formant_resonator_step(sk_formant_resonator_t *res, float in) {
+    if (!res) return 0.0f;
+    /* y[n] = b0 * in - a1 * y[n-1] - a2 * y[n-2] */
+    float y = res->b0 * in - res->a1 * res->y1 - res->a2 * res->y2;
+    res->y2 = res->y1;
+    res->y1 = y;
+    return y * res->gain;
+}
+
+/* Initialize formant filter bank */
+static inline void sk_formant_bank_init(sk_formant_bank_t *fb, float sample_rate) {
+    if (!fb) return;
+    memset(fb, 0, sizeof(*fb));
+    fb->sample_rate = sample_rate > 1000.0f ? sample_rate : 48000.0f;
+}
+
+/* Configure formant bank to standard canonical vowel */
+static inline void sk_formant_bank_set_vowel(sk_formant_bank_t *fb, sk_vowel_id_t vowel) {
+    if (!fb) return;
+
+    /* Formant frequencies (Hz) for A, E, I, O, U */
+    static const float F[5][4] = {
+        { 730.0f, 1090.0f, 2440.0f, 3500.0f }, /* A */
+        { 530.0f, 1840.0f, 2480.0f, 3500.0f }, /* E */
+        { 270.0f, 2290.0f, 3010.0f, 3500.0f }, /* I */
+        { 500.0f,  850.0f, 2250.0f, 3500.0f }, /* O */
+        { 300.0f,  870.0f, 2240.0f, 3500.0f }  /* U */
+    };
+    /* Bandwidths (Hz) */
+    static const float B[5][4] = {
+        { 130.0f,  100.0f, 170.0f, 250.0f }, /* A */
+        { 100.0f,  100.0f, 150.0f, 250.0f }, /* E */
+        {  60.0f,  100.0f, 200.0f, 250.0f }, /* I */
+        {  80.0f,   80.0f, 100.0f, 250.0f }, /* O */
+        {  60.0f,   80.0f, 100.0f, 250.0f }  /* U */
+    };
+    /* Relative Gains */
+    static const float G[5][4] = {
+        { 1.0f, 0.50f, 0.25f, 0.10f }, /* A */
+        { 1.0f, 0.40f, 0.20f, 0.10f }, /* E */
+        { 1.0f, 0.35f, 0.15f, 0.10f }, /* I */
+        { 1.0f, 0.40f, 0.10f, 0.05f }, /* O */
+        { 1.0f, 0.30f, 0.08f, 0.05f }  /* U */
+    };
+
+    int v = (int)vowel;
+    if (v < 0 || v >= SK_VOWEL_COUNT) v = 0;
+
+    for (int i = 0; i < SK_FORMANTS_COUNT; i++) {
+        sk_formant_resonator_set(&fb->formants[i], F[v][i], B[v][i], G[v][i], fb->sample_rate);
+    }
+}
+
+/* Continuous 2D Vowel Morphing:
+ * X in [-1.0, 1.0]: Back (-1 = /u/, /o/) to Front (+1 = /i/, /e/)
+ * Y in [-1.0, 1.0]: Close (-1 = /i/, /u/) to Open (+1 = /a/)
+ */
+static inline void sk_formant_bank_set_xy(sk_formant_bank_t *fb, float x, float y) {
+    if (!fb) return;
+    x = sk_clampf(x, -1.0f, 1.0f);
+    y = sk_clampf(y, -1.0f, 1.0f);
+    fb->current_x = x;
+    fb->current_y = y;
+
+    /* Normalize to [0, 1] */
+    float nx = (x + 1.0f) * 0.5f;
+    float ny = (y + 1.0f) * 0.5f;
+
+    /* F1 mainly controlled by Openness (Y): 250 Hz (closed) to 750 Hz (open) */
+    float f1 = 250.0f + 500.0f * ny;
+    /* F2 mainly controlled by Frontness (X): 800 Hz (back) to 2300 Hz (front) */
+    float f2 = 800.0f + 1500.0f * nx;
+    /* F3 influenced by both: 2200 Hz to 3000 Hz */
+    float f3 = 2200.0f + 800.0f * nx;
+    float f4 = 3500.0f;
+
+    sk_formant_resonator_set(&fb->formants[0], f1, 100.0f, 1.0f, fb->sample_rate);
+    sk_formant_resonator_set(&fb->formants[1], f2, 110.0f, 0.45f, fb->sample_rate);
+    sk_formant_resonator_set(&fb->formants[2], f3, 170.0f, 0.20f, fb->sample_rate);
+    sk_formant_resonator_set(&fb->formants[3], f4, 250.0f, 0.08f, fb->sample_rate);
+}
+
+/* Step formant bank: processes input through parallel resonators and sums output */
+static inline float sk_formant_bank_step(sk_formant_bank_t *fb, float in) {
+    if (!fb) return in;
+    float sum = 0.0f;
+    for (int i = 0; i < SK_FORMANTS_COUNT; i++) {
+        sum += sk_formant_resonator_step(&fb->formants[i], in);
+    }
+    return sum;
+}
+
 #ifdef __cplusplus
 }
 #endif

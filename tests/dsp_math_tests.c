@@ -210,6 +210,56 @@ static void test_glissando_tools(void) {
     TEST_ASSERT(cur > 0.01f, "glissando incremented");
 }
 
+static void test_karplus_strong(void) {
+    sk_karplus_t ks;
+    sk_karplus_init(&ks, 48000.0f);
+    TEST_ASSERT(ks.size == SK_KARPLUS_MAX_LEN, "karplus init size");
+
+    sk_rng_t rng;
+    sk_rng_init(&rng, 54321);
+
+    /* Pluck at 440 Hz */
+    sk_karplus_pluck(&ks, 440.0f, 0.8f, 0.2f, 0.7f, &rng);
+    TEST_ASSERT(ks.int_delay > 0, "karplus tuned int_delay");
+
+    /* Render 2000 samples and verify decay and stability */
+    float max_amp = 0.0f;
+    float last_amp = 0.0f;
+    for (int i = 0; i < 2000; i++) {
+        float s = sk_karplus_step(&ks);
+        TEST_ASSERT(!isnan(s) && !isinf(s), "karplus output is finite");
+        TEST_ASSERT(fabsf(s) <= 2.0f, "karplus output bounded");
+        if (fabsf(s) > max_amp) max_amp = fabsf(s);
+        if (i == 1999) last_amp = fabsf(s);
+    }
+    TEST_ASSERT(max_amp > 0.1f, "karplus produced oscillation");
+    TEST_ASSERT(last_amp < max_amp, "karplus decayed over time");
+}
+
+static void test_formants_and_glottal(void) {
+    /* Test Rosenberg glottal pulse */
+    float g0 = sk_glottal_pulse(0.0f, 0.6f);
+    TEST_ASSERT(g0 == 0.0f, "glottal pulse starts at 0");
+    float g_mid = sk_glottal_pulse(0.3f, 0.6f);
+    TEST_ASSERT(g_mid > 0.0f && g_mid <= 1.0f, "glottal pulse open phase");
+    float g_closed = sk_glottal_pulse(0.8f, 0.6f);
+    TEST_ASSERT(g_closed == 0.0f, "glottal pulse closed phase");
+
+    /* Test Formant Bank canonical vowels */
+    sk_formant_bank_t fb;
+    sk_formant_bank_init(&fb, 48000.0f);
+    for (int v = 0; v < SK_VOWEL_COUNT; v++) {
+        sk_formant_bank_set_vowel(&fb, (sk_vowel_id_t)v);
+        float out = sk_formant_bank_step(&fb, 1.0f);
+        TEST_ASSERT(!isnan(out) && !isinf(out), "formant step finite for vowel");
+    }
+
+    /* Test 2D XY morphing */
+    sk_formant_bank_set_xy(&fb, -0.5f, 0.5f);
+    float out_xy = sk_formant_bank_step(&fb, 0.8f);
+    TEST_ASSERT(!isnan(out_xy) && !isinf(out_xy), "formant step finite for XY morph");
+}
+
 int main(void) {
     printf("Running sk_dsp math test suite...\n");
     test_clamping_and_safety();
@@ -225,6 +275,8 @@ int main(void) {
     test_companded_and_dithered_quantize();
     test_delay_tools();
     test_glissando_tools();
+    test_karplus_strong();
+    test_formants_and_glottal();
     printf("All %d sk_dsp checks passed successfully!\n", g_pass);
     return 0;
 }
