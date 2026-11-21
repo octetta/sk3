@@ -415,10 +415,10 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
                 508, 83, 80, 28, hwnd, (HMENU)IDC_BTN_SEND, NULL, NULL);
             SendMessageA(hBtnSend, WM_SETFONT, (WPARAM)g_hFontUI, TRUE);
 
-            // Action Buttons Row: Macro Buttons e!0..e!9, Silence, Copy Log, Clear Log
+            // Action Buttons Row: Macro Buttons 0..9, Silence, Copy Log, Clear Log
             for (int i = 0; i < 10; i++) {
                 char mlabel[8];
-                snprintf(mlabel, sizeof(mlabel), "e!%d", i);
+                snprintf(mlabel, sizeof(mlabel), "%d", i);
                 HWND hBtnM = CreateWindowExA(0, "BUTTON", mlabel,
                     WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP,
                     20 + i * 35, 118, 32, 26, hwnd, (HMENU)(INT_PTR)(IDC_BTN_MACRO_0 + i), NULL, NULL);

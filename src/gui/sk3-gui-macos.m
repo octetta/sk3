@@ -500,10 +500,10 @@
     self.sendBtn.autoresizingMask = NSViewMinXMargin | NSViewMinYMargin;
     [content addSubview:self.sendBtn];
 
-    // Action Buttons: Macros e!0..e!9, Silence, Copy Log, Clear Log
+    // Action Buttons: Macros 0..9, Silence, Copy Log, Clear Log
     self.macroBtns = [NSMutableArray array];
     for (int i = 0; i < 10; i++) {
-        NSString *title = [NSString stringWithFormat:@"e!%d", i];
+        NSString *title = [NSString stringWithFormat:@"%d", i];
         NSButton *mBtn = [NSButton buttonWithTitle:title target:self action:@selector(macroClicked:)];
         mBtn.tag = i;
         mBtn.frame = NSMakeRect(20 + i * 36, 404, 34, 28);

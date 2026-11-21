@@ -783,7 +783,7 @@ static void render_all(void) {
             for (int i = 0; i < 10; i++) {
                 if (mx + m_btn_w > silence_x - 6) break;
                 char mlabel[8];
-                snprintf(mlabel, sizeof(mlabel), "e!%d", i);
+                snprintf(mlabel, sizeof(mlabel), "%d", i);
                 add_btn_exact(BTN_MACRO_0 + i, mx, qy, m_btn_w, btn_h, mlabel);
                 mx += m_btn_w + gap;
             }
