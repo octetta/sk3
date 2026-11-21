@@ -1,0 +1,59 @@
+@name     tts_render
+@alias    tts!
+@group    wave
+@c_name   skode_clause_tts_render_0
+@type     immediate
+@arity    0
+@match    ()
+@summary  render bracketed phonetic DSL string to data array
+@doc
+Renders bracketed phonetic DSL string into active data array.
+Usage: [phonemes] tts!
+@code
+    return skode_exec_tts(ctx, s, args, argc);
+@end
+
+@name     tts_render
+@alias    tts!
+@group    wave
+@c_name   skode_clause_tts_render_1
+@type     immediate
+@arity    1
+@match    (finite)
+@summary  render phonemes to data and optional wave slot or voice
+@doc
+Renders phonemes to data array and optional wave slot or voice persona.
+Usage: [phonemes] slot tts!
+@code
+    return skode_exec_tts(ctx, s, args, argc);
+@end
+
+@name     tts_render
+@alias    tts!
+@group    wave
+@c_name   skode_clause_tts_render_2
+@type     immediate
+@arity    2
+@match    (finite, finite)
+@summary  render phonemes to data and wave slot with voice persona
+@doc
+Renders phonemes to data array and wavetable slot with voice persona (0=Paul, 1=Harry, 2=Betty, 3=SAM, 4=Robot, 5=Elf).
+Usage: [phonemes] slot voice tts!
+@code
+    return skode_exec_tts(ctx, s, args, argc);
+@end
+
+@name     tts_render
+@alias    tts!
+@group    wave
+@c_name   skode_clause_tts_render_3
+@type     immediate
+@arity    3
+@match    (finite, finite, finite)
+@summary  render phonemes to wave slot with voice and pitch
+@doc
+Renders phonemes to data array and wavetable slot with voice persona and base pitch in Hz.
+Usage: [phonemes] slot voice pitch tts!
+@code
+    return skode_exec_tts(ctx, s, args, argc);
+@end

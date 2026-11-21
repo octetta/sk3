@@ -9,10 +9,10 @@ Generated automatically by `tools/mkopcodes` from modular opcode definitions in 
 
 ## Architecture & System Overview
 
-- **Total Command Words**: 304
-- **Total Dispatch Clauses**: 613
+- **Total Command Words**: 306
+- **Total Dispatch Clauses**: 621
 - **Real-Time Audio Opcode Handlers**: 156 (audio-thread safe, zero allocation, zero string lookup)
-- **Immediate / Control Plane Clauses**: 457 (REPL / parser / file system / diagnostics)
+- **Immediate / Control Plane Clauses**: 465 (REPL / parser / file system / diagnostics)
 
 ### Functional Command Groups
 
@@ -20,7 +20,7 @@ Generated automatically by `tools/mkopcodes` from modular opcode definitions in 
 |:---|:---|:---:|:---|
 | voice | `voice` | 25 | Core voice selection, levels, panning, and voice diagnostics |
 | osc | `osc` | 19 | Oscillators, waveforms, frequency, tuning, detune, loops |
-| wave | `wave` | 12 | Wavetable slots, visualizers, WAV import and export |
+| wave | `wave` | 14 | Wavetable slots, visualizers, WAV import and export |
 | filter | `filter` | 8 | Filter cutoff frequency, resonance, modes, wavefolding |
 | env | `env` | 15 | Envelopes, ADSR parameters, curve shaping, segment times |
 | mod | `mod` | 14 | Cross-modulation, FM, AM, ring mod, sample & hold, glissando |
@@ -1613,6 +1613,8 @@ Usage: WS wave
 | Command | Alias | Clauses | Arity | Execution | Summary |
 |:---|:---|:---:|:---:|:---:|:---|
 | [`data_to_sample`](#data_to_sample) | `/d` | 5 | 0..4 | Immediate | load data array into default sample slot |
+| [`data_to_wave`](#data_to_wave) | `d>w` | 4 | 0..3 | Immediate | load active data array into default sample slot as one-shot |
+| [`tts_render`](#tts_render) | `tts!` | 4 | 0..3 | Immediate | render bracketed phonetic DSL string to data array |
 | [`voice_wave_display`](#voice_wave_display) | `VW` | 4 | 0..3 | Immediate | render ascii waveform for active voice |
 | [`wave_bandlimit`](#wave_bandlimit) | `WB` | 2 | 0..1 | Real-Time | bandlimit active voice wavetable |
 | [`wave_default`](#wave_default) | `/` | 2 | 0..1 | Real-Time | reset voice waveform to default sine |
@@ -1694,6 +1696,126 @@ Usage: /d slot rate one_shot
 ```text
 Loads data array with slot, rate, one-shot flag, and loop offset.
 Usage: /d slot rate one_shot offset
+```
+
+---
+
+### `data_to_wave`
+
+- **Alias**: `d>w`
+- **Group**: `wave`
+- **Clause Count**: 4
+
+#### Clause 1: `data_to_wave()`
+
+- **Arity**: `0`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: load active data array into default sample slot as one-shot
+
+**Description & Details**:
+
+```text
+Loads active data array samples into default sample slot (300) as one-shot.
+Usage: d>w
+```
+
+#### Clause 2: `data_to_wave(finite)`
+
+- **Arity**: `1`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: load active data array into specified wave slot as one-shot
+
+**Description & Details**:
+
+```text
+Loads active data array into specified sample slot as one-shot.
+Usage: slot d>w
+```
+
+#### Clause 3: `data_to_wave(finite, finite)`
+
+- **Arity**: `2`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: load active data array into slot with one-shot or sample rate
+
+**Description & Details**:
+
+```text
+Loads active data array into slot with one-shot flag or custom sample rate.
+Usage: slot one_shot d>w (or slot rate d>w)
+```
+
+#### Clause 4: `data_to_wave(finite, finite, finite)`
+
+- **Arity**: `3`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: load active data array with slot, rate, and one-shot flag
+
+**Description & Details**:
+
+```text
+Loads data array with slot, rate, and one-shot playback flag.
+Usage: slot rate one_shot d>w
+```
+
+---
+
+### `tts_render`
+
+- **Alias**: `tts!`
+- **Group**: `wave`
+- **Clause Count**: 4
+
+#### Clause 1: `tts_render()`
+
+- **Arity**: `0`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: render bracketed phonetic DSL string to data array
+
+**Description & Details**:
+
+```text
+Renders bracketed phonetic DSL string into active data array.
+Usage: [phonemes] tts!
+```
+
+#### Clause 2: `tts_render(finite)`
+
+- **Arity**: `1`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: render phonemes to data and optional wave slot or voice
+
+**Description & Details**:
+
+```text
+Renders phonemes to data array and optional wave slot or voice persona.
+Usage: [phonemes] slot tts!
+```
+
+#### Clause 3: `tts_render(finite, finite)`
+
+- **Arity**: `2`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: render phonemes to data and wave slot with voice persona
+
+**Description & Details**:
+
+```text
+Renders phonemes to data array and wavetable slot with voice persona (0=Paul, 1=Harry, 2=Betty, 3=SAM, 4=Robot, 5=Elf).
+Usage: [phonemes] slot voice tts!
+```
+
+#### Clause 4: `tts_render(finite, finite, finite)`
+
+- **Arity**: `3`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: render phonemes to wave slot with voice and pitch
+
+**Description & Details**:
+
+```text
+Renders phonemes to data array and wavetable slot with voice persona and base pitch in Hz.
+Usage: [phonemes] slot voice pitch tts!
 ```
 
 ---

@@ -1,0 +1,59 @@
+@name     data_to_wave
+@alias    d>w
+@group    wave
+@c_name   skode_clause_data_to_wave_0
+@type     immediate
+@arity    0
+@match    ()
+@summary  load active data array into default sample slot as one-shot
+@doc
+Loads active data array samples into default sample slot (300) as one-shot.
+Usage: d>w
+@code
+    return skode_exec_data_to_wave(ctx, s, args, argc);
+@end
+
+@name     data_to_wave
+@alias    d>w
+@group    wave
+@c_name   skode_clause_data_to_wave_1
+@type     immediate
+@arity    1
+@match    (finite)
+@summary  load active data array into specified wave slot as one-shot
+@doc
+Loads active data array into specified sample slot as one-shot.
+Usage: slot d>w
+@code
+    return skode_exec_data_to_wave(ctx, s, args, argc);
+@end
+
+@name     data_to_wave
+@alias    d>w
+@group    wave
+@c_name   skode_clause_data_to_wave_2
+@type     immediate
+@arity    2
+@match    (finite, finite)
+@summary  load active data array into slot with one-shot or sample rate
+@doc
+Loads active data array into slot with one-shot flag or custom sample rate.
+Usage: slot one_shot d>w (or slot rate d>w)
+@code
+    return skode_exec_data_to_wave(ctx, s, args, argc);
+@end
+
+@name     data_to_wave
+@alias    d>w
+@group    wave
+@c_name   skode_clause_data_to_wave_3
+@type     immediate
+@arity    3
+@match    (finite, finite, finite)
+@summary  load active data array with slot, rate, and one-shot flag
+@doc
+Loads data array with slot, rate, and one-shot playback flag.
+Usage: slot rate one_shot d>w
+@code
+    return skode_exec_data_to_wave(ctx, s, args, argc);
+@end

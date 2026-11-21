@@ -1,5 +1,6 @@
 #include "skode-internal.h"
 #include "scope-ipc.h"
+#include "sk_dsp.h"
 
 static int word_exec_ab(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
   uint32_t atom = ands_atom_num(s);
@@ -1700,6 +1701,149 @@ int skode_exec__qr(skode_t *ctx, ands_t *s, const double *arg, int argc) {
 }
 int skode_exec__slash(skode_t *ctx, ands_t *s, const double *arg, int argc) {
   return word_exec__slash(NULL, ctx, s, (double*)arg, argc);
+}
+
+int skode_exec_tts(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  (void)s;
+  if (!ctx || !ctx->parse) return -1;
+  const char *phrase = ands_string(ctx->parse);
+  if (!phrase || phrase[0] == '\0') {
+    ctx->printf(ctx, "# tts! requires bracketed phonetic DSL string, e.g. [HH:70 EH1:110 L:70 OW1:150] tts!\n");
+    return 0;
+  }
+
+  int wave_slot = -1;
+  int voice_id = 0;       /* 0=Paul, 1=Harry, 2=Betty, 3=SAM, 4=Robot, 5=Elf */
+  float base_pitch = 120.0f;
+  float rate = (float)MAIN_SAMPLE_RATE;
+  if (rate < 1000.0f) rate = 48000.0f;
+
+  if (argc == 1) {
+    int v;
+    if (skode_double_to_int(arg[0], &v)) {
+      if (v >= EXT_SAMPLE_000 && skode_wave_valid(v)) {
+        wave_slot = v;
+      } else if (v >= 0 && v <= 5) {
+        voice_id = v;
+      } else if (skode_wave_valid(v)) {
+        wave_slot = v;
+      }
+    }
+  } else if (argc >= 2) {
+    int v0, v1;
+    if (skode_double_to_int(arg[0], &v0) && skode_wave_valid(v0)) {
+      wave_slot = v0;
+    }
+    if (skode_double_to_int(arg[1], &v1) && v1 >= 0 && v1 <= 5) {
+      voice_id = v1;
+    }
+    if (argc >= 3 && arg[2] > 20.0 && arg[2] < 2000.0) {
+      base_pitch = (float)arg[2];
+    }
+  }
+
+  /* Compile phonetic DSL string into acoustic parameter frames */
+  sk_phoneme_frame_t frames[SK_PHONEME_MAX_TOKENS];
+  int num_frames = sk_phoneme_compile_dsl(phrase, frames, SK_PHONEME_MAX_TOKENS, base_pitch);
+  if (num_frames <= 0) {
+    ctx->printf(ctx, "# tts: no valid phonemes parsed from [%s]\n", phrase);
+    return 0;
+  }
+
+  /* Compute duration with safety cap of 30.0s (prevent OOM) */
+  float total_ms = 0.0f;
+  for (int i = 0; i < num_frames; i++) {
+    total_ms += frames[i].duration_ms;
+  }
+  if (total_ms > 30000.0f) {
+    ctx->printf(ctx, "# tts: duration %.1f ms exceeds 30s limit; clamping\n", total_ms);
+    total_ms = 30000.0f;
+  }
+
+  int total_samples = (int)((total_ms / 1000.0f) * rate) + (int)(rate * 0.1f);
+  if (total_samples <= 0 || total_samples > (int)(rate * 30.0f)) {
+    ctx->printf(ctx, "# tts: invalid sample count %d\n", total_samples);
+    return 0;
+  }
+
+  /* Select voice persona */
+  sk_speech_voice_t voice;
+  switch (voice_id) {
+    case 1: voice = sk_speech_voice_harry(); break;
+    case 2: voice = sk_speech_voice_betty(); break;
+    case 3: voice = sk_speech_voice_sam(); break;
+    case 4: voice = sk_speech_voice_robot(); break;
+    case 5: voice = sk_speech_voice_elf(); break;
+    case 0:
+    default: voice = sk_speech_voice_paul(); break;
+  }
+
+  float *audio_buf = (float *)calloc((size_t)total_samples, sizeof(float));
+  if (!audio_buf) {
+    ctx->printf(ctx, "# tts: memory allocation failed\n");
+    return 0;
+  }
+
+  sk_rng_t rng;
+  sk_rng_init(&rng, 1234567);
+  int rendered = sk_phoneme_render_frames_voice(frames, num_frames, audio_buf, total_samples, rate, &voice, &rng);
+  if (rendered <= 0) {
+    free(audio_buf);
+    ctx->printf(ctx, "# tts: synthesis produced 0 samples\n");
+    return 0;
+  }
+
+  /* Resize and write directly into skode data buffer (ands_data) */
+  ands_data_resize(ctx->parse, rendered);
+  double *d = ands_data(ctx->parse);
+  if (!d || ands_data_cap(ctx->parse) < rendered) {
+    free(audio_buf);
+    ctx->printf(ctx, "# tts: failed to allocate data buffer\n");
+    return 0;
+  }
+  for (int i = 0; i < rendered; i++) {
+    d[i] = (double)audio_buf[i];
+  }
+  ands_data_len_set(ctx->parse, rendered);
+  free(audio_buf);
+
+  ctx->printf(ctx, "# tts: rendered %d samples (%.2fs) to data\n", rendered, (double)rendered / rate);
+
+  /* If a valid wave slot was provided, install directly as one-shot sample */
+  if (wave_slot >= 0 && skode_wave_valid(wave_slot)) {
+    data_load(ctx, wave_slot, 1 /* one_shot */, rate, 0.0f);
+    ctx->printf(ctx, "# tts: installed to w%d\n", wave_slot);
+  }
+
+  return 0;
+}
+
+int skode_exec_data_to_wave(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  (void)s;
+  if (!ctx || !ctx->parse) return -1;
+  int wave_slot = EXT_SAMPLE_000;
+  int one_shot = 1;                     /* d>w defaults to ONE-SHOT mode */
+  float rate = (float)MAIN_SAMPLE_RATE;
+  float offset = 0.0f;
+
+  if (argc > 0 && !skode_double_to_int(arg[0], &wave_slot)) return 0;
+  if (argc > 1) {
+    if (arg[1] == 0.0 || arg[1] == 1.0) {
+      one_shot = (int)arg[1];
+    } else {
+      rate = (float)arg[1];
+    }
+  }
+  if (argc > 2) {
+    if (arg[1] > 1.0) {
+      skode_double_to_int(arg[2], &one_shot);
+    } else {
+      rate = (float)arg[2];
+    }
+  }
+  if (argc > 3) offset = (float)arg[3];
+
+  return data_load(ctx, wave_slot, one_shot, rate, offset);
 }
 
 void skode_register_words_dsp(skode_vocab_t *vocab) {

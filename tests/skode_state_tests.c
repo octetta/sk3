@@ -4032,11 +4032,47 @@ static void test_binary_rejection_and_text_validation(void) {
   skode_free(&ctx);
 }
 
+static void test_tts_speech_synthesis_and_wavetable_install(void) {
+  const char *test = "tts speech synthesis and wavetable install";
+  skode_t ctx = new_ctx();
+  ctx.log_enable = 1;
+
+  synth_free();
+  synth_init(8);
+  wave_table_init(0);
+  voice_init();
+  seq_init();
+
+  /* 1. Direct render to data */
+  consume(test, &ctx, "[HH:70 EH1:110@125 L:70 OW1:150] tts!");
+  int d_len = ands_data_len(ctx.parse);
+  if (d_len <= 0) {
+    fail(test, "tts! did not populate data array");
+  }
+  expect_substr(test, ctx.log, "tts: rendered", "tts render log message");
+
+  /* 2. Load into wave slot via d>w (default one-shot mode) */
+  consume(test, &ctx, "300 d>w");
+  if (!sw.data[300] || sw.size[300] != d_len) {
+    fail(test, "d>w did not load data array into w300");
+  }
+  expect_int(test, sw.one_shot[300], 1, "d>w wave slot one-shot mode");
+
+  /* 3. Direct single-step render and wavetable install */
+  consume(test, &ctx, "[S:70 P:50 IY1:120 K:60] 305 4 tts!");
+  if (!sw.data[305] || sw.size[305] <= 0) {
+    fail(test, "slot tts! did not install wavetable to w305");
+  }
+  expect_int(test, sw.one_shot[305], 1, "tts wave slot one-shot mode");
+}
+
 int main(int argc, char **argv) {
   synth_init(8);
   wave_table_init(0);
   voice_init();
   seq_init();
+
+  test_tts_speech_synthesis_and_wavetable_install();
 
   if (argc > 1 && strcmp(argv[1], "--session-only") == 0) {
     test_session_zip_round_trip();
