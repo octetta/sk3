@@ -1128,7 +1128,10 @@ static void toggle_console(void) {
 }
 
 static int ignore_x_errors(Display *d, XErrorEvent *e) {
-    (void)d; (void)e;
+    char msg[256];
+    XGetErrorText(d, e->error_code, msg, sizeof(msg));
+    fprintf(stderr, "X11 ERROR: %s (request_code=%d, minor_code=%d, resource_id=0x%lx)\n",
+            msg, e->request_code, e->minor_code, e->resourceid);
     return 0;
 }
 
@@ -1206,6 +1209,11 @@ int main(int argc, char **argv) {
     Atom atom_net_wm_type_normal = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE_NORMAL", False);
     XChangeProperty(dpy, win, atom_net_wm_type, XA_ATOM, 32, PropModeReplace,
                     (unsigned char *)&atom_net_wm_type_normal, 1);
+
+    Atom atom_net_wm_state = XInternAtom(dpy, "_NET_WM_STATE", False);
+    Atom atom_net_wm_state_above = XInternAtom(dpy, "_NET_WM_STATE_ABOVE", False);
+    XChangeProperty(dpy, win, atom_net_wm_state, XA_ATOM, 32, PropModeReplace,
+                    (unsigned char *)&atom_net_wm_state_above, 1);
 
     // Set WM hints to accept keyboard input
     XWMHints *hints = XAllocWMHints();
