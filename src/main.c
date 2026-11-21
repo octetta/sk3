@@ -229,6 +229,15 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  if (udp_port > 0) {
+    int up = skred_udp_info();
+    if (up > 0) {
+      printf("# sk3 UDP server listening on port %d (Opcode dispatch & datagrams)\n", up);
+    } else {
+      printf("# sk3 UDP server FAILED on port %d (already in use or permission denied)\n", udp_port);
+    }
+  }
+
   if (events_port > 0) {
     skred_udp_events_start(events_port);
   }
@@ -237,6 +246,8 @@ int main(int argc, char **argv) {
     int hp = skred_http_start(http_port);
     if (hp > 0) {
       printf("# sk3 TCP server listening on port %d (Raw TCP, HTTP/1.1, WebSocket)\n", hp);
+    } else {
+      printf("# sk3 TCP server FAILED on port %d (already in use or permission denied)\n", http_port);
     }
   }
 

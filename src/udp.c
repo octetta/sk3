@@ -70,15 +70,6 @@ static int udp_open(int port) {
     if (sock == INVALID_SOCKET) {
         return -1;
     }
-    int opt = 1;
-#ifdef _WIN32
-    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (const char *)&opt, sizeof(opt));
-#else
-    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-#ifdef SO_REUSEPORT
-    setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
-#endif
-#endif
     struct sockaddr_in serve;
 #ifdef _WIN32
     memset(&serve, 0, sizeof(serve));
@@ -264,6 +255,7 @@ int udp_start(int port) {
   }
   
   if (atomic_load_int(&udp_startup_status) < 0) {
+      pthread_join(udp_thread_handle, NULL);
       udp_running = 0;
       udp_port = 0;
       return -1;

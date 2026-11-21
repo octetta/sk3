@@ -75,12 +75,15 @@ static inline void sk3_gui_format_status(int audio_ok, int req_udp, int udp_port
         else snprintf(tcp_s, sizeof(tcp_s), "TCP: FAILED");
     }
 
+    int any_failed = (req_udp > 0 && udp_port_opened == 0) || (req_tcp > 0 && tcp_port_opened == 0);
+    const char *prefix = any_failed ? "PORT CONFLICT: sk3 v%s" : "RUNNING: sk3 v%s";
+
     if (udp_s[0] && tcp_s[0]) {
-        snprintf(out_status, out_status_sz, "RUNNING: sk3 v%s (%s, %s)", version, udp_s, tcp_s);
+        snprintf(out_status, out_status_sz, any_failed ? "PORT CONFLICT: sk3 v%s (%s, %s)" : "RUNNING: sk3 v%s (%s, %s)", version, udp_s, tcp_s);
     } else if (udp_s[0]) {
-        snprintf(out_status, out_status_sz, "RUNNING: sk3 v%s (%s)", version, udp_s);
+        snprintf(out_status, out_status_sz, any_failed ? "PORT CONFLICT: sk3 v%s (%s)" : "RUNNING: sk3 v%s (%s)", version, udp_s);
     } else if (tcp_s[0]) {
-        snprintf(out_status, out_status_sz, "RUNNING: sk3 v%s (%s)", version, tcp_s);
+        snprintf(out_status, out_status_sz, any_failed ? "PORT CONFLICT: sk3 v%s (%s)" : "RUNNING: sk3 v%s (%s)", version, tcp_s);
     } else {
         snprintf(out_status, out_status_sz, "RUNNING: sk3 v%s", version);
     }

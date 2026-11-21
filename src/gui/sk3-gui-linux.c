@@ -609,7 +609,10 @@ static void render_all(void) {
     // Status LED circle
     int led_d = 12;
     int led_y = r1_y + (r1_h - led_d) / 2;
-    XSetForeground(dpy, gc, server_running ? pal.status_ok_pixel : pal.status_err_pixel);
+    int cur_req_udp = atoi(udp_port_str);
+    int cur_req_tcp = atoi(tcp_port_str);
+    int any_port_failed = (cur_req_udp > 0 && active_udp_port == 0) || (cur_req_tcp > 0 && active_tcp_port == 0);
+    XSetForeground(dpy, gc, (server_running && !any_port_failed) ? pal.status_ok_pixel : pal.status_err_pixel);
     XFillArc(dpy, backbuffer, gc, 16, led_y, led_d, led_d, 0, 360 * 64);
     XSetForeground(dpy, gc, pal.border_pixel);
     XDrawArc(dpy, backbuffer, gc, 16, led_y, led_d, led_d, 0, 360 * 64);
@@ -625,7 +628,7 @@ static void render_all(void) {
 
     // Status Banner Text
     int banner_ty = r1_y + (r1_h + xft_font_ui->ascent - xft_font_ui->descent) / 2;
-    XftDrawStringUtf8(xft_draw, server_running ? &pal.status_ok : &pal.status_err,
+    XftDrawStringUtf8(xft_draw, (server_running && !any_port_failed) ? &pal.status_ok : &pal.status_err,
                       xft_font_ui, 36, banner_ty, (const FcChar8 *)status_banner, (int)strlen(status_banner));
 
     // Row 2: Server Controls & Console Toggle
@@ -661,14 +664,24 @@ static void render_all(void) {
 
     XSetForeground(dpy, gc, (active_focus == 0) ? pal.input_bg_pixel : pal.panel_pixel);
     XFillRectangle(dpy, backbuffer, gc, cur_x, r2_y, port_box_w, btn_h);
-    unsigned long udp_border = (active_focus == 0) ? pal.status_ok_pixel :
-                               (req_udp_val > 0 && active_udp_port == 0) ? pal.status_err_pixel : pal.border_pixel;
+    unsigned long udp_border = (req_udp_val > 0 && active_udp_port == 0) ? pal.status_err_pixel :
+                               (active_focus == 0) ? pal.status_ok_pixel : pal.border_pixel;
     XSetForeground(dpy, gc, udp_border);
     XDrawRectangle(dpy, backbuffer, gc, cur_x, r2_y, port_box_w, btn_h);
 
     int port_ty = r2_y + (btn_h + xft_font_mono->ascent - xft_font_mono->descent) / 2;
     XftColor *udp_text_col = (req_udp_val > 0 && active_udp_port == 0) ? &pal.status_err : &pal.text_color;
     XftDrawStringUtf8(xft_draw, udp_text_col, xft_font_mono, cur_x + 6, port_ty, (const FcChar8 *)udp_port_str, (int)strlen(udp_port_str));
+
+    if (active_focus == 0 && cursor_visible) {
+        XGlyphInfo ext_u;
+        XftTextExtentsUtf8(dpy, xft_font_mono, (const FcChar8 *)udp_port_str, (int)strlen(udp_port_str), &ext_u);
+        int cx = cur_x + 6 + ext_u.xOff;
+        int cur_h = mono_h + 2;
+        int cur_y = r2_y + (btn_h - cur_h) / 2;
+        XSetForeground(dpy, gc, pal.cursor_pixel);
+        XFillRectangle(dpy, backbuffer, gc, cx, cur_y, 2, cur_h);
+    }
     cur_x += port_box_w + 14;
 
     // TCP status dot, label & box
@@ -691,13 +704,23 @@ static void render_all(void) {
 
     XSetForeground(dpy, gc, (active_focus == 1) ? pal.input_bg_pixel : pal.panel_pixel);
     XFillRectangle(dpy, backbuffer, gc, cur_x, r2_y, port_box_w, btn_h);
-    unsigned long tcp_border = (active_focus == 1) ? pal.status_ok_pixel :
-                               (req_tcp_val > 0 && active_tcp_port == 0) ? pal.status_err_pixel : pal.border_pixel;
+    unsigned long tcp_border = (req_tcp_val > 0 && active_tcp_port == 0) ? pal.status_err_pixel :
+                               (active_focus == 1) ? pal.status_ok_pixel : pal.border_pixel;
     XSetForeground(dpy, gc, tcp_border);
     XDrawRectangle(dpy, backbuffer, gc, cur_x, r2_y, port_box_w, btn_h);
 
     XftColor *tcp_text_col = (req_tcp_val > 0 && active_tcp_port == 0) ? &pal.status_err : &pal.text_color;
     XftDrawStringUtf8(xft_draw, tcp_text_col, xft_font_mono, cur_x + 6, port_ty, (const FcChar8 *)tcp_port_str, (int)strlen(tcp_port_str));
+
+    if (active_focus == 1 && cursor_visible) {
+        XGlyphInfo ext_t;
+        XftTextExtentsUtf8(dpy, xft_font_mono, (const FcChar8 *)tcp_port_str, (int)strlen(tcp_port_str), &ext_t);
+        int cx = cur_x + 6 + ext_t.xOff;
+        int cur_h = mono_h + 2;
+        int cur_y = r2_y + (btn_h - cur_h) / 2;
+        XSetForeground(dpy, gc, pal.cursor_pixel);
+        XFillRectangle(dpy, backbuffer, gc, cx, cur_y, 2, cur_h);
+    }
     cur_x += port_box_w + 14;
 
     // Restart button
@@ -1415,10 +1438,14 @@ int main(int argc, char **argv) {
                     if (mx >= rendered_udp_box.x && mx <= rendered_udp_box.x + rendered_udp_box.w &&
                         my >= rendered_udp_box.y && my <= rendered_udp_box.y + rendered_udp_box.h) {
                         active_focus = 0;
+                        cursor_visible = 1;
+                        gettimeofday(&last_blink, NULL);
                         sel_active = 0;
                     } else if (mx >= rendered_tcp_box.x && mx <= rendered_tcp_box.x + rendered_tcp_box.w &&
                                my >= rendered_tcp_box.y && my <= rendered_tcp_box.y + rendered_tcp_box.h) {
                         active_focus = 1;
+                        cursor_visible = 1;
+                        gettimeofday(&last_blink, NULL);
                         sel_active = 0;
                     } else if (!is_collapsed &&
                                mx >= rendered_input_box.x && mx <= rendered_input_box.x + rendered_input_box.w &&
@@ -1629,12 +1656,16 @@ int main(int argc, char **argv) {
                     if (ksym == XK_BackSpace) {
                         size_t l = strlen(p_str);
                         if (l > 0) p_str[l - 1] = '\0';
+                        cursor_visible = 1;
+                        gettimeofday(&last_blink, NULL);
                         render_all();
                     } else if (len > 0 && kbuf[0] >= '0' && kbuf[0] <= '9') {
                         size_t l = strlen(p_str);
                         if (l < 5) {
                             p_str[l] = kbuf[0];
                             p_str[l + 1] = '\0';
+                            cursor_visible = 1;
+                            gettimeofday(&last_blink, NULL);
                             render_all();
                         }
                     } else if (ksym == XK_Return || ksym == XK_KP_Enter) {
@@ -1695,7 +1726,7 @@ int main(int argc, char **argv) {
         if (timeout_ms <= 0) {
             cursor_visible = !cursor_visible;
             last_blink = now;
-            if (!is_collapsed && active_focus == 2) {
+            if (active_focus == 0 || active_focus == 1 || (!is_collapsed && active_focus == 2)) {
                 render_all();
             }
             timeout_ms = 500;
