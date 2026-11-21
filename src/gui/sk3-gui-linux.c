@@ -610,9 +610,7 @@ static void render_all(void) {
 
     // Right-aligned top buttons: Font and Theme
     int cur_r = win_w - 16;
-    const char *f_name = (cur_font_size == SK3_FONT_SIZE_SMALL) ? "Font: S" :
-                         (cur_font_size == SK3_FONT_SIZE_LARGE) ? "Font: L" : "Font: M";
-    add_btn_auto(BTN_FONT, 0, r1_y, f_name);
+    add_btn_auto(BTN_FONT, 0, r1_y, sk3_font_size_name(cur_font_size));
     buttons[num_buttons - 1].x = cur_r - buttons[num_buttons - 1].w;
     cur_r = buttons[num_buttons - 1].x - 8;
 
@@ -681,7 +679,7 @@ static void render_all(void) {
     cur_x += buttons[num_buttons - 1].w + 8;
 
     // Toggle Console button
-    add_btn_auto(BTN_TOGGLE_CONSOLE, cur_x, r2_y, is_collapsed ? "Console [Show]" : "Console [Hide]");
+    add_btn_auto(BTN_TOGGLE_CONSOLE, cur_x, r2_y, is_collapsed ? "Show" : "Hide");
 
     int min_collapsed_h = r2_y + btn_h + 12;
 

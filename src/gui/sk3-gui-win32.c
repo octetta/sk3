@@ -315,11 +315,11 @@ static void toggle_console(HWND hwnd) {
     if (g_isCollapsed) {
         g_prevExpandedH = rc.bottom - rc.top;
         SetWindowPos(hwnd, NULL, 0, 0, cur_w, COLLAPSED_HEIGHT, SWP_NOMOVE | SWP_NOZORDER);
-        SetWindowTextA(g_hBtnToggle, "Console [Show]");
+        SetWindowTextA(g_hBtnToggle, "Show");
     } else {
         int target_h = (g_prevExpandedH > COLLAPSED_HEIGHT + 100) ? g_prevExpandedH : DEFAULT_HEIGHT;
         SetWindowPos(hwnd, NULL, 0, 0, cur_w, target_h, SWP_NOMOVE | SWP_NOZORDER);
-        SetWindowTextA(g_hBtnToggle, "Console [Hide]");
+        SetWindowTextA(g_hBtnToggle, "Hide");
         SetFocus(g_hCmdInput);
     }
 }
@@ -387,7 +387,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
                 304, 45, 55, 26, hwnd, (HMENU)IDC_BTN_EXIT, NULL, NULL);
             SendMessageA(hBtnExit, WM_SETFONT, (WPARAM)g_hFontUI, TRUE);
 
-            g_hBtnToggle = CreateWindowExA(0, "BUTTON", g_isCollapsed ? "Console [Show]" : "Console [Hide]",
+            g_hBtnToggle = CreateWindowExA(0, "BUTTON", g_isCollapsed ? "Show" : "Hide",
                 WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP,
                 363, 45, 100, 26, hwnd, (HMENU)IDC_BTN_TOGGLE, NULL, NULL);
             SendMessageA(g_hBtnToggle, WM_SETFONT, (WPARAM)g_hFontUI, TRUE);
@@ -397,9 +397,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
                 467, 45, 95, 26, hwnd, (HMENU)IDC_BTN_THEME, NULL, NULL);
             SendMessageA(g_hBtnTheme, WM_SETFONT, (WPARAM)g_hFontUI, TRUE);
 
-            const char *fs_lbl = (g_curFontSize == SK3_FONT_SIZE_SMALL) ? "Font: S" :
-                                 (g_curFontSize == SK3_FONT_SIZE_LARGE) ? "Font: L" : "Font: M";
-            g_hBtnFont = CreateWindowExA(0, "BUTTON", fs_lbl,
+            g_hBtnFont = CreateWindowExA(0, "BUTTON", sk3_font_size_name(g_curFontSize),
                 WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP,
                 566, 45, 60, 26, hwnd, (HMENU)IDC_BTN_FONT, NULL, NULL);
             SendMessageA(g_hBtnFont, WM_SETFONT, (WPARAM)g_hFontUI, TRUE);
@@ -543,8 +541,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
             } else if (id == IDC_BTN_FONT) {
                 g_curFontSize = (g_curFontSize + 1) % SK3_FONT_SIZE_COUNT;
                 update_mono_font();
-                SetWindowTextA(g_hBtnFont, (g_curFontSize == SK3_FONT_SIZE_SMALL) ? "Font: S" :
-                                           (g_curFontSize == SK3_FONT_SIZE_LARGE) ? "Font: L" : "Font: M");
+                SetWindowTextA(g_hBtnFont, sk3_font_size_name(g_curFontSize));
                 SetFocus(g_hCmdInput);
             } else if (id >= IDC_BTN_MACRO_0 && id <= IDC_BTN_MACRO_9) {
                 int slot = id - IDC_BTN_MACRO_0;

@@ -39,20 +39,20 @@ typedef enum {
 
 static inline const char *sk3_font_size_name(sk3_font_size_t sz) {
     switch (sz) {
-        case SK3_FONT_SIZE_SMALL:  return "Font: S (11px)";
-        case SK3_FONT_SIZE_MEDIUM: return "Font: M (14px)";
-        case SK3_FONT_SIZE_LARGE:  return "Font: L (18px)";
-        default: return "Font: M";
+        case SK3_FONT_SIZE_SMALL:  return "S";
+        case SK3_FONT_SIZE_LARGE:  return "L";
+        case SK3_FONT_SIZE_MEDIUM:
+        default: return "M";
     }
 }
 
 static inline const char *sk3_theme_name(sk3_theme_t th) {
     switch (th) {
-        case SK3_THEME_DARK:  return "Theme: Dark";
-        case SK3_THEME_AMBER: return "Theme: Amber";
-        case SK3_THEME_GREEN: return "Theme: Green";
-        case SK3_THEME_LIGHT: return "Theme: Light";
-        default: return "Theme: Dark";
+        case SK3_THEME_DARK:  return "Dark";
+        case SK3_THEME_AMBER: return "Amber";
+        case SK3_THEME_GREEN: return "Green";
+        case SK3_THEME_LIGHT: return "Light";
+        default: return "Dark";
     }
 }
 

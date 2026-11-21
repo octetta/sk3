@@ -206,7 +206,7 @@
         CGFloat diff = frame.size.height - COLLAPSED_HEIGHT;
         frame.origin.y += diff;
         frame.size.height = COLLAPSED_HEIGHT;
-        self.toggleBtn.title = @"Console [Show]";
+        self.toggleBtn.title = @"Show";
         self.cmdInput.hidden = YES;
         self.sendBtn.hidden = YES;
         for (NSButton *b in self.macroBtns) b.hidden = YES;
@@ -219,7 +219,7 @@
         CGFloat diff = targetH - frame.size.height;
         frame.origin.y -= diff;
         frame.size.height = targetH;
-        self.toggleBtn.title = @"Console [Hide]";
+        self.toggleBtn.title = @"Hide";
         self.cmdInput.hidden = NO;
         self.sendBtn.hidden = NO;
         for (NSButton *b in self.macroBtns) b.hidden = NO;
@@ -465,7 +465,7 @@
     [content addSubview:self.exitBtn];
 
     // Console Toggle Button
-    self.toggleBtn = [NSButton buttonWithTitle:self.isCollapsed ? @"Console [Show]" : @"Console [Hide]" target:self action:@selector(toggleConsole:)];
+    self.toggleBtn = [NSButton buttonWithTitle:self.isCollapsed ? @"Show" : @"Hide" target:self action:@selector(toggleConsole:)];
     self.toggleBtn.frame = NSMakeRect(372, 504, 110, 28);
     self.toggleBtn.bezelStyle = NSBezelStyleRounded;
     self.toggleBtn.autoresizingMask = NSViewMinYMargin;
