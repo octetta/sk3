@@ -278,6 +278,16 @@ static void test_phoneme_dsl(void) {
     TEST_ASSERT((frames[4].flags & SK_PHO_STOP) && (frames[4].flags & SK_PHO_FRIC), "CH is affricate");
     TEST_ASSERT((frames[5].flags & SK_PHO_VOICED) && (frames[5].flags & SK_PHO_STOP), "JH is voiced affricate");
 
+    /* Test prosody, cadence, inflection glide, vibrato, and stress */
+    const char *dsl3 = "[EH1:100@140>105~*1.2] [AA0:80]";
+    int n3 = sk_phoneme_compile_dsl(dsl3, frames, 16, 120.0f);
+    TEST_ASSERT(n3 == 2, "compiled 2 prosody frames");
+    TEST_ASSERT(frames[0].pitch_hz == 140.0f, "frame 0 start pitch");
+    TEST_ASSERT(frames[0].pitch_end_hz == 105.0f, "frame 0 end pitch inflection glide");
+    TEST_ASSERT(frames[0].vibrato_depth > 0.0f, "frame 0 vibrato enabled");
+    TEST_ASSERT(frames[0].voice_gain > 1.0f, "frame 0 primary stress voice gain scaled");
+    TEST_ASSERT(frames[1].duration_ms < 80.0f, "frame 1 unstressed duration reduced");
+
     float out[4800];
     sk_rng_t rng;
     sk_rng_init(&rng, 1111);

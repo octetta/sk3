@@ -210,44 +210,44 @@ static void render_speech_demo(const char *filename, int sample_rate) {
     printf("Rendering historic speech synthesis showcase demo...\n");
     const char *dsl = 
         /* Part 1: Baseline phrases: "SKRED", "HELLO", "WE WILL ROCK YOU" */
-        "[S:80 K:50 R:80 EH:140@130 D:80] [_:350] "
-        "[HH:70@115 EH:110@135 L:80@130 OW:200@105] [_:350] "
-        "[W:70 IH:80 L:70] [_:100] [R:80 AA:140@120 K:70] [_:100] [Y:70 UW:220@105] [_:600] "
+        "[S:80 K:50 R:80 EH1:140@130>115 D:80] [_:350] "
+        "[HH:70@115 EH1:110@130>138 L:80@135 OW1:200@115>95] [_:350] "
+        "[W:70 IH0:80 L:70] [_:100] [R:80 AA1:140@125>115 K:70] [_:100] [Y:70 UW1:220@110>95] [_:600] "
 
         /* Part 2: Bell Labs 1939 Voder (Homer Dudley / Pedro the Voder) */
-        /* "GOOD AFTERNOON RADIO AUDIENCE" */
-        "[G:60 UH:90@100 D:50] [_:60] "
-        "[AE:110@105 F:70 T:50 ER:100@125 N:60 UW:160@140 N:70] [_:120] "
-        "[R:70 EY:110@130 D:50 IY:90@120 OW:150@105] [_:120] "
-        "[AA:120@125 D:50 IY:90@115 AH:80@105 N:60 S:120] [_:350] "
+        /* "GOOD AFTERNOON RADIO AUDIENCE" with wrist-bar pitch inflection */
+        "[G:60 UH1:90@100>108 D:50] [_:60] "
+        "[AE1:110@108>118 F:70 T:50 ER0:100@125>135 N:60 UW1:160@142>125 N:70] [_:120] "
+        "[R:70 EY1:110@130>122 D:50 IY0:90@120>112 OW1:150@112>100] [_:120] "
+        "[AA1:120@126>118 D:50 IY0:90@115 AH0:80@105 N:60 S:120@100>90] [_:350] "
         /* Historic Voder test phrase: "SHE SAW A SHOT" */
-        "[SH:130 IY:150@135] [_:80] "
-        "[S:120 AO:160@125] [_:80] "
-        "[AH:90@115] [_:70] "
-        "[SH:120 AA:160@110 T:70] [_:600] "
+        "[SH:130 IY1:150@135>142] [_:80] "
+        "[S:120 AO1:160@130>120] [_:80] "
+        "[AH0:90@115] [_:70] "
+        "[SH:120 AA1:160@115>95 T:70] [_:600] "
 
         /* Part 3: 1961 IBM 7094 / Max Mathews - "DAISY BELL" */
-        /* Sung melody with exact pitch overrides */
-        "[D:60 EY:180@349 Z:60 IY:220@294] [_:140] " /* Dai - sy (F4, D4) */
-        "[D:60 EY:180@233 Z:60 IY:220@175] [_:160] " /* Dai - sy (Bb3, F3) */
-        "[G:60 IH:130@196 V:50] [_:60] "             /* give (G3) */
-        "[M:60 IY:140@220] [_:60] "                  /* me (A3) */
-        "[Y:60 UH:100@233 R:60] [_:60] "             /* your (Bb3) */
-        "[AE:120@262 N:50] [S:60 ER:130@294] [_:80] " /* an - swer (C4, D4) */
-        "[D:70 UW:320@233] [_:600] "                 /* do (Bb3) */
+        /* Sung melody with exact pitch overrides and vocal vibrato */
+        "[D:60 EY1:180@349~ Z:60 IY1:220@294~] [_:140] " /* Dai - sy (F4, D4) */
+        "[D:60 EY1:180@233~ Z:60 IY1:220@175~] [_:160] " /* Dai - sy (Bb3, F3) */
+        "[G:60 IH0:130@196 V:50] [_:60] "                /* give (G3) */
+        "[M:60 IY1:140@220~] [_:60] "                     /* me (A3) */
+        "[Y:60 UH0:100@233 R:60] [_:60] "                /* your (Bb3) */
+        "[AE1:120@262 N:50] [S:60 ER0:130@294~] [_:80] " /* an - swer (C4, D4) */
+        "[D:70 UW1:320@233~] [_:600] "                    /* do (Bb3) */
 
         /* Part 4: Kraftwerk tribute - "I AM THE OPERATOR WITH MY POCKET CALCULATOR" + "ONE TWO THREE FOUR" */
-        /* Strict monotone pitch @ 110 Hz */
-        "[AY:120@110] [_:60] [AE:100@110 M:70] [_:60] "
-        "[DH:50 AH:70@110] [_:50] "
-        "[AA:90@110 P:50 ER:80@110 EY:100@110 T:50 ER:110@110] [_:80] "
-        "[W:50 IH:80@110 TH:60] [_:60] [M:50 AY:110@110] [_:60] "
-        "[P:50 AA:90@110 K:50 AH:70@110 T:50] [_:60] "
-        "[K:50 AE:90@110 L:50 K:50 Y:50 UH:80@110 L:50 EY:100@110 T:50 ER:140@110] [_:300] "
-        "[W:60 AH:110@110 N:70] [_:140] "
-        "[T:60 UW:130@110] [_:140] "
-        "[TH:70 R:60 IY:140@110] [_:140] "
-        "[F:70 AO:120@110 R:70] [_:500]";
+        /* Strict monotone robotic pitch @ 110 Hz */
+        "[AY1:120@110] [_:60] [AE0:100@110 M:70] [_:60] "
+        "[DH:50 AH0:70@110] [_:50] "
+        "[AA1:90@110 P:50 ER0:80@110 EY1:100@110 T:50 ER0:110@110] [_:80] "
+        "[W:50 IH0:80@110 TH:60] [_:60] [M:50 AY1:110@110] [_:60] "
+        "[P:50 AA1:90@110 K:50 AH0:70@110 T:50] [_:60] "
+        "[K:50 AE1:90@110 L:50 K:50 Y:50 UH0:80@110 L:50 EY1:100@110 T:50 ER0:140@110] [_:300] "
+        "[W:60 AH1:110@110 N:70] [_:140] "
+        "[T:60 UW1:130@110] [_:140] "
+        "[TH:70 R:60 IY1:140@110] [_:140] "
+        "[F:70 AO1:120@110 R:70] [_:500]";
 
     printf("Compiling historic speech DSL...\n");
     sk_phoneme_frame_t frames[SK_PHONEME_MAX_TOKENS];

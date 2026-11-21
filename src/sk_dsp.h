@@ -381,9 +381,8 @@ typedef struct {
     float drive;
 } sk_biquad_t;
 
-static inline void sk_biquad_init(sk_biquad_t *b, sk_biquad_type_t type, float f, float q, float sr) {
-    b->x1 = b->x2 = b->y1 = b->y2 = 0.0f;
-    b->drive = 0.0f;
+static inline void sk_biquad_set(sk_biquad_t *b, sk_biquad_type_t type, float f, float q, float sr) {
+    if (!b) return;
     if (sr <= 0.0f || f <= 0.0f) {
         b->b0 = 1.0f; b->b1 = b->b2 = b->a1 = b->a2 = 0.0f;
         return;
@@ -453,6 +452,13 @@ static inline void sk_biquad_init(sk_biquad_t *b, sk_biquad_type_t type, float f
     b->b2 = b2 * inv_a0;
     b->a1 = a1 * inv_a0;
     b->a2 = a2 * inv_a0;
+}
+
+static inline void sk_biquad_init(sk_biquad_t *b, sk_biquad_type_t type, float f, float q, float sr) {
+    if (!b) return;
+    b->x1 = b->x2 = b->y1 = b->y2 = 0.0f;
+    b->drive = 0.0f;
+    sk_biquad_set(b, type, f, q, sr);
 }
 
 static inline float sk_biquad_step(sk_biquad_t *b, float in) {
@@ -1010,19 +1016,28 @@ typedef struct {
     float current_y;
 } sk_formant_bank_t;
 
-/* Rosenberg polynomial glottal pulse generator for natural voiced excitation */
+/* Rosenberg-Klatt C1-continuous glottal pulse generator for natural voiced excitation without clicks */
 static inline float sk_glottal_pulse(float phase, float open_quotient) {
     phase = sk_clampf(phase, 0.0f, 1.0f);
     open_quotient = sk_clampf(open_quotient, 0.2f, 0.85f);
 
-    if (phase > open_quotient) {
+    if (phase >= open_quotient) {
         return 0.0f; /* Glottis closed */
     }
 
-    /* Normalized time in glottal opening/closing phase */
-    float tn = phase / open_quotient;
-    /* Rosenberg polynomial: g(t) = 3*t^2 - 2*t^3 */
-    return (3.0f * tn * tn) - (2.0f * tn * tn * tn);
+    /* Split open phase into opening rise (~65%) and closing fall (~35%) */
+    float t_open = open_quotient * 0.65f;
+    float t_close = open_quotient - t_open;
+
+    if (phase < t_open) {
+        /* Opening phase: smooth raised-cosine rise from 0.0 to 1.0 */
+        float theta = (float)M_PI * (phase / t_open);
+        return 0.5f * (1.0f - cosf(theta));
+    } else {
+        /* Closing phase: smooth cosine drop from 1.0 to 0.0 (C0 and C1 continuous at closure) */
+        float theta = ((float)M_PI * 0.5f) * ((phase - t_open) / t_close);
+        return cosf(theta);
+    }
 }
 
 /* Initialize single formant resonator */
@@ -1168,10 +1183,13 @@ typedef struct {
 typedef struct {
     float duration_ms;
     float pitch_hz;
+    float pitch_end_hz;    /* Optional pitch glide target (0 or == pitch_hz for steady; != for inflection) */
     float voice_gain;
     float noise_gain;
     float noise_freq;
     float noise_bw;
+    float vibrato_depth;   /* Vibrato modulation depth (e.g. 0.02 = 2%) */
+    float vibrato_rate;    /* Vibrato speed in Hz (e.g. 5.5 Hz) */
     uint16_t flags;
     float f1, f2, f3, f4;
     float b1, b2, b3, b4;
@@ -1239,15 +1257,28 @@ static inline const sk_phoneme_def_t *sk_phoneme_lookup(const char *code) {
     static const int COUNT = sizeof(TABLE) / sizeof(TABLE[0]);
 
     if (!code || !code[0]) return NULL;
+
+    /* Clean code: strip any trailing stress digit ('0', '1', '2') */
+    char clean[8];
+    int len = 0;
+    while (code[len] && len < 7) {
+        clean[len] = code[len];
+        len++;
+    }
+    clean[len] = '\0';
+    if (len > 1 && (clean[len - 1] >= '0' && clean[len - 1] <= '2')) {
+        clean[len - 1] = '\0';
+    }
+
     for (int i = 0; i < COUNT; i++) {
-        if (strcasecmp(TABLE[i].code, code) == 0) {
+        if (strcasecmp(TABLE[i].code, clean) == 0) {
             return &TABLE[i];
         }
     }
     return NULL;
 }
 
-/* Compile a phonetic DSL string (e.g. "[S:50 K:40 R:70 EH:120@130 D:60]") into flat frame array */
+/* Compile a phonetic DSL string (e.g. "[S:50 K:40 R:70 EH1:120@130>105~ D:60]") into flat frame array */
 static inline int sk_phoneme_compile_dsl(const char *dsl, sk_phoneme_frame_t *out_frames, int max_frames, float default_pitch) {
     if (!dsl || !out_frames || max_frames <= 0) return 0;
     if (default_pitch < 40.0f) default_pitch = 120.0f;
@@ -1265,11 +1296,17 @@ static inline int sk_phoneme_compile_dsl(const char *dsl, sk_phoneme_frame_t *ou
         /* Read phoneme code */
         char code[8];
         int c_idx = 0;
-        while (*p && *p != ':' && *p != '@' && *p != ' ' && *p != '\t' && *p != ',' && *p != ']' && c_idx < 7) {
+        int stress = -1; /* -1 = none, 0 = unstressed, 1 = primary, 2 = secondary */
+        while (*p && *p != ':' && *p != '@' && *p != '~' && *p != '*' && *p != ' ' && *p != '\t' && *p != ',' && *p != ']' && c_idx < 7) {
             code[c_idx++] = *p++;
         }
         code[c_idx] = '\0';
         if (c_idx == 0) break;
+
+        /* Detect ARPAbet numeric stress suffix (e.g. "EH1", "AA0", "UW2") */
+        if (c_idx > 1 && (code[c_idx - 1] >= '0' && code[c_idx - 1] <= '2')) {
+            stress = code[c_idx - 1] - '0';
+        }
 
         const sk_phoneme_def_t *def = sk_phoneme_lookup(code);
         if (!def) {
@@ -1279,6 +1316,27 @@ static inline int sk_phoneme_compile_dsl(const char *dsl, sk_phoneme_frame_t *ou
 
         float dur = def ? def->default_ms : 80.0f;
         float pitch = default_pitch;
+        float pitch_end = 0.0f;
+        float vib_depth = 0.0f;
+        float vib_rate = 5.5f;
+        float amp_scale = 1.0f;
+
+        /* Linguistic stress factors (applied to both default and explicit durations/pitches) */
+        float stress_dur_mult = 1.0f;
+        float stress_pitch_mult = 1.0f;
+        if (stress == 1) {
+            stress_dur_mult = 1.25f;       /* Primary stress: +25% duration */
+            stress_pitch_mult = 1.15f;     /* +15% pitch accent */
+            amp_scale *= 1.20f;            /* +20% voice intensity */
+        } else if (stress == 0) {
+            stress_dur_mult = 0.75f;       /* Unstressed: -25% duration */
+            stress_pitch_mult = 0.95f;
+            amp_scale *= 0.80f;            /* -20% voice intensity */
+        } else if (stress == 2) {
+            stress_dur_mult = 1.10f;       /* Secondary stress: +10% duration */
+            stress_pitch_mult = 1.05f;
+            amp_scale *= 1.05f;
+        }
 
         /* Parse optional duration ':dur' */
         if (*p == ':') {
@@ -1290,8 +1348,10 @@ static inline int sk_phoneme_compile_dsl(const char *dsl, sk_phoneme_frame_t *ou
                 p = end;
             }
         }
+        dur *= stress_dur_mult;
+        pitch *= stress_pitch_mult;
 
-        /* Parse optional pitch '@pitch' */
+        /* Parse optional pitch '@pitch' or pitch inflection glide '@start>end' / '@start<end' */
         if (*p == '@') {
             p++;
             char *end;
@@ -1299,26 +1359,59 @@ static inline int sk_phoneme_compile_dsl(const char *dsl, sk_phoneme_frame_t *ou
             if (end > p && parsed_pitch > 20.0f) {
                 pitch = parsed_pitch;
                 p = end;
+                if (*p == '>' || *p == '<' || *p == '~') {
+                    p++;
+                    float parsed_end = strtof(p, &end);
+                    if (end > p && parsed_end > 20.0f) {
+                        pitch_end = parsed_end;
+                        p = end;
+                    }
+                }
+            }
+        }
+
+        /* Parse optional vibrato '~' or '~rate' */
+        if (*p == '~') {
+            p++;
+            vib_depth = 0.025f; /* 2.5% natural pitch wobble */
+            vib_rate = 5.5f;
+            char *end;
+            float parsed_rate = strtof(p, &end);
+            if (end > p && parsed_rate > 0.5f) {
+                vib_rate = parsed_rate;
+                p = end;
+            }
+        }
+
+        /* Parse optional amplitude/stress multiplier '*amp' */
+        if (*p == '*') {
+            p++;
+            char *end;
+            float parsed_amp = strtof(p, &end);
+            if (end > p && parsed_amp >= 0.0f) {
+                amp_scale *= parsed_amp;
+                p = end;
             }
         }
 
         /* Fill frame */
         sk_phoneme_frame_t *f = &out_frames[frame_count++];
+        memset(f, 0, sizeof(*f));
         f->duration_ms = dur;
         f->pitch_hz = pitch;
+        f->pitch_end_hz = pitch_end > 20.0f ? pitch_end : pitch;
+        f->vibrato_depth = vib_depth;
+        f->vibrato_rate = vib_rate;
+
         if (def) {
             f->flags = def->flags;
-            f->voice_gain = def->voice_gain;
-            f->noise_gain = def->noise_gain;
+            f->voice_gain = def->voice_gain * amp_scale;
+            f->noise_gain = def->noise_gain * amp_scale;
             f->noise_freq = def->noise_freq;
             f->noise_bw = def->noise_bw;
             f->f1 = def->f1; f->f2 = def->f2; f->f3 = def->f3; f->f4 = def->f4;
             f->b1 = def->b1; f->b2 = def->b2; f->b3 = def->b3; f->b4 = def->b4;
             f->g1 = def->g1; f->g2 = def->g2; f->g3 = def->g3; f->g4 = def->g4;
-        } else {
-            memset(f, 0, sizeof(*f));
-            f->duration_ms = dur;
-            f->pitch_hz = pitch;
         }
     }
 
@@ -1337,10 +1430,12 @@ static inline int sk_phoneme_render_frames(const sk_phoneme_frame_t *frames, int
     sk_biquad_t noise_filter;
     sk_biquad_init(&noise_filter, SK_BIQUAD_BANDPASS, 4000.0f, 1.5f, sample_rate);
 
-    float current_f1 = frames[0].f1;
-    float current_f2 = frames[0].f2;
-    float current_f3 = frames[0].f3;
-    float current_f4 = frames[0].f4;
+    float current_f1 = frames[0].f1, current_f2 = frames[0].f2;
+    float current_f3 = frames[0].f3, current_f4 = frames[0].f4;
+    float current_b1 = frames[0].b1, current_b2 = frames[0].b2;
+    float current_b3 = frames[0].b3, current_b4 = frames[0].b4;
+    float current_g1 = frames[0].g1, current_g2 = frames[0].g2;
+    float current_g3 = frames[0].g3, current_g4 = frames[0].g4;
     float current_vg = 0.0f;
     float current_ng = 0.0f;
     float current_pitch = frames[0].pitch_hz;
@@ -1355,49 +1450,78 @@ static inline int sk_phoneme_render_frames(const sk_phoneme_frame_t *frames, int
 
         int is_stop = (fr->flags & SK_PHO_STOP) != 0;
         int closure_samples = is_stop ? (int)(frame_samples * 0.70f) : 0;
+        int burst_samples = frame_samples - closure_samples;
 
-        /* Update noise filter center frequency if fricative/stop */
+        /* Update noise filter center frequency smoothly without zeroing delay registers */
         if (fr->noise_freq > 200.0f) {
             float q = fr->noise_freq / (fr->noise_bw > 50.0f ? fr->noise_bw : 50.0f);
             if (q < 0.5f) q = 0.5f;
             if (q > 8.0f) q = 8.0f;
-            sk_biquad_init(&noise_filter, SK_BIQUAD_BANDPASS, fr->noise_freq, q, sample_rate);
+            sk_biquad_set(&noise_filter, SK_BIQUAD_BANDPASS, fr->noise_freq, q, sample_rate);
         }
 
         /* Coarticulation slew coefficient: ~15ms transition time */
         float slew = 1.0f - expf(-1.0f / (0.015f * sample_rate));
 
         for (int i = 0; i < frame_samples && out_idx < max_samples; i++) {
-            /* Slew formant frequencies and gains toward target */
+            float progress = (float)i / (float)frame_samples;
+
+            /* Compute pitch target with optional inflection glide */
+            float target_pitch = fr->pitch_hz;
+            if (fr->pitch_end_hz > 20.0f && fr->pitch_end_hz != fr->pitch_hz) {
+                target_pitch = sk_lerp(fr->pitch_hz, fr->pitch_end_hz, progress);
+            }
+
+            /* Apply vibrato if enabled */
+            if (fr->vibrato_depth > 0.0f) {
+                float t = (float)out_idx / sample_rate;
+                float vib = sinf(2.0f * (float)M_PI * fr->vibrato_rate * t) * fr->vibrato_depth;
+                target_pitch *= (1.0f + vib);
+            }
+
+            /* Slew formant frequencies, bandwidths, gains, and pitch */
             current_f1 += slew * (fr->f1 - current_f1);
             current_f2 += slew * (fr->f2 - current_f2);
             current_f3 += slew * (fr->f3 - current_f3);
             current_f4 += slew * (fr->f4 - current_f4);
-            current_pitch += slew * (fr->pitch_hz - current_pitch);
+
+            current_b1 += slew * (fr->b1 - current_b1);
+            current_b2 += slew * (fr->b2 - current_b2);
+            current_b3 += slew * (fr->b3 - current_b3);
+            current_b4 += slew * (fr->b4 - current_b4);
+
+            current_g1 += slew * (fr->g1 - current_g1);
+            current_g2 += slew * (fr->g2 - current_g2);
+            current_g3 += slew * (fr->g3 - current_g3);
+            current_g4 += slew * (fr->g4 - current_g4);
+
+            current_pitch += slew * (target_pitch - current_pitch);
 
             float target_vg = fr->voice_gain;
             float target_ng = fr->noise_gain;
 
-            /* Stop consonant handling: silence during closure, then burst */
+            /* Stop consonant handling: silence during closure, smooth half-sine burst during release */
             if (is_stop) {
                 if (i < closure_samples) {
                     target_ng = 0.0f;
                     if (!(fr->flags & SK_PHO_VOICED)) target_vg = 0.0f;
                 } else {
-                    target_ng = fr->noise_gain * 1.5f; /* Burst transient */
+                    float burst_frac = burst_samples > 0 ? (float)(i - closure_samples) / (float)burst_samples : 1.0f;
+                    float burst_env = sinf((float)M_PI * burst_frac);
+                    target_ng = fr->noise_gain * 1.5f * burst_env;
                 }
             }
 
             current_vg += slew * (target_vg - current_vg);
             current_ng += slew * (target_ng - current_ng);
 
-            /* Update formant resonators with slewed frequencies */
-            sk_formant_resonator_set(&fb.formants[0], current_f1, fr->b1, fr->g1, sample_rate);
-            sk_formant_resonator_set(&fb.formants[1], current_f2, fr->b2, fr->g2, sample_rate);
-            sk_formant_resonator_set(&fb.formants[2], current_f3, fr->b3, fr->g3, sample_rate);
-            sk_formant_resonator_set(&fb.formants[3], current_f4, fr->b4, fr->g4, sample_rate);
+            /* Update formant resonators with continuously slewed parameters */
+            sk_formant_resonator_set(&fb.formants[0], current_f1, current_b1, current_g1, sample_rate);
+            sk_formant_resonator_set(&fb.formants[1], current_f2, current_b2, current_g2, sample_rate);
+            sk_formant_resonator_set(&fb.formants[2], current_f3, current_b3, current_g3, sample_rate);
+            sk_formant_resonator_set(&fb.formants[3], current_f4, current_b4, current_g4, sample_rate);
 
-            /* Glottal oscillator */
+            /* Glottal oscillator (C1-continuous) */
             float phase_inc = current_pitch / sample_rate;
             phase += phase_inc;
             if (phase >= 1.0f) phase -= 1.0f;
