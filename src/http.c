@@ -73,6 +73,7 @@ typedef struct {
     int body_offset;
     int keep_alive;
     uint32_t last_activity_sec;
+    char path[128];
 } sk_http_client_t;
 
 static SOCKET server_sock = INVALID_SOCKET;
@@ -133,9 +134,42 @@ static const char *find_header(const char *headers, const char *name) {
     return NULL;
 }
 
+/* Matches endpoint command names accommodating leading '/', '-', or '.' */
+static inline int path_match(const char *path, const char *name) {
+    if (!path || !name) return 0;
+    while (*path == '/') path++;
+    if (*path == '-' || *path == '.') path++;
+    return strcmp(path, name) == 0;
+}
+
 /* Execute command body in client's context and prepare HTTP response */
 static void client_execute_and_respond(sk_http_client_t *c, const char *body, int body_len) {
     atomic_fetch_add_uint64(&metric_requests, 1);
+
+    /* Check if this is a connection reset command: /-reset or /.reset */
+    if (path_match(c->path, "reset")) {
+        skode_free(&c->ctx);
+        skode_init(&c->ctx);
+        c->ctx.log_enable = 1;
+        const char *resp_body = "OK reset\n";
+        int resp_len = (int)strlen(resp_body);
+        const char *conn_header = c->keep_alive ? "keep-alive" : "close";
+        c->tx_len = snprintf(c->tx_buf, sizeof(c->tx_buf),
+            "HTTP/1.1 200 OK\r\n"
+            "Server: sk3-http\r\n"
+            "Content-Type: text/plain; charset=utf-8\r\n"
+            "Access-Control-Allow-Origin: *\r\n"
+            "Access-Control-Allow-Methods: POST, OPTIONS, GET\r\n"
+            "Access-Control-Allow-Headers: Content-Type, Authorization\r\n"
+            "Connection: %s\r\n"
+            "Content-Length: %d\r\n"
+            "\r\n"
+            "%s",
+            conn_header, resp_len, resp_body);
+        c->tx_sent = 0;
+        c->state = SK_HTTP_STATE_SENDING_RESPONSE;
+        return;
+    }
 
     /* Reset client's log buffer to capture only this request's output */
     c->ctx.log[0] = '\0';
@@ -276,14 +310,15 @@ static void client_read(sk_http_client_t *c) {
             if (c->content_length < 0) c->content_length = 0;
 
             /* Extract URL path from request line: "METHOD /path HTTP/1.x" */
-            char path[128] = "/";
+            c->path[0] = '/';
+            c->path[1] = '\0';
             const char *sp1 = strchr(c->rx_buf, ' ');
             if (sp1) {
                 sp1++;
                 const char *sp2 = strchr(sp1, ' ');
-                if (sp2 && (sp2 - sp1) < (int)sizeof(path)) {
-                    memcpy(path, sp1, sp2 - sp1);
-                    path[sp2 - sp1] = '\0';
+                if (sp2 && (sp2 - sp1) < (int)sizeof(c->path)) {
+                    memcpy(c->path, sp1, sp2 - sp1);
+                    c->path[sp2 - sp1] = '\0';
                 }
             }
 
@@ -295,9 +330,9 @@ static void client_read(sk_http_client_t *c) {
                 char get_body[512];
                 const char *content_type = "text/plain; charset=utf-8";
 
-                if (strcmp(path, "/version") == 0) {
+                if (path_match(c->path, "version")) {
                     snprintf(get_body, sizeof(get_body), "%s\n", skred_version());
-                } else if (strcmp(path, "/status") == 0 || strcmp(path, "/health") == 0 || strcmp(path, "/metrics") == 0) {
+                } else if (path_match(c->path, "status") || path_match(c->path, "health") || path_match(c->path, "metrics")) {
                     content_type = "application/json; charset=utf-8";
                     skred_http_metrics_t m;
                     skred_http_metrics(&m);
@@ -308,9 +343,11 @@ static void client_read(sk_http_client_t *c) {
                     snprintf(get_body, sizeof(get_body),
                         "sk3 v%s HTTP endpoint ready\n"
                         "Endpoints:\n"
-                        "  POST /skode (or POST /)   Execute Skode Forth commands\n"
-                        "  GET  /status              JSON engine & HTTP metrics\n"
-                        "  GET  /version             Plaintext version string\n",
+                        "  POST /                     Execute Skode commands in connection context\n"
+                        "  POST /-skode (or /.skode)   Execute Skode commands\n"
+                        "  POST /-reset (or /.reset)   Reset this connection's context\n"
+                        "  GET  /-status (or /.status) JSON engine & HTTP metrics\n"
+                        "  GET  /-version (or /.version) Plaintext version string\n",
                         skred_version());
                 }
 
