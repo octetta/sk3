@@ -1,132 +1,120 @@
-# DSP Expansion Plan: Physical Modeling & Full Phoneme/Formant Synthesis
+# DSP Expansion Plan: Physical Modeling, Speech Synthesis & Sound Analysis
 
-## 1. Architectural Perspective & Evaluation
-
-### A. String Pluck: Extended Karplus-Strong (KS)
-* **The Concept**: Digital waveguide physical modeling where a burst of energy circulates in a feedback delay loop with a loss filter.
-* **Why it fits `sk3` / `k-synth`**:
-  - Extremely cheap computationally (a circular buffer read/write, one multiplication, one addition per sample).
-  - High dynamic and acoustic range: changes naturally depending on pluck velocity, pick position, and string damping.
-  - Complements the existing subtractive/wavetable architecture without requiring heavy new memory structures.
-* **Implemented in Phase 1**:
-  - **Allpass Fractional Delay Tuning**: Maintains constant loop magnitude $|H(e^{j\omega})| = 1.0$, allowing crisp pitch tuning across octaves without artificial high-frequency damping.
-  - **Pick Position Comb**: Feedforward comb $(x[n] - x[n - D_{\text{pick}}])$ creates harmonic notches corresponding to plucking near the bridge (bright/thin) vs. center (warm/round).
+> [!NOTE]
+> This document tracks the design roadmap, execution phases, and completed deliverables for the `sk3` DSP expansion. For the complete API reference and mathematical documentation, consult [`doc/DSP_TOOLKIT.md`](file:///home/stewartj/book/sk3/doc/DSP_TOOLKIT.md).
 
 ---
 
-### B. Vocal Tract: Vowels & Full Phoneme Generation
-* **The Concept**: Source-filter acoustic model of speech. An excitation source (glottal pulse train for voiced sounds, shaped noise for unvoiced fricatives, or silence-and-burst for plosives) drives a bank of 4 to 5 tuned bandpass formant resonators ($F_1 \dots F_5$) and a parallel frication noise pathway.
-* **The 4 Phonetic Acoustic Classes**:
-  1. **Voiced Sonorants (Vowels & Glides)**: `/a/`, `/e/`, `/i/`, `/o/`, `/u/`, `/l/`, `/r/`, `/w/`, `/j/`.
-     - Driven by Rosenberg glottal pulse ($g(t) = 3t^2 - 2t^3$) with mild pitch jitter and vibrato.
-     - Resonated through parallel constant-0dB 2-pole bandpass filters ($F_1, F_2, F_3, F_4$).
-  2. **Fricatives & Sibilants**: `/s/`, `/ʃ/` ("sh"), `/f/`, `/θ/` ("th"), `/z/`, `/ʒ/`, `/v/`.
-     - High-frequency shaped noise injected into the vocal tract or mixed with voice:
-       - `/s/`: Bandpass noise centered at **5.0 kHz – 8.0 kHz**.
-       - `/ʃ/`: Turbulent noise centered at **2.5 kHz – 4.5 kHz**.
-       - Voiced fricatives (`/z/`, `/v/`): Glottal pulse and noise simultaneously active.
-  3. **Plosives / Stops**: `/p/`, `/t/`, `/k/` (unvoiced), `/b/`, `/d/`, `/g/` (voiced).
-     - 3-phase state machine:
-       $$\text{Voice bar / closure} \longrightarrow \text{Complete silence (20–60ms)} \longrightarrow \text{High-pressure release burst (5–15ms)}$$
-  4. **Nasals**: `/m/`, `/n/`, `/ŋ/` ("ng").
-     - Closed oral cavity branches off open nasal cavity, creating an anti-formant (spectral zero / notch) between 800 Hz and 1800 Hz, with a prominent low "nasal murmur" at ~250 Hz.
+## 1. Executive Summary & Status
 
----
-
-## 2. Phased Implementation Roadmap
+All Phase 1, Phase 1B, Phase 1C, and Sound Analysis capabilities have been fully implemented in [`src/sk_dsp.h`](file:///home/stewartj/book/sk3/src/sk_dsp.h), verified with 16 automated test suites via `ctest`, and compiled into 8 standalone audio demonstrations via `make dsp-demos`.
 
 ```mermaid
 flowchart TD
-    subgraph Phase 1: Core DSP Math (COMPLETED)
-        A1[sk_dsp.h: Karplus-Strong string engine with allpass tuning & pick comb]
-        A2[sk_dsp.h: Rosenberg glottal generator & 4-pole Formant Bank]
-        A3[dsp_math_tests.c: 15 unit tests passing 100%]
-        A4[render_dsp_demo: pluck_demo.wav and vowel_demo.wav generated]
+    subgraph Phase 1: Core Physical Modeling & Oscillators (DELIVERED)
+        A1[Karplus-Strong Plucked Strings & Allpass Tuning]
+        A2[Karplus-Strong Physical Drum Membrane]
+        A3[Physical Waveguide Flute & Brass Models]
+        A4[Band-Limited PolyBLEP Oscillators: Saw, Pulse/PWM, Tri]
     end
 
-    subgraph Phase 1B: Full Phoneme Primitives & Dictionary (Token Safe)
-        B1[sk_dsp.h: Add ARPAbet ~40-phoneme acoustic parameter table]
-        B2[sk_dsp.h: Add Fricative/Stop noise shaper & Plosive burst generator]
-        B3[sk_dsp.h: Add Coarticulation parameter smoother]
-        B4[tools/render_dsp_demo: Render spoken words demo e.g. 'SKRED']
+    subgraph Phase 1B: Formants & Historic Speech (DELIVERED)
+        B1[5-Pole Parallel Formant Resonators with Lip Pre-emphasis]
+        B2[~40 ARPAbet Phoneme Target Dictionary]
+        B3[ASCII Speech DSL Compiler with Pitch Glides & Vibrato]
+        B4[DECtalk & SAM Historic Voice Personas]
     end
 
-    subgraph Phase 2: Interactive Playground in k-synth
-        C1[Expose Karplus-Strong & Formant controls in k-synth]
-        C2[UI 2D Vowel XY Pad & Phoneme String Trigger]
+    subgraph Phase 1C: Percussion & Modal Idiophones (DELIVERED)
+        C1[Analog 808/909 Drums: Kick, Snare, Hats, Clap, Cowbell, Tom]
+        C2[Euler-Bernoulli Modal Metallic Bells & Chimes]
     end
 
-    subgraph Phase 3: sk3 Engine & Skode Forth Integration (Next Week)
-        D1[Voice mode: Karplus-Strong physical pluck]
-        D2[Voice filter mode: Formant bank resonator]
-        D3[Skode Forth words: e.g. [H EH L OW] say or v0 form x y]
-        D4[Cross-repo release: sk3, skode, skred-web, mod/sid clients]
+    subgraph Phase 1D: Sound Analysis & Transcription (DELIVERED)
+        D1[Pure C Speech-to-Phoneme Transcriber: sk_speech_analyze_pcm]
+        D2[10th-Order Levinson-Durbin LPC & Formant Peak Picking]
     end
 
-    Phase 1 --> Phase 1B
-    Phase 1B --> Phase 2
-    Phase 2 --> Phase 3
+    subgraph Phase 2: Engine & Network Control (DELIVERED)
+        E1[Multiplexed Non-Blocking HTTP POST Control Endpoint on port 60440]
+        E2[Per-Connection Isolated Skode Context with Keep-Alive]
+    end
+
+    subgraph Phase 3: Forth Words & Schema Integration (UPCOMING)
+        F1[Expose physical pluck & flute/brass in Skode dictionary]
+        F2[Expose speech DSL tokenizer as native Forth word]
+        F3[Interactive 2D Formant Pad in web UI]
+    end
+
+    Phase 1 --> Phase 1B --> Phase 1C --> Phase 1D --> Phase 2 --> Phase 3
 ```
 
 ---
 
-## 3. Detailed Component Specifications
+## 2. Implementation Deliverables Matrix
 
-### Component 1: `sk_karplus_t` (Plucked String Engine) — *Completed*
-* **Location**: [sk3/src/sk_dsp.h](file:///home/stewartj/book/sk3/src/sk_dsp.h#L834-L968)
-* **Features**: Self-contained circular buffer, 1st-order allpass fractional delay tuning, dual-parameter pluck (pick position comb + strike brightness lowpass), 1-pole loop damping, DC blocker.
-
----
-
-### Component 2: `sk_formant_bank_t` (Vocal Resonator Engine) — *Completed*
-* **Location**: [sk3/src/sk_dsp.h](file:///home/stewartj/book/sk3/src/sk_dsp.h#L970-L1136)
-* **Features**: Rosenberg polynomial glottal wave generator ($g(t) = 3t^2 - 2t^3$), 4-pole parallel constant 0 dB peak bandpass resonators, canonical vowel selector (`/a/`, `/e/`, `/i/`, `/o/`, `/u/`), continuous 2D $(X, Y)$ vowel morphing plane.
-
----
-
-### Component 3: `sk_phoneme_t` (Full Phoneme Dictionary & Engine)
-* **Location**: [sk3/src/sk_dsp.h](file:///home/stewartj/book/sk3/src/sk_dsp.h)
-* **Phoneme Acoustic Definition**:
-  ```c
-  typedef struct {
-      char code[4];          /* ARPAbet code: "AA", "S", "T", "SH", "M", etc. */
-      uint8_t flags;         /* Bit 0: voiced, Bit 1: nasal, Bit 2: plosive, Bit 3: fricative */
-      float duration_ms;     /* Standard steady-state duration in ms */
-      float voice_gain;      /* Glottal pulse level (0.0 to 1.0) */
-      float noise_gain;      /* Aspiration/frication noise level (0.0 to 1.0) */
-      float noise_freq;      /* Frication filter center frequency in Hz */
-      float noise_bw;        /* Frication filter bandwidth in Hz */
-      float f1, f2, f3, f4;  /* Formant target frequencies in Hz */
-      float b1, b2, b3, b4;  /* Formant bandwidths in Hz */
-      float g1, g2, g3, g4;  /* Formant relative gains */
-  } sk_phoneme_def_t;
-  ```
-
-* **ARPAbet Subset (~40 Standard Phonemes)**:
-  - **Vowels**: `AA` (father), `AE` (cat), `AH` (but), `AO` (dog), `EH` (bed), `ER` (bird), `EY` (say), `IH` (sit), `IY` (see), `OW` (go), `UH` (book), `UW` (too).
-  - **Fricatives**: `S` (sea), `SH` (she), `Z` (zoo), `ZH` (measure), `F` (fan), `V` (van), `TH` (thin), `DH` (this).
-  - **Stops/Plosives**: `P` (pat), `B` (bat), `T` (tap), `D` (dam), `K` (cat), `G` (gap).
-  - **Nasals**: `M` (mom), `N` (no), `NG` (sing).
-  - **Glides & Liquids**: `L` (lay), `R` (red), `W` (way), `Y` (yes), `HH` (hay).
-
-* **Coarticulation Transition Filter**:
-  A parameter slew rate limiter:
-  $$P_{k}[n] = P_{k}[n-1] + \alpha \cdot \left(\text{Target}_{k} - P_{k}[n-1]\right)$$
-  Where $\alpha \approx 0.005$ to $0.02$, ensuring formant frequencies sweep smoothly between phonemes to sound like human vocal tract movement instead of abrupt clicks.
+| Component | Target Architecture | Implementation File | Status | Verification Target |
+| :--- | :--- | :--- | :--- | :--- |
+| **Plucked String** | Extended Karplus-Strong with allpass fractional delay and pick comb filter | [`src/sk_dsp.h`](file:///home/stewartj/book/sk3/src/sk_dsp.h) (`sk_karplus_t`) | **Complete** | `pluck_demo.wav` |
+| **Physical Drum** | 2D membrane pitch-drop waveguide with inverting loop filter | [`src/sk_dsp.h`](file:///home/stewartj/book/sk3/src/sk_dsp.h) (`sk_karplus_strike_drum`) | **Complete** | `percussion_demo.wav` |
+| **Physical Flute** | McIntyre-Schumacher-Woodhouse non-linear jet-drive waveguide | [`src/sk_dsp.h`](file:///home/stewartj/book/sk3/src/sk_dsp.h) (`sk_flute_t`) | **Complete** | `wind_brass_demo.wav` |
+| **Physical Brass** | Spring-mass lip reed, Bernoulli flow, and brassiness shock waves | [`src/sk_dsp.h`](file:///home/stewartj/book/sk3/src/sk_dsp.h) (`sk_brass_t`) | **Complete** | `wind_brass_demo.wav` |
+| **PolyBLEP Waveforms** | 2nd-order polynomial bandlimited step (Saw, Pulse/PWM, Triangle) | [`src/sk_dsp.h`](file:///home/stewartj/book/sk3/src/sk_dsp.h) (`sk_polyblep_osc_t`) | **Complete** | `polyblep_demo.wav` |
+| **Formant Resonators** | 5-pole parallel bandpass bank ($F_1 \dots F_5$) with lip radiation pre-emphasis | [`src/sk_dsp.h`](file:///home/stewartj/book/sk3/src/sk_dsp.h) (`sk_formant_bank_t`) | **Complete** | `vowel_demo.wav` |
+| **Speech DSL** | ASCII phoneme tokenizer with pitch inflection `[PHO:ms@f0>f1~]` | [`src/sk_dsp.h`](file:///home/stewartj/book/sk3/src/sk_dsp.h) (`sk_phoneme_compile_dsl`) | **Complete** | `phoneme_demo.wav`, `speech_demo.wav` |
+| **Historic Voices** | DECtalk (Paul, Betty, Harry), SAM C64, Kit the Kid, Robot Monotone | [`src/sk_dsp.h`](file:///home/stewartj/book/sk3/src/sk_dsp.h) (`sk_speech_voice_*`) | **Complete** | `voices_demo.wav` |
+| **Analog Drums** | 808/909 Kick, Snare, Hi-Hats, Clap, Cowbell, and Tom | [`src/sk_dsp.h`](file:///home/stewartj/book/sk3/src/sk_dsp.h) (`sk_drum_*`) | **Complete** | `percussion_demo.wav` |
+| **Modal Bells** | 6-mode Euler-Bernoulli inharmonic metallic idiophones (5 presets) | [`src/sk_dsp.h`](file:///home/stewartj/book/sk3/src/sk_dsp.h) (`sk_drum_bell_t`) | **Complete** | `percussion_demo.wav` |
+| **LPC Speech Analysis**| 10th-order Levinson-Durbin all-pole LPC & formant peak picking in pure C | [`src/sk_dsp.h`](file:///home/stewartj/book/sk3/src/sk_dsp.h) (`sk_speech_analyze_pcm`) | **Complete** | `tests/dsp_math_tests.c` |
+| **HTTP POST Endpoint** | Multiplexed non-blocking POST control server on port 60440 | [`src/http.c`](file:///home/stewartj/book/sk3/src/http.c), [`src/http.h`](file:///home/stewartj/book/sk3/src/http.h) | **Complete** | `tests/http_tests.c` |
 
 ---
 
-### Component 4: Skode Forth Syntax Design (Phase 3)
-* **Pluck Command**:
-  ```forth
-  v0 440 0.8 0.2 pluck    \ voice 0, 440 Hz, vel 0.8, pick pos 0.2
-  ```
-* **Vowel / Formant Filter Command**:
-  ```forth
-  v0 vowel A              \ set voice 0 formant filter to canonical 'A'
-  v0 0.5 -0.2 form_xy     \ set voice 0 to continuous 2D vowel plane coordinate
-  ```
-* **Phoneme Speech Command**:
-  ```forth
-  [S K R EH D] phoneme    \ speak "skred" using ARPAbet phoneme sequence
-  ```
+## 3. Acoustic Modeling Details
+
+### A. Extended Karplus-Strong Physical String
+* **Allpass Fractional Delay**: Solves pitch-quantization without introducing artificial high-frequency damping ($|A(z)| = 1.0$ across all frequencies).
+* **Pick Position Comb**: Feedforward comb $(x[n] - x[n - D_{\text{pick}}])$ creates harmonic notches corresponding to picking close to the bridge (bright) vs. center (warm).
+
+### B. Physical Flute & Brass
+* **Flute**: Models turbulent air jet crossing the labium window. Non-linear cubic saturation creates alternating edge-tone vortices, coupled back into a reflection bore.
+* **Brass**: Simulates player's lips acting as an outward-striking spring-mass valve. High-pressure air from mouth creates non-linear shock waves steepening into brassy buzz.
+
+### C. Anti-Aliased PolyBLEP Oscillators
+* Residual step correction eliminates Nyquist foldover distortion without expensive 4x/8x oversampling.
+* Supports dynamic pulse-width modulation (PWM) from 1% to 99% with sub-sample transient accuracy.
+
+### D. Historic Speech & Formant Synthesis
+* **Klatt-Style Resonator Bank**: Constant 0 dB peak gain bandpass filters prevent gain explosion when formants sweep or cluster.
+* **Lip Radiation Tilt**: First-difference filter ($y[n] = x[n] - 0.72x[n-1]$) adds natural +6 dB/octave high-frequency acoustic presence.
+* **Stop Plosive Transients**: Instantaneous pressure burst injection replicates alveolar, velar, and bilabial release pops (P, T, K, B, D, G).
+* **DECtalk / SAM Voice Personas**: Replicates historic speech synthesis systems with parameterized vocal tract lengths and fundamental pitch envelopes.
+
+### E. Modal Metallic Bells
+* Unlike 2D drums that drop in pitch on impact, struck metallic solids possess structural stiffness governed by Euler-Bernoulli beam and shell mechanics:
+  $$f_n = f_0 \cdot \mu_n$$
+* Presets include bronze church bells, orchestral tubular chimes, vibraphone bars, Tibetan singing bowls (with beating modal doublets), and Latin agogo bells.
+
+### F. Pure C Sound Analysis & Speech-to-Phoneme
+* Independent of Python, external neural network weights, or foreign C libraries.
+* Employs 3:1 integer decimation (to 16 kHz), 25 ms Hamming windows, zero-crossing rate calculation, and 10th-order Levinson-Durbin autocorrelation LPC recursion.
+* Extracts resonant $F_1, F_2, F_3$ spectral peaks and maps them to standard ARPAbet phonetic centroids.
+
+---
+
+## 4. Phase 3 Roadmap: Skode Language & Engine Integration
+
+With all math, physics, and speech primitives fully implemented and tested in `sk_dsp.h`, Phase 3 integrates these engines into the real-time `sk3` synthesizer and Forth-like `skode` language:
+
+1. **Physical Modeling Voice Modes**:
+   - `w6` physical string voice mode (`pluck`).
+   - `w7` physical wind/brass voice mode (`wind`, `brass`).
+2. **Formant Resonator Filter Modes**:
+   - Expand `sk3` filter types to include 5-pole vocal tract formant filtering (`formant`).
+3. **Native Speech Opcode**:
+   - Forth word `say` to evaluate inline speech DSL tokens:
+     ```forth
+     "[HH:70 EH1:110 L:80 OW1:200]" say
+     ```
+4. **Interactive Web UI**:
+   - 2D vowel plane pad $(X, Y)$ and realtime phoneme sequencer in `skred-web`.

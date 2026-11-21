@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <inttypes.h>
 
 #if defined(__EMSCRIPTEN__) || defined(SK_NO_NETWORK)
 
@@ -274,25 +275,56 @@ static void client_read(sk_http_client_t *c) {
             c->content_length = cl_val ? atoi(cl_val) : 0;
             if (c->content_length < 0) c->content_length = 0;
 
+            /* Extract URL path from request line: "METHOD /path HTTP/1.x" */
+            char path[128] = "/";
+            const char *sp1 = strchr(c->rx_buf, ' ');
+            if (sp1) {
+                sp1++;
+                const char *sp2 = strchr(sp1, ' ');
+                if (sp2 && (sp2 - sp1) < (int)sizeof(path)) {
+                    memcpy(path, sp1, sp2 - sp1);
+                    path[sp2 - sp1] = '\0';
+                }
+            }
+
             /* Check method */
             if (strncmp(c->rx_buf, "OPTIONS", 7) == 0) {
                 client_respond_cors(c);
                 return;
             } else if (strncmp(c->rx_buf, "GET", 3) == 0) {
-                /* Health check / GET status */
-                char get_body[256];
-                snprintf(get_body, sizeof(get_body), "sk3 v%s HTTP endpoint ready (POST /skode)\n", skred_version());
+                char get_body[512];
+                const char *content_type = "text/plain; charset=utf-8";
+
+                if (strcmp(path, "/version") == 0) {
+                    snprintf(get_body, sizeof(get_body), "%s\n", skred_version());
+                } else if (strcmp(path, "/status") == 0 || strcmp(path, "/health") == 0 || strcmp(path, "/metrics") == 0) {
+                    content_type = "application/json; charset=utf-8";
+                    skred_http_metrics_t m;
+                    skred_http_metrics(&m);
+                    snprintf(get_body, sizeof(get_body),
+                        "{\"status\":\"ok\",\"version\":\"%s\",\"port\":%d,\"active_connections\":%d,\"total_requests\":%" PRIu64 ",\"total_commands\":%" PRIu64 ",\"errors\":%" PRIu64 "}\n",
+                        skred_version(), m.port, m.active_connections, m.total_requests, m.total_commands, m.errors);
+                } else {
+                    snprintf(get_body, sizeof(get_body),
+                        "sk3 v%s HTTP endpoint ready\n"
+                        "Endpoints:\n"
+                        "  POST /skode (or POST /)   Execute Skode Forth commands\n"
+                        "  GET  /status              JSON engine & HTTP metrics\n"
+                        "  GET  /version             Plaintext version string\n",
+                        skred_version());
+                }
+
                 int len = (int)strlen(get_body);
                 c->tx_len = snprintf(c->tx_buf, sizeof(c->tx_buf),
                     "HTTP/1.1 200 OK\r\n"
                     "Server: sk3-http\r\n"
-                    "Content-Type: text/plain; charset=utf-8\r\n"
+                    "Content-Type: %s\r\n"
                     "Access-Control-Allow-Origin: *\r\n"
                     "Connection: %s\r\n"
                     "Content-Length: %d\r\n"
                     "\r\n"
                     "%s",
-                    c->keep_alive ? "keep-alive" : "close", len, get_body);
+                    content_type, c->keep_alive ? "keep-alive" : "close", len, get_body);
                 c->tx_sent = 0;
                 c->state = SK_HTTP_STATE_SENDING_RESPONSE;
                 return;
