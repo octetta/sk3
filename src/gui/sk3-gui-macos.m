@@ -26,7 +26,7 @@
 @property (strong, nonatomic) NSButton *sendBtn;
 @property (strong, nonatomic) NSButton *testBtn;
 @property (strong, nonatomic) NSButton *silenceBtn;
-@property (strong, nonatomic) NSButton *copyLogBtn;
+@property (strong, nonatomic) NSButton *btnCopyLog;
 @property (strong, nonatomic) NSButton *clearBtn;
 @property (strong, nonatomic) NSScrollView *logScroll;
 @property (strong, nonatomic) NSTextView *logView;
@@ -201,7 +201,7 @@
         self.sendBtn.hidden = YES;
         self.testBtn.hidden = YES;
         self.silenceBtn.hidden = YES;
-        self.copyLogBtn.hidden = YES;
+        self.btnCopyLog.hidden = YES;
         self.clearBtn.hidden = YES;
         self.logScroll.hidden = YES;
     } else {
@@ -215,7 +215,7 @@
         self.sendBtn.hidden = NO;
         self.testBtn.hidden = NO;
         self.silenceBtn.hidden = NO;
-        self.copyLogBtn.hidden = NO;
+        self.btnCopyLog.hidden = NO;
         self.clearBtn.hidden = NO;
         self.logScroll.hidden = NO;
         [self.window makeFirstResponder:self.cmdInput];
@@ -470,11 +470,11 @@
     self.silenceBtn.autoresizingMask = NSViewMinYMargin;
     [content addSubview:self.silenceBtn];
 
-    self.copyLogBtn = [NSButton buttonWithTitle:@"Copy Log" target:self action:@selector(copyLog:)];
-    self.copyLogBtn.frame = NSMakeRect(430, 396, 95, 28);
-    self.copyLogBtn.bezelStyle = NSBezelStyleRounded;
-    self.copyLogBtn.autoresizingMask = NSViewMinXMargin | NSViewMinYMargin;
-    [content addSubview:self.copyLogBtn];
+    self.btnCopyLog = [NSButton buttonWithTitle:@"Copy Log" target:self action:@selector(copyLog:)];
+    self.btnCopyLog.frame = NSMakeRect(430, 396, 95, 28);
+    self.btnCopyLog.bezelStyle = NSBezelStyleRounded;
+    self.btnCopyLog.autoresizingMask = NSViewMinXMargin | NSViewMinYMargin;
+    [content addSubview:self.btnCopyLog];
 
     self.clearBtn = [NSButton buttonWithTitle:@"Clear Log" target:self action:@selector(clearClicked:)];
     self.clearBtn.frame = NSMakeRect(530, 396, 90, 28);
@@ -511,7 +511,7 @@
     self.sendBtn.hidden = YES;
     self.testBtn.hidden = YES;
     self.silenceBtn.hidden = YES;
-    self.copyLogBtn.hidden = YES;
+    self.btnCopyLog.hidden = YES;
     self.clearBtn.hidden = YES;
     self.logScroll.hidden = YES;
 
