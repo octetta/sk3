@@ -121,7 +121,7 @@ emcc -I"${ROOT_DIR}/src" \
     -s STACK_SIZE=5242880 \
     -Wl,-z,stack-size=5242880 \
     -s ALLOW_MEMORY_GROWTH=1 \
-    -s INITIAL_MEMORY=128MB \
+    -s INITIAL_MEMORY=32MB \
     -s MAXIMUM_MEMORY=1GB \
     -s MODULARIZE=1 \
     -s EXPORT_ES6=1 \
