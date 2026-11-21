@@ -2333,6 +2333,14 @@ int skred_command(char* line) {
   return skred_command_ctx(line, &w);
 }
 
+int skred_set_string(const char *str) {
+  return skode_set_string(&w, str);
+}
+
+const char *skred_get_string(void) {
+  return skode_get_string(&w);
+}
+
 void skred_stop(void) {
   skred_control_dispatch_stop();
   skred_midi_uninit();

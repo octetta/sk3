@@ -70,6 +70,11 @@ struct skode_s;
 int skred_command(char* cmd);
 int skred_command_ctx(char* cmd, struct skode_s *ctx);
 
+// Sets the ANDS scratch string buffer in the engine's default context (e.g. for drag-and-drop file paths).
+// Words like 'load', 'w0', 'mount', 'cd' consume this string directly.
+int skred_set_string(const char *str);
+const char *skred_get_string(void);
+
 // Safely tear down resources
 void skred_stop(void);
 

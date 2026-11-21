@@ -17,14 +17,14 @@
 @property (strong, nonatomic) NSTextField *udpField;
 @property (strong, nonatomic) NSTextField *tcpField;
 @property (strong, nonatomic) NSButton *restartBtn;
+@property (strong, nonatomic) NSButton *exitBtn;
 @property (strong, nonatomic) NSButton *toggleBtn;
 @property (strong, nonatomic) NSButton *themeBtn;
 @property (strong, nonatomic) NSButton *fontBtn;
 
-@property (strong, nonatomic) NSTextField *cmdLbl;
 @property (strong, nonatomic) NSTextField *cmdInput;
 @property (strong, nonatomic) NSButton *sendBtn;
-@property (strong, nonatomic) NSButton *testBtn;
+@property (strong, nonatomic) NSMutableArray<NSButton *> *macroBtns;
 @property (strong, nonatomic) NSButton *silenceBtn;
 @property (strong, nonatomic) NSButton *btnCopyLog;
 @property (strong, nonatomic) NSButton *clearBtn;
@@ -88,7 +88,6 @@
 
     self.window.backgroundColor = bg;
     self.statusLabel.textColor = statusOk;
-    self.cmdLbl.textColor = textDim;
 
     self.cmdInput.backgroundColor = panel;
     self.cmdInput.textColor = text;
@@ -187,6 +186,18 @@
     self.cmdInput.stringValue = @"";
 }
 
+- (void)saveConfig {
+    sk3_gui_config_t cfg;
+    cfg.theme = (int)self.curTheme;
+    cfg.font_size = (int)self.curFontSize;
+    NSRect r = self.window.frame;
+    cfg.window_width = (int)r.size.width;
+    cfg.window_height = self.isCollapsed ? (int)self.prevExpandedH : (int)r.size.height;
+    cfg.prev_expanded_h = (int)self.prevExpandedH;
+    cfg.console_collapsed = self.isCollapsed ? 1 : 0;
+    sk3_gui_config_save(&cfg);
+}
+
 - (void)toggleConsole:(id)sender {
     self.isCollapsed = !self.isCollapsed;
     NSRect frame = self.window.frame;
@@ -196,10 +207,9 @@
         frame.origin.y += diff;
         frame.size.height = COLLAPSED_HEIGHT;
         self.toggleBtn.title = @"Console [Show]";
-        self.cmdLbl.hidden = YES;
         self.cmdInput.hidden = YES;
         self.sendBtn.hidden = YES;
-        self.testBtn.hidden = YES;
+        for (NSButton *b in self.macroBtns) b.hidden = YES;
         self.silenceBtn.hidden = YES;
         self.btnCopyLog.hidden = YES;
         self.clearBtn.hidden = YES;
@@ -210,10 +220,9 @@
         frame.origin.y -= diff;
         frame.size.height = targetH;
         self.toggleBtn.title = @"Console [Hide]";
-        self.cmdLbl.hidden = NO;
         self.cmdInput.hidden = NO;
         self.sendBtn.hidden = NO;
-        self.testBtn.hidden = NO;
+        for (NSButton *b in self.macroBtns) b.hidden = NO;
         self.silenceBtn.hidden = NO;
         self.btnCopyLog.hidden = NO;
         self.clearBtn.hidden = NO;
@@ -249,17 +258,47 @@
 }
 
 - (void)restartClicked:(id)sender {
-    [self startEngine];
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.messageText = @"Restart Audio Engine";
+    alert.informativeText = @"Do you really want to do this?";
+    [alert addButtonWithTitle:@"Restart"];
+    [alert addButtonWithTitle:@"Cancel"];
+    if ([alert runModal] == NSAlertFirstButtonReturn) {
+        [self startEngine];
+    }
     [self.window makeFirstResponder:self.cmdInput];
 }
 
-- (void)testClicked:(id)sender {
-    [self executeCommand:@"v0 w1 f440 a-6 l1;"];
+- (void)exitClicked:(id)sender {
+    [self.window performClose:sender];
+}
+
+- (BOOL)windowShouldClose:(NSWindow *)sender {
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.messageText = @"Exit sk3";
+    alert.informativeText = @"Do you really want to do this?";
+    [alert addButtonWithTitle:@"Exit"];
+    [alert addButtonWithTitle:@"Cancel"];
+    if ([alert runModal] == NSAlertFirstButtonReturn) {
+        [self saveConfig];
+        return YES;
+    }
+    return NO;
+}
+
+- (void)applicationWillTerminate:(NSNotification *)notification {
+    [self saveConfig];
+    skred_stop();
+}
+
+- (void)macroClicked:(id)sender {
+    NSInteger slot = [sender tag];
+    [self executeCommand:[NSString stringWithFormat:@"e!%ld;", (long)slot]];
     [self.window makeFirstResponder:self.cmdInput];
 }
 
 - (void)silenceClicked:(id)sender {
-    [self executeCommand:@"O Z0; S-1;"];
+    [self executeCommand:@"O Z0;"];
     [self.window makeFirstResponder:self.cmdInput];
 }
 
@@ -285,14 +324,7 @@
         NSURL *url = urls[0];
         NSString *path = [url path];
         if (path) {
-            char log_msg[512] = {0};
-            char cmd[2048] = {0};
-            sk3_gui_format_file_drop([path UTF8String], log_msg, sizeof(log_msg), cmd, sizeof(cmd));
-            if (log_msg[0]) [self appendLog:[NSString stringWithUTF8String:log_msg]];
-            if (cmd[0]) {
-                self.cmdInput.stringValue = [NSString stringWithUTF8String:cmd];
-                [self.window makeFirstResponder:self.cmdInput];
-            }
+            skred_set_string([path UTF8String]);
             return YES;
         }
     }
@@ -339,20 +371,34 @@
     self.history = [NSMutableArray array];
     self.historyIdx = -1;
     self.currentDraft = @"";
-    self.curFontSize = SK3_FONT_SIZE_MEDIUM;
-    self.curTheme = SK3_THEME_DARK;
-    self.isCollapsed = YES;
-    self.prevExpandedH = DEFAULT_HEIGHT;
 
-    // Create Main Window (Collapsed by default!)
-    NSRect frame = NSMakeRect(0, 0, DEFAULT_WIDTH, COLLAPSED_HEIGHT);
+    // Load saved configuration from system appropriate config text file
+    sk3_gui_config_t cfg;
+    sk3_gui_config_init_defaults(&cfg);
+    if (sk3_gui_config_load(&cfg) == 0) {
+        self.curTheme = (sk3_theme_t)cfg.theme;
+        self.curFontSize = (sk3_font_size_t)cfg.font_size;
+        self.isCollapsed = cfg.console_collapsed ? YES : NO;
+        self.prevExpandedH = cfg.prev_expanded_h;
+    } else {
+        self.curFontSize = SK3_FONT_SIZE_MEDIUM;
+        self.curTheme = SK3_THEME_DARK;
+        self.isCollapsed = YES;
+        self.prevExpandedH = DEFAULT_HEIGHT;
+    }
+
+    CGFloat initW = cfg.window_width > 0 ? (CGFloat)cfg.window_width : DEFAULT_WIDTH;
+    CGFloat initH = self.isCollapsed ? COLLAPSED_HEIGHT : (cfg.window_height > 0 ? (CGFloat)cfg.window_height : DEFAULT_HEIGHT);
+
+    // Create Main Window
+    NSRect frame = NSMakeRect(0, 0, initW, initH);
     NSUInteger styleMask = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable |
                            NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskResizable;
     self.window = [[NSWindow alloc] initWithContentRect:frame
                                               styleMask:styleMask
                                                 backing:NSBackingStoreBuffered
                                                   defer:NO];
-    self.window.title = @"sk3 - Audio Engine & Control Server";
+    self.window.title = [NSString stringWithFormat:@"sk3 v%s - Audio Engine & Control Server", skred_version()];
     self.window.minSize = NSMakeSize(560, COLLAPSED_HEIGHT);
     [self.window center];
     self.window.delegate = self;
@@ -406,44 +452,41 @@
 
     // Restart Button
     self.restartBtn = [NSButton buttonWithTitle:@"Restart" target:self action:@selector(restartClicked:)];
-    self.restartBtn.frame = NSMakeRect(238, 504, 75, 28);
+    self.restartBtn.frame = NSMakeRect(238, 504, 70, 28);
     self.restartBtn.bezelStyle = NSBezelStyleRounded;
     self.restartBtn.autoresizingMask = NSViewMinYMargin;
     [content addSubview:self.restartBtn];
 
+    // Exit Button
+    self.exitBtn = [NSButton buttonWithTitle:@"Exit" target:self action:@selector(exitClicked:)];
+    self.exitBtn.frame = NSMakeRect(310, 504, 60, 28);
+    self.exitBtn.bezelStyle = NSBezelStyleRounded;
+    self.exitBtn.autoresizingMask = NSViewMinYMargin;
+    [content addSubview:self.exitBtn];
+
     // Console Toggle Button
-    self.toggleBtn = [NSButton buttonWithTitle:@"Console [Show]" target:self action:@selector(toggleConsole:)];
-    self.toggleBtn.frame = NSMakeRect(318, 504, 110, 28);
+    self.toggleBtn = [NSButton buttonWithTitle:self.isCollapsed ? @"Console [Show]" : @"Console [Hide]" target:self action:@selector(toggleConsole:)];
+    self.toggleBtn.frame = NSMakeRect(372, 504, 110, 28);
     self.toggleBtn.bezelStyle = NSBezelStyleRounded;
     self.toggleBtn.autoresizingMask = NSViewMinYMargin;
     [content addSubview:self.toggleBtn];
 
     // Theme Button
-    self.themeBtn = [NSButton buttonWithTitle:@"Theme: Dark" target:self action:@selector(cycleTheme:)];
-    self.themeBtn.frame = NSMakeRect(418, 504, 110, 28);
+    self.themeBtn = [NSButton buttonWithTitle:[NSString stringWithUTF8String:sk3_theme_name(self.curTheme)] target:self action:@selector(cycleTheme:)];
+    self.themeBtn.frame = NSMakeRect(484, 504, 100, 28);
     self.themeBtn.bezelStyle = NSBezelStyleRounded;
     self.themeBtn.autoresizingMask = NSViewMinYMargin;
     [content addSubview:self.themeBtn];
 
     // Font Button
-    self.fontBtn = [NSButton buttonWithTitle:@"Font: M" target:self action:@selector(cycleFontSize:)];
-    self.fontBtn.frame = NSMakeRect(533, 504, 85, 28);
+    self.fontBtn = [NSButton buttonWithTitle:[NSString stringWithUTF8String:sk3_font_size_name(self.curFontSize)] target:self action:@selector(cycleFontSize:)];
+    self.fontBtn.frame = NSMakeRect(586, 504, 75, 28);
     self.fontBtn.bezelStyle = NSBezelStyleRounded;
     self.fontBtn.autoresizingMask = NSViewMinYMargin;
     [content addSubview:self.fontBtn];
 
-    // Command Input Label
-    self.cmdLbl = [[NSTextField alloc] initWithFrame:NSMakeRect(20, 468, 600, 20)];
-    self.cmdLbl.editable = NO;
-    self.cmdLbl.bezeled = NO;
-    self.cmdLbl.drawsBackground = NO;
-    self.cmdLbl.stringValue = @"Skode Command (Enter to run, Up/Down history):";
-    self.cmdLbl.font = [NSFont systemFontOfSize:12.0];
-    self.cmdLbl.autoresizingMask = NSViewWidthSizable | NSViewMinYMargin;
-    [content addSubview:self.cmdLbl];
-
-    // Command Input Field (Monospaced!)
-    self.cmdInput = [[NSTextField alloc] initWithFrame:NSMakeRect(20, 436, 500, 28)];
+    // Command Input Field (Monospaced! No label above it taking up space)
+    self.cmdInput = [[NSTextField alloc] initWithFrame:NSMakeRect(20, 442, 500, 28)];
     self.cmdInput.placeholderString = @"e.g. v0 w1 f440 a-6 l1; or (120 4 (b-1 c0))";
     self.cmdInput.font = [self currentMonoFont];
     self.cmdInput.delegate = self;
@@ -452,32 +495,38 @@
 
     // Send Button
     self.sendBtn = [NSButton buttonWithTitle:@"Send" target:self action:@selector(sendClicked:)];
-    self.sendBtn.frame = NSMakeRect(530, 435, 90, 30);
+    self.sendBtn.frame = NSMakeRect(530, 441, 90, 30);
     self.sendBtn.bezelStyle = NSBezelStyleRounded;
     self.sendBtn.autoresizingMask = NSViewMinXMargin | NSViewMinYMargin;
     [content addSubview:self.sendBtn];
 
-    // Quick Action Buttons
-    self.testBtn = [NSButton buttonWithTitle:@"Test Tone" target:self action:@selector(testClicked:)];
-    self.testBtn.frame = NSMakeRect(20, 396, 95, 28);
-    self.testBtn.bezelStyle = NSBezelStyleRounded;
-    self.testBtn.autoresizingMask = NSViewMinYMargin;
-    [content addSubview:self.testBtn];
+    // Action Buttons: Macros e!0..e!9, Silence, Copy Log, Clear Log
+    self.macroBtns = [NSMutableArray array];
+    for (int i = 0; i < 10; i++) {
+        NSString *title = [NSString stringWithFormat:@"e!%d", i];
+        NSButton *mBtn = [NSButton buttonWithTitle:title target:self action:@selector(macroClicked:)];
+        mBtn.tag = i;
+        mBtn.frame = NSMakeRect(20 + i * 36, 404, 34, 28);
+        mBtn.bezelStyle = NSBezelStyleRounded;
+        mBtn.autoresizingMask = NSViewMinYMargin;
+        [content addSubview:mBtn];
+        [self.macroBtns addObject:mBtn];
+    }
 
-    self.silenceBtn = [NSButton buttonWithTitle:@"Silence (O Z0)" target:self action:@selector(silenceClicked:)];
-    self.silenceBtn.frame = NSMakeRect(120, 396, 125, 28);
+    self.silenceBtn = [NSButton buttonWithTitle:@"Silence" target:self action:@selector(silenceClicked:)];
+    self.silenceBtn.frame = NSMakeRect(386, 404, 76, 28);
     self.silenceBtn.bezelStyle = NSBezelStyleRounded;
-    self.silenceBtn.autoresizingMask = NSViewMinYMargin;
+    self.silenceBtn.autoresizingMask = NSViewMinXMargin | NSViewMinYMargin;
     [content addSubview:self.silenceBtn];
 
     self.btnCopyLog = [NSButton buttonWithTitle:@"Copy Log" target:self action:@selector(copyLog:)];
-    self.btnCopyLog.frame = NSMakeRect(430, 396, 95, 28);
+    self.btnCopyLog.frame = NSMakeRect(466, 404, 82, 28);
     self.btnCopyLog.bezelStyle = NSBezelStyleRounded;
     self.btnCopyLog.autoresizingMask = NSViewMinXMargin | NSViewMinYMargin;
     [content addSubview:self.btnCopyLog];
 
     self.clearBtn = [NSButton buttonWithTitle:@"Clear Log" target:self action:@selector(clearClicked:)];
-    self.clearBtn.frame = NSMakeRect(530, 396, 90, 28);
+    self.clearBtn.frame = NSMakeRect(552, 404, 82, 28);
     self.clearBtn.bezelStyle = NSBezelStyleRounded;
     self.clearBtn.autoresizingMask = NSViewMinXMargin | NSViewMinYMargin;
     [content addSubview:self.clearBtn];
@@ -505,15 +554,16 @@
     self.logScroll.documentView = self.logView;
     [content addSubview:self.logScroll];
 
-    // Hide console elements initially because we start collapsed
-    self.cmdLbl.hidden = YES;
-    self.cmdInput.hidden = YES;
-    self.sendBtn.hidden = YES;
-    self.testBtn.hidden = YES;
-    self.silenceBtn.hidden = YES;
-    self.btnCopyLog.hidden = YES;
-    self.clearBtn.hidden = YES;
-    self.logScroll.hidden = YES;
+    // Hide console elements initially if collapsed
+    if (self.isCollapsed) {
+        self.cmdInput.hidden = YES;
+        self.sendBtn.hidden = YES;
+        for (NSButton *b in self.macroBtns) b.hidden = YES;
+        self.silenceBtn.hidden = YES;
+        self.btnCopyLog.hidden = YES;
+        self.clearBtn.hidden = YES;
+        self.logScroll.hidden = YES;
+    }
 
     [self applyTheme];
 

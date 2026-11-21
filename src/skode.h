@@ -191,6 +191,8 @@ const char *skode_last_error_msg(const skode_t *ctx);
 void skode_clear_error(skode_t *ctx);
 
 int skode_consume(char *line, skode_t *w);
+int skode_set_string(skode_t *ctx, const char *str);
+const char *skode_get_string(const skode_t *ctx);
 int skode_execute_event(const event_t *event, skode_t *ctx);
 int skode_program_push_ex(event_program_t *program, skode_opcode_t code,
     struct ands_s *parser, const double *arg, int argc, int arg_offset, char mode,

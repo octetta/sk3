@@ -2711,6 +2711,25 @@ int skode_consume(char *line, skode_t *ctx) {
   return ctx->quit;
 }
 
+int skode_set_string(skode_t *ctx, const char *str) {
+  if (!ctx || !str) return 0;
+  skode_global_init();
+  skode_dict_init();
+  if (ctx->parse == NULL) {
+    ctx->parse = ands_new(skode_callback, (void *)ctx);
+    if (!ctx->parse) return 0;
+    ands_set_global(ctx->parse, global_var);
+    ands_set_stream_pull(ctx->parse, skode_stream_pull);
+  }
+  ands_string_from_external(ctx->parse, (char *)str, (int)strlen(str));
+  return 1;
+}
+
+const char *skode_get_string(const skode_t *ctx) {
+  if (!ctx || !ctx->parse) return "";
+  return ands_string(ctx->parse);
+}
+
 int audio_show(skode_t *ctx) {
   skode_t wprime;
   if (ctx == NULL) {

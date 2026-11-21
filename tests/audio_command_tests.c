@@ -214,6 +214,17 @@ int main(void) {
     skode_free(&sk_filt); wave_free(); synth_free();
   }
 
+  // Verify skred_set_string and skred_get_string for drag-and-drop ANDS integration
+  {
+    const char *test_path = "/tmp/skode_test_sample.wav";
+    expect(skred_set_string(test_path) == 1, "skred_set_string succeeds");
+    expect(strcmp(skred_get_string(), test_path) == 0, "skred_get_string matches path");
+    skred_logger(1);
+    skred_command("?s;");
+    char *log = skred_log();
+    expect(log && strstr(log, test_path) != NULL, "ands query_string ?s outputs set path");
+  }
+
   if (failures) {
     fprintf(stderr, "%d audio command test failure(s)\n", failures);
     return 1;
