@@ -1234,13 +1234,13 @@ static inline const sk_phoneme_def_t *sk_phoneme_lookup(const char *code) {
         { "CH", SK_PHO_STOP|SK_PHO_FRIC, 80.0f, 0.0f, 0.85f, 3800, 1800, 300, 1800, 2800, 3500, 80, 100, 150, 250, 0.1f, 0.10f, 0.10f, 0.05f },
         { "JH", SK_PHO_VOICED|SK_PHO_STOP|SK_PHO_FRIC, 80.0f, 0.6f, 0.65f, 3800, 1800, 300, 1800, 2800, 3500, 80, 100, 150, 250, 0.6f, 0.10f, 0.10f, 0.05f },
 
-        /* STOPS / PLOSIVES (with closure & release burst) */
-        { "P",  SK_PHO_STOP,   60.0f, 0.0f, 0.70f, 1500,  800, 300,  900, 2200, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.05f, 0.02f },
-        { "B",  SK_PHO_VOICED|SK_PHO_STOP, 60.0f, 0.5f, 0.50f, 1500, 800, 250,  900, 2200, 3500,  80, 100, 150, 250, 0.5f, 0.10f, 0.05f, 0.02f },
-        { "T",  SK_PHO_STOP,   60.0f, 0.0f, 0.85f, 4800, 1600, 300, 1600, 2600, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.05f, 0.02f },
-        { "D",  SK_PHO_VOICED|SK_PHO_STOP, 60.0f, 0.6f, 0.60f, 4200, 1600, 250, 1600, 2600, 3500,  80, 100, 150, 250, 0.6f, 0.10f, 0.05f, 0.02f },
-        { "K",  SK_PHO_STOP,   70.0f, 0.0f, 0.80f, 2600, 1000, 300, 1800, 2600, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.05f, 0.02f },
-        { "G",  SK_PHO_VOICED|SK_PHO_STOP, 70.0f, 0.6f, 0.55f, 2400, 1000, 250, 1800, 2600, 3500,  80, 100, 150, 250, 0.6f, 0.10f, 0.05f, 0.02f },
+        /* STOPS / PLOSIVES (with closure & release burst, tuned with anatomical consonant loci) */
+        { "P",  SK_PHO_STOP,   60.0f, 0.0f, 0.70f, 1500,  800, 300,  800, 2200, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.05f, 0.02f },
+        { "B",  SK_PHO_VOICED|SK_PHO_STOP, 60.0f, 0.5f, 0.50f, 1500, 800, 250,  800, 2200, 3500,  80, 100, 150, 250, 0.5f, 0.10f, 0.05f, 0.02f },
+        { "T",  SK_PHO_STOP,   60.0f, 0.0f, 0.85f, 4800, 1600, 300, 1800, 2600, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.05f, 0.02f },
+        { "D",  SK_PHO_VOICED|SK_PHO_STOP, 60.0f, 0.6f, 0.60f, 4200, 1600, 250, 1800, 2600, 3500,  80, 100, 150, 250, 0.6f, 0.10f, 0.05f, 0.02f },
+        { "K",  SK_PHO_STOP,   70.0f, 0.0f, 0.80f, 2600, 1000, 300, 2400, 2700, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.05f, 0.02f },
+        { "G",  SK_PHO_VOICED|SK_PHO_STOP, 70.0f, 0.6f, 0.55f, 2400, 1000, 250, 2400, 2700, 3500,  80, 100, 150, 250, 0.6f, 0.10f, 0.05f, 0.02f },
 
         /* NASALS */
         { "M",  SK_PHO_VOICED|SK_PHO_NASAL, 90.0f, 0.85f, 0.0f, 0.0f, 0.0f, 250, 1100, 2200, 3500, 50, 100, 150, 250, 1.0f, 0.20f, 0.08f, 0.02f },
@@ -1420,11 +1420,67 @@ static inline int sk_phoneme_compile_dsl(const char *dsl, sk_phoneme_frame_t *ou
     return frame_count;
 }
 
-/* Standalone renderer: renders compiled phoneme frames into PCM float audio buffer */
-static inline int sk_phoneme_render_frames(const sk_phoneme_frame_t *frames, int num_frames,
-                                          float *out_audio, int max_samples, float sample_rate, sk_rng_t *rng) {
+/* Voice configuration parameters (inspired by DECtalk & SAM) */
+typedef struct {
+    float pitch_scale;        /* Fundamental frequency multiplier (1.0 = normal, 1.6 = female, 0.75 = deep) */
+    float formant_scale;      /* Vocal tract length / throat scale (1.0 = normal, 1.25 = child/elf, 0.88 = giant) */
+    float speed_scale;        /* Tempo / cadence multiplier (1.0 = normal, 1.2 = fast, 0.8 = slow) */
+    float breathiness;        /* Glottal aspiration noise mixed with voiced sounds (0.0 = clean, 0.08 = breathy) */
+    float pitch_declination;  /* Sentence pitch downdrift in Hz over phrase (e.g. 10.0 Hz) */
+} sk_speech_voice_t;
+
+static inline sk_speech_voice_t sk_speech_voice_default(void) {
+    sk_speech_voice_t v = { 1.0f, 1.0f, 1.0f, 0.0f, 6.0f };
+    return v;
+}
+
+static inline sk_speech_voice_t sk_speech_voice_paul(void) {
+    /* DECtalk 'Perfect Paul' standard adult male */
+    sk_speech_voice_t v = { 1.0f, 1.0f, 1.0f, 0.02f, 8.0f };
+    return v;
+}
+
+static inline sk_speech_voice_t sk_speech_voice_harry(void) {
+    /* DECtalk 'Huge Harry' deep resonant male */
+    sk_speech_voice_t v = { 0.72f, 0.88f, 0.95f, 0.04f, 6.0f };
+    return v;
+}
+
+static inline sk_speech_voice_t sk_speech_voice_betty(void) {
+    /* DECtalk 'Beautiful Betty' female voice */
+    sk_speech_voice_t v = { 1.60f, 1.15f, 1.05f, 0.06f, 10.0f };
+    return v;
+}
+
+static inline sk_speech_voice_t sk_speech_voice_sam(void) {
+    /* Retro 1982 SAM (Software Automatic Mouth) / C64 voice */
+    sk_speech_voice_t v = { 1.12f, 1.05f, 1.15f, 0.0f, 0.0f };
+    return v;
+}
+
+static inline sk_speech_voice_t sk_speech_voice_elf(void) {
+    /* High-pitched child / elf / 'Kit the Kid' */
+    sk_speech_voice_t v = { 1.85f, 1.30f, 1.15f, 0.02f, 12.0f };
+    return v;
+}
+
+static inline sk_speech_voice_t sk_speech_voice_robot(void) {
+    /* Pure robotic monotone (Kraftwerk) */
+    sk_speech_voice_t v = { 0.90f, 1.0f, 1.0f, 0.0f, 0.0f };
+    return v;
+}
+
+/* Standalone renderer: renders compiled phoneme frames into PCM float audio buffer with voice persona */
+static inline int sk_phoneme_render_frames_voice(const sk_phoneme_frame_t *frames, int num_frames,
+                                                float *out_audio, int max_samples, float sample_rate,
+                                                const sk_speech_voice_t *voice, sk_rng_t *rng) {
     if (!frames || num_frames <= 0 || !out_audio || max_samples <= 0) return 0;
     if (sample_rate < 1000.0f) sample_rate = 48000.0f;
+
+    sk_speech_voice_t v = voice ? *voice : sk_speech_voice_default();
+    if (v.pitch_scale <= 0.0f) v.pitch_scale = 1.0f;
+    if (v.formant_scale <= 0.0f) v.formant_scale = 1.0f;
+    if (v.speed_scale <= 0.0f) v.speed_scale = 1.0f;
 
     sk_formant_bank_t fb;
     sk_formant_bank_init(&fb, sample_rate);
@@ -1432,15 +1488,21 @@ static inline int sk_phoneme_render_frames(const sk_phoneme_frame_t *frames, int
     sk_biquad_t noise_filter;
     sk_biquad_init(&noise_filter, SK_BIQUAD_BANDPASS, 4000.0f, 1.5f, sample_rate);
 
-    float current_f1 = frames[0].f1, current_f2 = frames[0].f2;
-    float current_f3 = frames[0].f3, current_f4 = frames[0].f4;
-    float current_b1 = frames[0].b1, current_b2 = frames[0].b2;
-    float current_b3 = frames[0].b3, current_b4 = frames[0].b4;
-    float current_g1 = frames[0].g1, current_g2 = frames[0].g2;
-    float current_g3 = frames[0].g3, current_g4 = frames[0].g4;
+    float current_f1 = frames[0].f1 * v.formant_scale;
+    float current_f2 = frames[0].f2 * v.formant_scale;
+    float current_f3 = frames[0].f3 * v.formant_scale;
+    float current_f4 = frames[0].f4 * v.formant_scale;
+    float current_b1 = frames[0].b1;
+    float current_b2 = frames[0].b2;
+    float current_b3 = frames[0].b3;
+    float current_b4 = frames[0].b4;
+    float current_g1 = frames[0].g1;
+    float current_g2 = frames[0].g2;
+    float current_g3 = frames[0].g3;
+    float current_g4 = frames[0].g4;
     float current_vg = 0.0f;
     float current_ng = 0.0f;
-    float current_pitch = frames[0].pitch_hz;
+    float current_pitch = frames[0].pitch_hz * v.pitch_scale;
 
     float phase = 0.0f;
     float prev_lip = 0.0f;
@@ -1448,32 +1510,44 @@ static inline int sk_phoneme_render_frames(const sk_phoneme_frame_t *frames, int
 
     for (int fi = 0; fi < num_frames && out_idx < max_samples; fi++) {
         const sk_phoneme_frame_t *fr = &frames[fi];
-        int frame_samples = (int)(fr->duration_ms * 0.001f * sample_rate);
+        int frame_samples = (int)(fr->duration_ms * 0.001f * sample_rate / v.speed_scale);
         if (frame_samples < 1) frame_samples = 1;
 
         int is_stop = (fr->flags & SK_PHO_STOP) != 0;
         int closure_samples = is_stop ? (int)(frame_samples * 0.70f) : 0;
         int burst_samples = frame_samples - closure_samples;
 
+        /* Sentence declination: natural gentle pitch drop over phrase */
+        float sentence_declination = v.pitch_declination * (1.0f - (float)fi / (float)num_frames);
+
         /* Update noise filter center frequency smoothly without zeroing delay registers */
         if (fr->noise_freq > 200.0f) {
-            float q = fr->noise_freq / (fr->noise_bw > 50.0f ? fr->noise_bw : 50.0f);
+            float n_freq = fr->noise_freq * v.formant_scale;
+            if (n_freq > sample_rate * 0.45f) n_freq = sample_rate * 0.45f;
+            float q = n_freq / (fr->noise_bw > 50.0f ? fr->noise_bw : 50.0f);
             if (q < 0.5f) q = 0.5f;
             if (q > 8.0f) q = 8.0f;
-            sk_biquad_set(&noise_filter, SK_BIQUAD_BANDPASS, fr->noise_freq, q, sample_rate);
+            sk_biquad_set(&noise_filter, SK_BIQUAD_BANDPASS, n_freq, q, sample_rate);
         }
 
         /* Coarticulation slew coefficient: ~8ms fast natural transition time */
         float slew = 1.0f - expf(-1.0f / (0.008f * sample_rate));
 
+        /* Target formants scaled by vocal tract length */
+        float target_f1 = fr->f1 * v.formant_scale;
+        float target_f2 = fr->f2 * v.formant_scale;
+        float target_f3 = fr->f3 * v.formant_scale;
+        float target_f4 = fr->f4 * v.formant_scale;
+
         for (int i = 0; i < frame_samples && out_idx < max_samples; i++) {
             float progress = (float)i / (float)frame_samples;
 
-            /* Compute pitch target with optional inflection glide */
+            /* Compute pitch target with optional inflection glide and declination */
             float target_pitch = fr->pitch_hz;
             if (fr->pitch_end_hz > 20.0f && fr->pitch_end_hz != fr->pitch_hz) {
                 target_pitch = sk_lerp(fr->pitch_hz, fr->pitch_end_hz, progress);
             }
+            target_pitch = (target_pitch * v.pitch_scale) + sentence_declination;
 
             /* Apply vibrato if enabled */
             if (fr->vibrato_depth > 0.0f) {
@@ -1483,10 +1557,10 @@ static inline int sk_phoneme_render_frames(const sk_phoneme_frame_t *frames, int
             }
 
             /* Slew formant frequencies, bandwidths, gains, and pitch */
-            current_f1 += slew * (fr->f1 - current_f1);
-            current_f2 += slew * (fr->f2 - current_f2);
-            current_f3 += slew * (fr->f3 - current_f3);
-            current_f4 += slew * (fr->f4 - current_f4);
+            current_f1 += slew * (target_f1 - current_f1);
+            current_f2 += slew * (target_f2 - current_f2);
+            current_f3 += slew * (target_f3 - current_f3);
+            current_f4 += slew * (target_f4 - current_f4);
 
             current_b1 += slew * (fr->b1 - current_b1);
             current_b2 += slew * (fr->b2 - current_b2);
@@ -1530,8 +1604,15 @@ static inline int sk_phoneme_render_frames(const sk_phoneme_frame_t *frames, int
             if (phase >= 1.0f) phase -= 1.0f;
             float glottal = sk_glottal_pulse(phase, 0.65f) * current_vg;
 
-            /* Noise generator (boosted 2.2x for articulate consonant presence) */
+            /* Random noise generator */
             float raw_noise = rng ? sk_rng_float(rng) : (((float)rand() / (float)RAND_MAX) * 2.0f - 1.0f);
+
+            /* Add glottal breathiness if voice has aspiration */
+            if (v.breathiness > 0.0f && current_vg > 0.0f) {
+                glottal += raw_noise * v.breathiness * current_vg;
+            }
+
+            /* Shaped noise for consonants (boosted 2.2x for articulate presence) */
             float shaped_noise = sk_biquad_step(&noise_filter, raw_noise) * current_ng * 2.2f;
 
             /* Resonate voiced excitation through vocal tract formants */
@@ -1540,7 +1621,7 @@ static inline int sk_phoneme_render_frames(const sk_phoneme_frame_t *frames, int
             /* Mix voiced vocal tract + shaped frication noise */
             float sample = voiced_out + shaped_noise;
 
-            /* Lip radiation characteristic (+6 dB/octave differentiator) to remove muffled bass mud */
+            /* Lip radiation characteristic (+6 dB/octave differentiator) */
             float lip_out = sample - 0.94f * prev_lip;
             prev_lip = sample;
 
@@ -1550,6 +1631,12 @@ static inline int sk_phoneme_render_frames(const sk_phoneme_frame_t *frames, int
     }
 
     return out_idx;
+}
+
+/* Standalone renderer: renders compiled phoneme frames into PCM float audio buffer with default voice */
+static inline int sk_phoneme_render_frames(const sk_phoneme_frame_t *frames, int num_frames,
+                                          float *out_audio, int max_samples, float sample_rate, sk_rng_t *rng) {
+    return sk_phoneme_render_frames_voice(frames, num_frames, out_audio, max_samples, sample_rate, NULL, rng);
 }
 
 #ifdef __cplusplus

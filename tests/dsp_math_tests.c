@@ -297,6 +297,15 @@ static void test_phoneme_dsl(void) {
         TEST_ASSERT(!isnan(out[i]) && !isinf(out[i]), "speech samples finite");
         TEST_ASSERT(fabsf(out[i]) <= 1.0f, "speech samples clamped");
     }
+
+    /* Test voice personas (DECtalk / SAM presets) */
+    sk_speech_voice_t betty = sk_speech_voice_betty();
+    int samples_betty = sk_phoneme_render_frames_voice(frames, n, out, 4800, 48000.0f, &betty, &rng);
+    TEST_ASSERT(samples_betty > 0, "rendered female voice persona");
+
+    sk_speech_voice_t sam = sk_speech_voice_sam();
+    int samples_sam = sk_phoneme_render_frames_voice(frames, n, out, 4800, 48000.0f, &sam, &rng);
+    TEST_ASSERT(samples_sam > 0, "rendered SAM voice persona");
 }
 
 int main(void) {

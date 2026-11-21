@@ -272,6 +272,62 @@ static void render_speech_demo(const char *filename, int sample_rate) {
     free(pcm);
 }
 
+static void render_voices_demo(const char *filename, int sample_rate) {
+    printf("Rendering DECtalk & SAM voice personas demo...\n");
+    const char *phrase = 
+        "[HH:70 EH1:110@125>135 L:70 OW1:150@120>100] [_:150] "
+        "[AY1:110@125] [_:60] [AE1:90@120 M:60] [_:80] "
+        "[S:70 P:50 IY1:120@130 K:60 IH0:70 NG:70] [_:350]";
+
+    sk_phoneme_frame_t frames[SK_PHONEME_MAX_TOKENS];
+    int num_frames = sk_phoneme_compile_dsl(phrase, frames, SK_PHONEME_MAX_TOKENS, 120.0f);
+
+    struct {
+        const char *name;
+        sk_speech_voice_t voice;
+    } personas[] = {
+        { "Perfect Paul (DECtalk Male)", sk_speech_voice_paul() },
+        { "Beautiful Betty (DECtalk Female)", sk_speech_voice_betty() },
+        { "Huge Harry (DECtalk Deep Male)", sk_speech_voice_harry() },
+        { "SAM (1982 Commodore 64 / SoftVoice)", sk_speech_voice_sam() },
+        { "Kit the Kid (Child / Elf)", sk_speech_voice_elf() },
+        { "Robot Monotone (Kraftwerk)", sk_speech_voice_robot() }
+    };
+    int num_personas = sizeof(personas) / sizeof(personas[0]);
+
+    int max_total_samples = sample_rate * 25;
+    float *total_float = (float *)calloc(max_total_samples, sizeof(float));
+    int total_write_idx = 0;
+
+    sk_rng_t rng;
+    sk_rng_init(&rng, 54321);
+
+    for (int p = 0; p < num_personas; p++) {
+        printf("  Rendering voice %d/%d: %s\n", p + 1, num_personas, personas[p].name);
+        int buf_len = sample_rate * 4;
+        float *buf = (float *)calloc(buf_len, sizeof(float));
+        int samples = sk_phoneme_render_frames_voice(frames, num_frames, buf, buf_len, (float)sample_rate, &personas[p].voice, &rng);
+
+        for (int i = 0; i < samples && total_write_idx < max_total_samples; i++) {
+            total_float[total_write_idx++] = buf[i];
+        }
+        /* Inter-persona silence */
+        int pause_samples = (int)(0.4f * sample_rate);
+        total_write_idx += pause_samples;
+        if (total_write_idx > max_total_samples) total_write_idx = max_total_samples;
+        free(buf);
+    }
+
+    int16_t *pcm = (int16_t *)malloc(total_write_idx * sizeof(int16_t));
+    for (int i = 0; i < total_write_idx; i++) {
+        pcm[i] = (int16_t)(total_float[i] * 28000.0f);
+    }
+
+    write_wav_file(filename, pcm, total_write_idx, sample_rate);
+    free(total_float);
+    free(pcm);
+}
+
 int main(int argc, char **argv) {
     (void)argc; (void)argv;
     int sample_rate = 48000;
@@ -279,6 +335,7 @@ int main(int argc, char **argv) {
     render_vowel_demo("vowel_demo.wav", sample_rate);
     render_phoneme_demo("phoneme_demo.wav", sample_rate);
     render_speech_demo("speech_demo.wav", sample_rate);
+    render_voices_demo("voices_demo.wav", sample_rate);
     printf("DSP demo rendering complete!\n");
     return 0;
 }
