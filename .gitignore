@@ -8,6 +8,7 @@ dist/
 src/gen/
 tools/mksynth
 tools/mkopcodes
+tools/render_dsp_demo
 
 # Editor and OS
 .DS_Store
