@@ -166,6 +166,45 @@ if(SKRED_SCOPE)
     )
 endif()
 
+# GUI frontends for Windows and macOS
+if(WIN32)
+    set(SK3_GUI_SRCS src/gui/sk3-gui-win32.c)
+    find_program(WINDRES_BIN NAMES x86_64-w64-mingw32-windres windres)
+    if(WINDRES_BIN)
+        add_custom_command(
+            OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/osko.res.o"
+            COMMAND "${WINDRES_BIN}" -i "${CMAKE_CURRENT_SOURCE_DIR}/assets/osko.rc" -O coff -o "${CMAKE_CURRENT_BINARY_DIR}/osko.res.o"
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+            DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/assets/osko.rc" "${CMAKE_CURRENT_SOURCE_DIR}/assets/osko.ico"
+            COMMENT "Compiling Windows resource icon osko.rc"
+        )
+        list(APPEND SK3_GUI_SRCS "${CMAKE_CURRENT_BINARY_DIR}/osko.res.o")
+    endif()
+    add_executable(sk3-gui WIN32 ${SK3_GUI_SRCS})
+    target_link_libraries(sk3-gui PRIVATE api gdi32 comctl32 ws2_32 ole32 winmm)
+    target_include_directories(sk3-gui PRIVATE
+        "${CMAKE_CURRENT_BINARY_DIR}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/gen"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/exp-vfs"
+    )
+    if(CMAKE_C_COMPILER_ID MATCHES "Clang")
+        target_link_options(sk3-gui PRIVATE "-Wl,--subsystem,windows")
+    endif()
+    install(TARGETS sk3-gui RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+elseif(APPLE)
+    add_executable(sk3-gui src/gui/sk3-gui-macos.m)
+    target_link_libraries(sk3-gui PRIVATE api "-framework Cocoa")
+    target_include_directories(sk3-gui PRIVATE
+        "${CMAKE_CURRENT_BINARY_DIR}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/gen"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/exp-vfs"
+    )
+    target_compile_options(sk3-gui PRIVATE -fobjc-arc)
+    install(TARGETS sk3-gui RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+endif()
+
 # Installation headers
 install(FILES
     src/api.h

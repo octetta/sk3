@@ -130,6 +130,14 @@ dist-api: native
 	mkdir -p $(DIST_PREFIX)
 	$(CMAKE) --install $(BUILD_DIR) --prefix $(DIST_PREFIX)
 	@if [ "$(DIST_PLATFORM)" = "macos-universal" ]; then \
+		rm -rf $(DIST_PREFIX)/sk3.app; \
+		mkdir -p $(DIST_PREFIX)/sk3.app/Contents/MacOS $(DIST_PREFIX)/sk3.app/Contents/Resources; \
+		sed "s/VERSION_PLACEHOLDER/$(VERSION)/g" assets/macos/Info.plist > $(DIST_PREFIX)/sk3.app/Contents/Info.plist; \
+		cp $(DIST_PREFIX)/bin/sk3-gui $(DIST_PREFIX)/sk3.app/Contents/MacOS/; \
+		cp assets/osko.icns $(DIST_PREFIX)/sk3.app/Contents/Resources/; \
+		chmod +x $(DIST_PREFIX)/sk3.app/Contents/MacOS/sk3-gui; \
+		if command -v xattr >/dev/null 2>&1; then xattr -cr $(DIST_PREFIX)/sk3.app; fi; \
+		if command -v codesign >/dev/null 2>&1; then codesign --force --deep --sign - --entitlements assets/macos/entitlements.plist $(DIST_PREFIX)/sk3.app; fi; \
 		$(CMAKE) -E chdir $(DIST_PLATFORM_ROOT) $(CMAKE) -E tar czf skred-$(VERSION)-maxed.tar.gz --format=gnutar skred-$(VERSION)-maxed; \
 	else \
 		$(CMAKE) -E chdir $(DIST_PLATFORM_ROOT) $(CMAKE) -E tar czf skred-$(VERSION)-maxed-linux-x86_64.tar.gz --format=gnutar skred-$(VERSION)-maxed; \
@@ -150,7 +158,7 @@ dist-api-linux-aarch64: gen
 
 windows-cross-libs: gen
 	$(ZIG_ENV) $(CMAKE) --preset cross-windows-zig-maxed
-	$(ZIG_ENV) $(CMAKE) --build --preset cross-windows-zig-maxed --target api api_shared mini-skred sk3 skred
+	$(ZIG_ENV) $(CMAKE) --build --preset cross-windows-zig-maxed --target api api_shared mini-skred sk3 skred sk3-gui
 	$(CMAKE) --install build_cross_windows_zig_maxed --prefix $(DIST_DIR)/windows-x86_64/skred-$(VERSION)-maxed
 
 dist-api-windows: windows-cross-libs
