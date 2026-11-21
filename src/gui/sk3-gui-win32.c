@@ -169,7 +169,6 @@ static void copy_log_to_clipboard(HWND hLog) {
         EmptyClipboard();
         SetClipboardData(CF_TEXT, hMem);
         CloseClipboard();
-        append_log(hLog, "\r\n[Log copied to clipboard]\r\n");
     } else {
         GlobalFree(hMem);
     }

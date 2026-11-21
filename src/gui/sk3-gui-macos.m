@@ -325,7 +325,6 @@
         NSPasteboard *pb = [NSPasteboard generalPasteboard];
         [pb clearContents];
         [pb setString:logStr forType:NSPasteboardTypeString];
-        [self appendLog:@"\n[Log copied to clipboard]\n"];
     }
 }
 

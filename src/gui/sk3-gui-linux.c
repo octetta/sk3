@@ -1129,7 +1129,6 @@ static void copy_full_log(void) {
         if (sel_text && sel_text[0]) {
             set_clipboard(sel_text);
             free(sel_text);
-            append_log("[Selection copied to clipboard]");
             return;
         }
         if (sel_text) free(sel_text);
@@ -1151,7 +1150,6 @@ static void copy_full_log(void) {
     }
     set_clipboard(buf);
     free(buf);
-    append_log("[Log copied to clipboard]");
 }
 
 static void toggle_console(void) {
@@ -1577,7 +1575,6 @@ int main(int argc, char **argv) {
                         if (sel_text) {
                             set_clipboard(sel_text);
                             free(sel_text);
-                            append_log("[Selection copied to clipboard]");
                         }
                     } else if (active_focus == 2) {
                         set_clipboard(cmd_buf);

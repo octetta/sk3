@@ -304,11 +304,13 @@ jobs:
             export WINEDLLOVERRIDES="mscoree,mshtml="
             export WINEDEBUG=-all
             wineboot --init || true
+            WINE_CMD="wine"
+            command -v wine64 >/dev/null 2>&1 && WINE_CMD="wine64"
             xvfb-run -s "-screen 0 1024x768x24" bash -c "
               openbox &
               sleep 1
-              SKRED_NO_AUDIO=1 SK3_GUI_EXPANDED=1 wine \"$EXE_PATH\" &
-              sleep 5
+              SKRED_NO_AUDIO=1 SK3_GUI_EXPANDED=1 \$WINE_CMD \"$EXE_PATH\" &
+              sleep 6
               scrot release-assets/raw-windows.png || import -window root release-assets/raw-windows.png || true
               wineserver -k || true
             " || true
