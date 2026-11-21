@@ -30,6 +30,24 @@ Version: `1.3.20`
   - **WebAssembly**: Asynchronous, zero-dependency browser and headless Node.js engine via Emscripten, featuring dedicated multi-threaded POSIX pthreads and stable WebAudio integration for glitch-free cross-browser real-time synthesis.
 - **Code-Generated Contract Architecture**: Synthesizer voice states and opcode dispatch tables are declaratively compiled from `.def` schema specifications via `mksynth` and `mkopcodes`, ensuring 100% boundary invariance and seamless Gleam interop.
 
+## Client & Ecosystem Integration Matrix
+
+`sk3` listens on a single polymorphic TCP port (**`60440`** by default, configured via `-T<port>`) that automatically detects the client's protocol and escalates from Raw ASCII line streaming to HTTP/1.1 REST or RFC 6455 WebSockets:
+
+| Community & Sound Client | Connection Type | Protocol | How It Connects & What It Unlocks |
+| :--- | :--- | :--- | :--- |
+| **SynthDIY & Hardware Hackers**<br>*(ESP32, Teensy, Pico W, Arduino)* | **Raw TCP** | Plain ASCII (`\n`) | `client.println("v0 K1200 Q3.5")`<br>Zero HTTP/JSON/TLS library overhead on microcontrollers; physical potentiometers and rotary encoders stream straight to DSP voices. |
+| **Livecoding & Algorave**<br>*(TidalCycles, FoxDot, Orca, Sonic Pi)* | **Raw TCP / Pipe** | ASCII Lines | `nc localhost 60440`<br>Instant terminal REPL with Unix pipes; per-connection isolated Forth namespaces allow multi-user jam sessions on the same engine without macro collision. |
+| **Browser Web Apps & Strudel**<br>*(Strudel.cc, Canvas, WebAudio)* | **WebSocket** | RFC 6455 | `new WebSocket("ws://localhost:60440/")`<br>Bypasses browser sandbox limits; direct, zero-daemon communication from public web pages with Chromium Private Network Access (PNA). |
+| **Visuals & Generative Art**<br>*(TouchDesigner, Hydra, Max/MSP, p5.js)* | **WebSocket / TCP** | RFC 6455 / Raw TCP | Native TouchDesigner TCP/WebSocket DATs, Max/MSP `[tcpsocket]`, or Hydra web canvas modulating filter cutoffs (`K`) and resonance (`Q`) at 60–120 Hz with sub-millisecond response. |
+| **Visual Audio Patching**<br>*(PureData, SuperCollider)* | **Raw TCP** | ASCII Lines | Pd `[netsend]` or SuperCollider `NetAddr`<br>Native socket streaming without external VST/OSC bridge daemons or JACK routing ceremony. |
+| **BEAM Ecosystem**<br>*(Gleam, Elixir, Erlang, LFE)* | **Raw TCP** | `:gen_tcp` line mode | `:gen_tcp.connect('localhost', 60440, [:binary, packet: :line])`<br>1:1 conceptual match with BEAM actors; Phoenix LiveView sliders or LFE S-expressions stream directly into isolated engine contexts. |
+| **Game Dev & Creative Engines**<br>*(Godot, LÖVE 2D, Bevy / Rust)* | **TCP / WebSocket** | `StreamPeerTCP` / `LuaSocket` | Procedural sound generation driven directly from game scripts without compiling native C++ audio driver plugins. |
+| **AI & Computational Music**<br>*(Jupyter, Python, Julia, R)* | **HTTP REST / WS** | POST / WebSocket | `urllib.request` / `requests.post`<br>Audition algorithmic compositions directly from notebook cells without audio device kernel locking. |
+| **Glitch, Demoscene & Trackers**<br>*(Shell pipes, Renoise Lua, byte-mangling)* | **Raw TCP / Shell** | Fuzzed ASCII / Text | Uncrashable parser with graceful `# SKODE_ERROR` reporting; vintage hardware LFSR noise models (`w5` MOS 6581 SID, POKEY, NES) and analog saturation drive (`jd`). |
+
+See the [TCP, HTTP & WebSocket Reference](doc/HTTP_API.md) for complete standalone code examples, including an interactive browser XY controller pad.
+
 ## Quick Start
 
 ### Tooling (via mise)
