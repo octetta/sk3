@@ -1016,7 +1016,8 @@ typedef struct {
     float current_y;
 } sk_formant_bank_t;
 
-/* Rosenberg-Klatt C1-continuous glottal pulse generator for natural voiced excitation without clicks */
+/* Rosenberg-Klatt C1-continuous glottal pulse generator for natural voiced excitation without clicks.
+ * Uses an asymmetric shape with rapid closing phase to produce natural high-frequency harmonic brilliance. */
 static inline float sk_glottal_pulse(float phase, float open_quotient) {
     phase = sk_clampf(phase, 0.0f, 1.0f);
     open_quotient = sk_clampf(open_quotient, 0.2f, 0.85f);
@@ -1025,8 +1026,8 @@ static inline float sk_glottal_pulse(float phase, float open_quotient) {
         return 0.0f; /* Glottis closed */
     }
 
-    /* Split open phase into opening rise (~65%) and closing fall (~35%) */
-    float t_open = open_quotient * 0.65f;
+    /* Asymmetric glottal pulse: 80% opening rise, 20% rapid closing snap */
+    float t_open = open_quotient * 0.80f;
     float t_close = open_quotient - t_open;
 
     if (phase < t_open) {
@@ -1034,7 +1035,7 @@ static inline float sk_glottal_pulse(float phase, float open_quotient) {
         float theta = (float)M_PI * (phase / t_open);
         return 0.5f * (1.0f - cosf(theta));
     } else {
-        /* Closing phase: smooth cosine drop from 1.0 to 0.0 (C0 and C1 continuous at closure) */
+        /* Closing phase: rapid cosine fall from 1.0 to 0.0 (C0 and C1 continuous at closure) */
         float theta = ((float)M_PI * 0.5f) * ((phase - t_open) / t_close);
         return cosf(theta);
     }
@@ -1142,14 +1143,15 @@ static inline void sk_formant_bank_set_xy(sk_formant_bank_t *fb, float x, float 
     sk_formant_resonator_set(&fb->formants[3], f4, 250.0f, 0.08f, fb->sample_rate);
 }
 
-/* Step formant bank: processes input through parallel resonators and sums output */
+/* Step formant bank: processes input through parallel resonators with alternating signs
+ * (+F1 - F2 + F3 - F4) per Klatt/Holmes standard to eliminate destructive phase cancellation in inter-formant valleys */
 static inline float sk_formant_bank_step(sk_formant_bank_t *fb, float in) {
     if (!fb) return in;
-    float sum = 0.0f;
-    for (int i = 0; i < SK_FORMANTS_COUNT; i++) {
-        sum += sk_formant_resonator_step(&fb->formants[i], in);
-    }
-    return sum;
+    float s1 = sk_formant_resonator_step(&fb->formants[0], in);
+    float s2 = sk_formant_resonator_step(&fb->formants[1], in);
+    float s3 = sk_formant_resonator_step(&fb->formants[2], in);
+    float s4 = sk_formant_resonator_step(&fb->formants[3], in);
+    return s1 - s2 + s3 - s4;
 }
 
 /* =========================================================================
@@ -1441,6 +1443,7 @@ static inline int sk_phoneme_render_frames(const sk_phoneme_frame_t *frames, int
     float current_pitch = frames[0].pitch_hz;
 
     float phase = 0.0f;
+    float prev_lip = 0.0f;
     int out_idx = 0;
 
     for (int fi = 0; fi < num_frames && out_idx < max_samples; fi++) {
@@ -1460,8 +1463,8 @@ static inline int sk_phoneme_render_frames(const sk_phoneme_frame_t *frames, int
             sk_biquad_set(&noise_filter, SK_BIQUAD_BANDPASS, fr->noise_freq, q, sample_rate);
         }
 
-        /* Coarticulation slew coefficient: ~15ms transition time */
-        float slew = 1.0f - expf(-1.0f / (0.015f * sample_rate));
+        /* Coarticulation slew coefficient: ~8ms fast natural transition time */
+        float slew = 1.0f - expf(-1.0f / (0.008f * sample_rate));
 
         for (int i = 0; i < frame_samples && out_idx < max_samples; i++) {
             float progress = (float)i / (float)frame_samples;
@@ -1508,7 +1511,7 @@ static inline int sk_phoneme_render_frames(const sk_phoneme_frame_t *frames, int
                 } else {
                     float burst_frac = burst_samples > 0 ? (float)(i - closure_samples) / (float)burst_samples : 1.0f;
                     float burst_env = sinf((float)M_PI * burst_frac);
-                    target_ng = fr->noise_gain * 1.5f * burst_env;
+                    target_ng = fr->noise_gain * 2.0f * burst_env;
                 }
             }
 
@@ -1527,9 +1530,9 @@ static inline int sk_phoneme_render_frames(const sk_phoneme_frame_t *frames, int
             if (phase >= 1.0f) phase -= 1.0f;
             float glottal = sk_glottal_pulse(phase, 0.65f) * current_vg;
 
-            /* Noise generator */
+            /* Noise generator (boosted 2.2x for articulate consonant presence) */
             float raw_noise = rng ? sk_rng_float(rng) : (((float)rand() / (float)RAND_MAX) * 2.0f - 1.0f);
-            float shaped_noise = sk_biquad_step(&noise_filter, raw_noise) * current_ng;
+            float shaped_noise = sk_biquad_step(&noise_filter, raw_noise) * current_ng * 2.2f;
 
             /* Resonate voiced excitation through vocal tract formants */
             float voiced_out = sk_formant_bank_step(&fb, glottal);
@@ -1537,8 +1540,12 @@ static inline int sk_phoneme_render_frames(const sk_phoneme_frame_t *frames, int
             /* Mix voiced vocal tract + shaped frication noise */
             float sample = voiced_out + shaped_noise;
 
+            /* Lip radiation characteristic (+6 dB/octave differentiator) to remove muffled bass mud */
+            float lip_out = sample - 0.94f * prev_lip;
+            prev_lip = sample;
+
             /* Soft-clip to prevent clipping */
-            out_audio[out_idx++] = sk_softclip_cubic(sample * 0.7f, 1.0f);
+            out_audio[out_idx++] = sk_softclip_cubic(lip_out * 1.8f, 1.0f);
         }
     }
 
