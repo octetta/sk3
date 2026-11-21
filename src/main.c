@@ -16,7 +16,7 @@ static void usage(void) {
   printf("  -n                       Disable interactive line editor (for subprocess mode)\n");
   printf("  -p<udp-port>             UDP control port (0 = disable UDP, default 60440)\n");
   printf("  -e<events-port>          UDP events broadcast port (0 = disable, default 0)\n");
-  printf("  -H<http-port>            HTTP POST control port (0 = disable HTTP, default 0)\n");
+  printf("  -H<http-port>            HTTP POST control port (0 = disable HTTP, default 60440)\n");
   printf("  -o<device-id>            Select output audio device\n");
   printf("  -i<device-id>            Select input audio device\n");
   printf("  -l                       List available audio input and output devices\n");
@@ -124,7 +124,7 @@ int main(int argc, char **argv) {
   unsigned int requested_frames = 128;
   int udp_port = 60440;
   int events_port = 0; // Default off
-  int http_port = 0;   // Default off (e.g. -H8080 or --http 8080)
+  int http_port = 60440; // Default 60440 (0 = disable HTTP)
   int output_device = -1;
   int input_device = -1;
   const char *file_to_load = NULL;

@@ -2,12 +2,13 @@
 #define SKRED_HTTP_H
 
 #include <stdint.h>
+#include <string.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define SK_HTTP_DEFAULT_PORT (8080)
+#define SK_HTTP_DEFAULT_PORT (60440)
 #define SK_HTTP_MAX_CLIENTS  (64)
 
 typedef struct {
