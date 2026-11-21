@@ -948,6 +948,8 @@ engine.
 
 ## Promoted Skode Macros: Follow-up Work
 
+For the full architectural guide on the Forth-style dictionary, two-level search order, word shadowing, and private vocabularies, see [doc/VOCABULARIES.md](VOCABULARIES.md).
+
 Named macros are checked with the real Skode compiler when defined. Definitions
 that compile entirely to scheduled opcodes are cached as dictionary programs;
 immediate definitions retain text-expansion behavior; `?m` reports their

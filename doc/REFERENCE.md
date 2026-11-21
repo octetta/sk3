@@ -10008,7 +10008,7 @@ Usage: /a?
 **Description & Details**:
 
 ```text
-Displays all dictionary words and categories.
+Displays all dictionary words and categories. See doc/VOCABULARIES.md for architecture.
 Usage: ?M [mode]
 ```
 

@@ -433,6 +433,8 @@ and removed from the current parser context:
 /m!
 ```
 
+For the underlying Forth-style dictionary search order, macro promotion mechanics, and vocabulary namespaces, see [doc/VOCABULARIES.md](VOCABULARIES.md).
+
 Read commands can feed later commands in the same chunk. The return value is
 left as the next command's first pending argument:
 

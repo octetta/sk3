@@ -6,7 +6,7 @@
 @match    ()
 @summary  show all dictionary words
 @doc
-Displays all dictionary words and categories.
+Displays all dictionary words and categories. See doc/VOCABULARIES.md for architecture.
 Usage: ?M [mode]
 @code
     (void)s; (void)args; (void)argc;
