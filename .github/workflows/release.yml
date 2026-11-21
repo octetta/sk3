@@ -231,7 +231,7 @@ jobs:
         run: make dist-api MACOS_UNIVERSAL=1
 
       - name: Install macOS screenshot dependencies
-        run: pip3 install pillow
+        run: pip3 install pillow --break-system-packages || true
 
       - name: Capture macOS GUI screenshot
         shell: bash
