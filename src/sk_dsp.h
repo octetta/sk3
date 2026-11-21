@@ -1141,7 +1141,7 @@ static inline float sk_formant_bank_step(sk_formant_bank_t *fb, float in) {
  * 11. Phoneme DSL & Standalone Speech Synthesis Engine
  * ========================================================================= */
 
-#define SK_PHONEME_MAX_TOKENS 128
+#define SK_PHONEME_MAX_TOKENS 512
 
 typedef enum {
     SK_PHO_VOICED   = (1 << 0),
@@ -1194,6 +1194,10 @@ static inline const sk_phoneme_def_t *sk_phoneme_lookup(const char *code) {
         { "OW", SK_PHO_VOICED, 150.0f, 1.0f, 0.0f, 0.0f, 0.0f, 500,  850, 2250, 3500,  80,  80, 100, 250, 1.0f, 0.40f, 0.10f, 0.05f },
         { "UH", SK_PHO_VOICED, 110.0f, 1.0f, 0.0f, 0.0f, 0.0f, 440, 1020, 2240, 3500,  80,  80, 100, 250, 1.0f, 0.40f, 0.10f, 0.05f },
         { "UW", SK_PHO_VOICED, 130.0f, 1.0f, 0.0f, 0.0f, 0.0f, 300,  870, 2240, 3500,  60,  80, 100, 250, 1.0f, 0.30f, 0.08f, 0.05f },
+        /* DIPHTHONGS */
+        { "AY", SK_PHO_VOICED, 160.0f, 1.0f, 0.0f, 0.0f, 0.0f, 650, 1700, 2500, 3500, 100, 100, 160, 250, 1.0f, 0.45f, 0.20f, 0.10f },
+        { "AW", SK_PHO_VOICED, 160.0f, 1.0f, 0.0f, 0.0f, 0.0f, 680, 1150, 2400, 3500, 100, 100, 160, 250, 1.0f, 0.40f, 0.15f, 0.08f },
+        { "OY", SK_PHO_VOICED, 160.0f, 1.0f, 0.0f, 0.0f, 0.0f, 520, 1600, 2400, 3500,  90, 100, 160, 250, 1.0f, 0.40f, 0.20f, 0.10f },
 
         /* FRICATIVES */
         { "S",  SK_PHO_FRIC,   80.0f, 0.0f, 0.75f, 6200, 2200, 300, 1500, 2500, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.10f, 0.05f },
@@ -1203,7 +1207,12 @@ static inline const sk_phoneme_def_t *sk_phoneme_lookup(const char *code) {
         { "F",  SK_PHO_FRIC,   70.0f, 0.0f, 0.50f, 4500, 3000, 300, 1200, 2400, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.10f, 0.05f },
         { "V",  SK_PHO_VOICED|SK_PHO_FRIC, 70.0f, 0.7f, 0.35f, 4500, 3000, 300, 1200, 2400, 3500, 80, 100, 150, 250, 0.7f, 0.10f, 0.10f, 0.05f },
         { "TH", SK_PHO_FRIC,   70.0f, 0.0f, 0.40f, 5000, 2800, 300, 1400, 2400, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.10f, 0.05f },
+        { "DH", SK_PHO_VOICED|SK_PHO_FRIC, 60.0f, 0.65f, 0.40f, 4000, 2500, 300, 1400, 2400, 3500, 80, 100, 150, 250, 0.65f, 0.10f, 0.10f, 0.05f },
         { "HH", SK_PHO_ASP,    60.0f, 0.0f, 0.60f, 2200, 2000, 500, 1500, 2500, 3500, 100, 100, 150, 250, 0.2f, 0.20f, 0.10f, 0.05f },
+
+        /* AFFRICATES */
+        { "CH", SK_PHO_STOP|SK_PHO_FRIC, 80.0f, 0.0f, 0.85f, 3800, 1800, 300, 1800, 2800, 3500, 80, 100, 150, 250, 0.1f, 0.10f, 0.10f, 0.05f },
+        { "JH", SK_PHO_VOICED|SK_PHO_STOP|SK_PHO_FRIC, 80.0f, 0.6f, 0.65f, 3800, 1800, 300, 1800, 2800, 3500, 80, 100, 150, 250, 0.6f, 0.10f, 0.10f, 0.05f },
 
         /* STOPS / PLOSIVES (with closure & release burst) */
         { "P",  SK_PHO_STOP,   60.0f, 0.0f, 0.70f, 1500,  800, 300,  900, 2200, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.05f, 0.02f },

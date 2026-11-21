@@ -106,7 +106,6 @@ static void render_vowel_demo(const char *filename, int sample_rate) {
 
     float f0 = 130.81f; /* C3 fundamental vocal pitch */
     float phase = 0.0f;
-    float lfo_phase = 0.0f;
 
     for (int i = 0; i < total_samples; i++) {
         float t = (float)i / (float)sample_rate;
@@ -162,25 +161,106 @@ static void render_vowel_demo(const char *filename, int sample_rate) {
     free(out);
 }
 
-static void render_speech_demo(const char *filename, int sample_rate) {
-    printf("Rendering phoneme DSL speech synthesis demo...\n");
-    const char *dsl = 
-        "[S:80 K:50 R:80 EH:140@130 D:80] [_:300] "
-        "[HH:70@115 EH:110@135 L:80@130 OW:200@105] [_:300] "
-        "[W:70 IH:80 L:70] [_:100] [R:80 AA:140@120 K:70] [_:100] [Y:70 UW:220@105] [_:400]";
+static void render_phoneme_demo(const char *filename, int sample_rate) {
+    printf("Rendering full phoneme inventory catalog demo...\n");
+    const char *dsl =
+        /* 1. Monophthong Vowels */
+        "[IY:240] [_:80] [IH:240] [_:80] [EH:240] [_:80] [AE:240] [_:80] "
+        "[AA:240] [_:80] [AH:240] [_:80] [AO:240] [_:80] [UH:240] [_:80] "
+        "[UW:240] [_:80] [ER:240] [_:250] "
+        /* 2. Diphthongs */
+        "[EY:260] [_:80] [AY:260] [_:80] [OY:260] [_:80] [AW:260] [_:80] [OW:260] [_:250] "
+        /* 3. Nasals */
+        "[M:250] [_:80] [N:250] [_:80] [NG:250] [_:250] "
+        /* 4. Liquids & Semivowels / Glides */
+        "[L:250] [_:80] [R:250] [_:80] [W:250] [_:80] [Y:250] [_:250] "
+        /* 5. Fricatives (Voiceless & Voiced) */
+        "[F:220] [_:80] [V:220] [_:80] [TH:220] [_:80] [DH:220] [_:80] "
+        "[S:220] [_:80] [Z:220] [_:80] [SH:220] [_:80] [ZH:220] [_:80] [HH:220] [_:250] "
+        /* 6. Stops / Plosives (with vowel release) */
+        "[P:60 AA:150] [_:80] [B:60 AA:150] [_:80] [T:60 AA:150] [_:80] "
+        "[D:60 AA:150] [_:80] [K:60 AA:150] [_:80] [G:60 AA:150] [_:250] "
+        /* 7. Affricates */
+        "[CH:70 AA:150] [_:80] [JH:70 AA:150] [_:400]";
 
-    printf("Compiling phoneme DSL: %s\n", dsl);
+    printf("Compiling phoneme catalog DSL...\n");
     sk_phoneme_frame_t frames[SK_PHONEME_MAX_TOKENS];
     int num_frames = sk_phoneme_compile_dsl(dsl, frames, SK_PHONEME_MAX_TOKENS, 120.0f);
-    printf("Compiled into %d acoustic phoneme frames\n", num_frames);
+    printf("Compiled %d catalog frames\n", num_frames);
 
-    int max_samples = sample_rate * 8; /* 8 sec buffer */
+    int max_samples = sample_rate * 20; /* 20 sec buffer */
+    float *float_buf = (float *)calloc(max_samples, sizeof(float));
+    sk_rng_t rng;
+    sk_rng_init(&rng, 13579);
+
+    int num_samples = sk_phoneme_render_frames(frames, num_frames, float_buf, max_samples, (float)sample_rate, &rng);
+    printf("Rendered %d audio samples for phoneme catalog\n", num_samples);
+
+    int16_t *pcm = (int16_t *)malloc(num_samples * sizeof(int16_t));
+    for (int i = 0; i < num_samples; i++) {
+        pcm[i] = (int16_t)(float_buf[i] * 28000.0f);
+    }
+
+    write_wav_file(filename, pcm, num_samples, sample_rate);
+    free(float_buf);
+    free(pcm);
+}
+
+static void render_speech_demo(const char *filename, int sample_rate) {
+    printf("Rendering historic speech synthesis showcase demo...\n");
+    const char *dsl = 
+        /* Part 1: Baseline phrases: "SKRED", "HELLO", "WE WILL ROCK YOU" */
+        "[S:80 K:50 R:80 EH:140@130 D:80] [_:350] "
+        "[HH:70@115 EH:110@135 L:80@130 OW:200@105] [_:350] "
+        "[W:70 IH:80 L:70] [_:100] [R:80 AA:140@120 K:70] [_:100] [Y:70 UW:220@105] [_:600] "
+
+        /* Part 2: Bell Labs 1939 Voder (Homer Dudley / Pedro the Voder) */
+        /* "GOOD AFTERNOON RADIO AUDIENCE" */
+        "[G:60 UH:90@100 D:50] [_:60] "
+        "[AE:110@105 F:70 T:50 ER:100@125 N:60 UW:160@140 N:70] [_:120] "
+        "[R:70 EY:110@130 D:50 IY:90@120 OW:150@105] [_:120] "
+        "[AA:120@125 D:50 IY:90@115 AH:80@105 N:60 S:120] [_:350] "
+        /* Historic Voder test phrase: "SHE SAW A SHOT" */
+        "[SH:130 IY:150@135] [_:80] "
+        "[S:120 AO:160@125] [_:80] "
+        "[AH:90@115] [_:70] "
+        "[SH:120 AA:160@110 T:70] [_:600] "
+
+        /* Part 3: 1961 IBM 7094 / Max Mathews - "DAISY BELL" */
+        /* Sung melody with exact pitch overrides */
+        "[D:60 EY:180@349 Z:60 IY:220@294] [_:140] " /* Dai - sy (F4, D4) */
+        "[D:60 EY:180@233 Z:60 IY:220@175] [_:160] " /* Dai - sy (Bb3, F3) */
+        "[G:60 IH:130@196 V:50] [_:60] "             /* give (G3) */
+        "[M:60 IY:140@220] [_:60] "                  /* me (A3) */
+        "[Y:60 UH:100@233 R:60] [_:60] "             /* your (Bb3) */
+        "[AE:120@262 N:50] [S:60 ER:130@294] [_:80] " /* an - swer (C4, D4) */
+        "[D:70 UW:320@233] [_:600] "                 /* do (Bb3) */
+
+        /* Part 4: Kraftwerk tribute - "I AM THE OPERATOR WITH MY POCKET CALCULATOR" + "ONE TWO THREE FOUR" */
+        /* Strict monotone pitch @ 110 Hz */
+        "[AY:120@110] [_:60] [AE:100@110 M:70] [_:60] "
+        "[DH:50 AH:70@110] [_:50] "
+        "[AA:90@110 P:50 ER:80@110 EY:100@110 T:50 ER:110@110] [_:80] "
+        "[W:50 IH:80@110 TH:60] [_:60] [M:50 AY:110@110] [_:60] "
+        "[P:50 AA:90@110 K:50 AH:70@110 T:50] [_:60] "
+        "[K:50 AE:90@110 L:50 K:50 Y:50 UH:80@110 L:50 EY:100@110 T:50 ER:140@110] [_:300] "
+        "[W:60 AH:110@110 N:70] [_:140] "
+        "[T:60 UW:130@110] [_:140] "
+        "[TH:70 R:60 IY:140@110] [_:140] "
+        "[F:70 AO:120@110 R:70] [_:500]";
+
+    printf("Compiling historic speech DSL...\n");
+    sk_phoneme_frame_t frames[SK_PHONEME_MAX_TOKENS];
+    int num_frames = sk_phoneme_compile_dsl(dsl, frames, SK_PHONEME_MAX_TOKENS, 120.0f);
+    printf("Compiled %d speech frames\n", num_frames);
+
+    int max_samples = sample_rate * 35; /* 35 sec buffer */
     float *float_buf = (float *)calloc(max_samples, sizeof(float));
     sk_rng_t rng;
     sk_rng_init(&rng, 98765);
 
     int num_samples = sk_phoneme_render_frames(frames, num_frames, float_buf, max_samples, (float)sample_rate, &rng);
-    printf("Rendered %d audio samples\n", num_samples);
+    printf("Rendered %d speech audio samples (%.2f seconds)\n", num_samples, (double)num_samples / sample_rate);
 
     int16_t *pcm = (int16_t *)malloc(num_samples * sizeof(int16_t));
     for (int i = 0; i < num_samples; i++) {
@@ -197,6 +277,7 @@ int main(int argc, char **argv) {
     int sample_rate = 48000;
     render_pluck_demo("pluck_demo.wav", sample_rate);
     render_vowel_demo("vowel_demo.wav", sample_rate);
+    render_phoneme_demo("phoneme_demo.wav", sample_rate);
     render_speech_demo("speech_demo.wav", sample_rate);
     printf("DSP demo rendering complete!\n");
     return 0;

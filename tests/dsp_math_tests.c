@@ -269,6 +269,15 @@ static void test_phoneme_dsl(void) {
     TEST_ASSERT(frames[3].pitch_hz == 130.0f, "frame 3 pitch is 130");
     TEST_ASSERT((frames[4].flags & SK_PHO_STOP) != 0, "frame 4 is stop plosive");
 
+    /* Test new phonemes: diphthongs, affricates, voiced fricatives */
+    const char *dsl2 = "[AY:80 AW:80 OY:80 DH:50 CH:70 JH:70]";
+    int n2 = sk_phoneme_compile_dsl(dsl2, frames, 16, 120.0f);
+    TEST_ASSERT(n2 == 6, "compiled 6 extended phonemes from DSL");
+    TEST_ASSERT((frames[0].flags & SK_PHO_VOICED) != 0, "AY is voiced");
+    TEST_ASSERT((frames[3].flags & SK_PHO_VOICED) && (frames[3].flags & SK_PHO_FRIC), "DH is voiced fricative");
+    TEST_ASSERT((frames[4].flags & SK_PHO_STOP) && (frames[4].flags & SK_PHO_FRIC), "CH is affricate");
+    TEST_ASSERT((frames[5].flags & SK_PHO_VOICED) && (frames[5].flags & SK_PHO_STOP), "JH is voiced affricate");
+
     float out[4800];
     sk_rng_t rng;
     sk_rng_init(&rng, 1111);
