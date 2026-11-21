@@ -1420,53 +1420,56 @@ static inline int sk_phoneme_compile_dsl(const char *dsl, sk_phoneme_frame_t *ou
     return frame_count;
 }
 
-/* Voice configuration parameters (inspired by DECtalk & SAM) */
+/* Voice configuration parameters (inspired by DECtalk, SAM, & Kraftwerk) */
 typedef struct {
     float pitch_scale;        /* Fundamental frequency multiplier (1.0 = normal, 1.6 = female, 0.75 = deep) */
     float formant_scale;      /* Vocal tract length / throat scale (1.0 = normal, 1.25 = child/elf, 0.88 = giant) */
     float speed_scale;        /* Tempo / cadence multiplier (1.0 = normal, 1.2 = fast, 0.8 = slow) */
     float breathiness;        /* Glottal aspiration noise mixed with voiced sounds (0.0 = clean, 0.08 = breathy) */
     float pitch_declination;  /* Sentence pitch downdrift in Hz over phrase (e.g. 10.0 Hz) */
+    float vowel_level;        /* Vowel voiced resonance gain knob (default 1.0) */
+    float consonant_level;    /* Frication / noise consonant gain knob (default 1.0) */
+    float robot_buzz;         /* 0.0 = natural human glottal pulse, 1.0 = Kraftwerk / Speak & Spell buzz */
 } sk_speech_voice_t;
 
 static inline sk_speech_voice_t sk_speech_voice_default(void) {
-    sk_speech_voice_t v = { 1.0f, 1.0f, 1.0f, 0.0f, 6.0f };
+    sk_speech_voice_t v = { 1.0f, 1.0f, 1.0f, 0.0f, 6.0f, 1.0f, 1.0f, 0.0f };
     return v;
 }
 
 static inline sk_speech_voice_t sk_speech_voice_paul(void) {
     /* DECtalk 'Perfect Paul' standard adult male */
-    sk_speech_voice_t v = { 1.0f, 1.0f, 1.0f, 0.02f, 8.0f };
+    sk_speech_voice_t v = { 1.0f, 1.0f, 1.0f, 0.02f, 8.0f, 1.05f, 0.90f, 0.05f };
     return v;
 }
 
 static inline sk_speech_voice_t sk_speech_voice_harry(void) {
     /* DECtalk 'Huge Harry' deep resonant male */
-    sk_speech_voice_t v = { 0.72f, 0.88f, 0.95f, 0.04f, 6.0f };
+    sk_speech_voice_t v = { 0.72f, 0.88f, 0.95f, 0.04f, 6.0f, 1.20f, 0.85f, 0.0f };
     return v;
 }
 
 static inline sk_speech_voice_t sk_speech_voice_betty(void) {
     /* DECtalk 'Beautiful Betty' female voice */
-    sk_speech_voice_t v = { 1.60f, 1.15f, 1.05f, 0.06f, 10.0f };
+    sk_speech_voice_t v = { 1.60f, 1.15f, 1.05f, 0.06f, 10.0f, 1.0f, 0.85f, 0.0f };
     return v;
 }
 
 static inline sk_speech_voice_t sk_speech_voice_sam(void) {
     /* Retro 1982 SAM (Software Automatic Mouth) / C64 voice */
-    sk_speech_voice_t v = { 1.12f, 1.05f, 1.15f, 0.0f, 0.0f };
+    sk_speech_voice_t v = { 1.12f, 1.05f, 1.15f, 0.0f, 0.0f, 1.10f, 1.0f, 0.35f };
     return v;
 }
 
 static inline sk_speech_voice_t sk_speech_voice_elf(void) {
     /* High-pitched child / elf / 'Kit the Kid' */
-    sk_speech_voice_t v = { 1.85f, 1.30f, 1.15f, 0.02f, 12.0f };
+    sk_speech_voice_t v = { 1.85f, 1.30f, 1.15f, 0.02f, 12.0f, 0.95f, 0.85f, 0.0f };
     return v;
 }
 
 static inline sk_speech_voice_t sk_speech_voice_robot(void) {
-    /* Pure robotic monotone (Kraftwerk) */
-    sk_speech_voice_t v = { 0.90f, 1.0f, 1.0f, 0.0f, 0.0f };
+    /* Pure robotic monotone (Kraftwerk - The Robots / Computer World) */
+    sk_speech_voice_t v = { 0.92f, 1.0f, 1.0f, 0.0f, 0.0f, 1.15f, 0.95f, 0.85f };
     return v;
 }
 
@@ -1481,6 +1484,8 @@ static inline int sk_phoneme_render_frames_voice(const sk_phoneme_frame_t *frame
     if (v.pitch_scale <= 0.0f) v.pitch_scale = 1.0f;
     if (v.formant_scale <= 0.0f) v.formant_scale = 1.0f;
     if (v.speed_scale <= 0.0f) v.speed_scale = 1.0f;
+    if (v.vowel_level <= 0.0f) v.vowel_level = 1.0f;
+    if (v.consonant_level <= 0.0f) v.consonant_level = 1.0f;
 
     sk_formant_bank_t fb;
     sk_formant_bank_init(&fb, sample_rate);
@@ -1598,11 +1603,24 @@ static inline int sk_phoneme_render_frames_voice(const sk_phoneme_frame_t *frame
             sk_formant_resonator_set(&fb.formants[2], current_f3, current_b3, current_g3, sample_rate);
             sk_formant_resonator_set(&fb.formants[3], current_f4, current_b4, current_g4, sample_rate);
 
-            /* Glottal oscillator (C1-continuous) */
+            /* Glottal / carrier excitation */
             float phase_inc = current_pitch / sample_rate;
             phase += phase_inc;
             if (phase >= 1.0f) phase -= 1.0f;
-            float glottal = sk_glottal_pulse(phase, 0.65f) * current_vg;
+
+            float glottal = sk_glottal_pulse(phase, 0.65f);
+
+            /* Kraftwerk / Speak & Spell robotic impulse buzz */
+            if (v.robot_buzz > 0.0f) {
+                float buzz = 0.0f;
+                if (phase < 0.08f) {
+                    buzz = 1.0f - (phase / 0.08f);
+                } else if (phase < 0.14f) {
+                    buzz = -0.4f * (1.0f - (phase - 0.08f) / 0.06f);
+                }
+                glottal = sk_lerp(glottal, buzz, v.robot_buzz);
+            }
+            glottal *= current_vg;
 
             /* Random noise generator */
             float raw_noise = rng ? sk_rng_float(rng) : (((float)rand() / (float)RAND_MAX) * 2.0f - 1.0f);
@@ -1612,21 +1630,21 @@ static inline int sk_phoneme_render_frames_voice(const sk_phoneme_frame_t *frame
                 glottal += raw_noise * v.breathiness * current_vg;
             }
 
-            /* Shaped noise for consonants (boosted 2.2x for articulate presence) */
-            float shaped_noise = sk_biquad_step(&noise_filter, raw_noise) * current_ng * 2.2f;
-
             /* Resonate voiced excitation through vocal tract formants */
-            float voiced_out = sk_formant_bank_step(&fb, glottal);
+            float voiced_raw = sk_formant_bank_step(&fb, glottal);
 
-            /* Mix voiced vocal tract + shaped frication noise */
-            float sample = voiced_out + shaped_noise;
+            /* Lip radiation differentiator (+6 dB/octave) applied ONLY to voiced vocal tract */
+            float voiced_lip = (voiced_raw - 0.92f * prev_lip) * 3.8f * v.vowel_level;
+            prev_lip = voiced_raw;
 
-            /* Lip radiation characteristic (+6 dB/octave differentiator) */
-            float lip_out = sample - 0.94f * prev_lip;
-            prev_lip = sample;
+            /* Shaped noise for consonants (naturally balanced, not differentiated) */
+            float shaped_noise = sk_biquad_step(&noise_filter, raw_noise) * current_ng * 0.45f * v.consonant_level;
+
+            /* Mix articulate vowels + crisp consonants */
+            float sample = voiced_lip + shaped_noise;
 
             /* Soft-clip to prevent clipping */
-            out_audio[out_idx++] = sk_softclip_cubic(lip_out * 1.8f, 1.0f);
+            out_audio[out_idx++] = sk_softclip_cubic(sample * 1.1f, 1.0f);
         }
     }
 
