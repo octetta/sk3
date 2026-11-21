@@ -133,13 +133,19 @@
 
     char statusBuf[256];
     if (r == 0) {
-        sk3_gui_format_status(1, activeUdp, activeTcp, skred_version(), statusBuf, sizeof(statusBuf));
+        sk3_gui_format_status(1, udpPort, activeUdp, tcpPort, activeTcp, skred_version(), statusBuf, sizeof(statusBuf));
         self.statusLabel.stringValue = [NSString stringWithUTF8String:statusBuf];
 
-        char bUdp[64] = "UDP Port: (not opened)\n";
-        char bTcp[64] = "TCP Port: (not opened)\n";
-        if (activeUdp > 0) snprintf(bUdp, sizeof(bUdp), "UDP Port: %d (Opcode dispatch & datagrams)\n", activeUdp);
-        if (activeTcp > 0) snprintf(bTcp, sizeof(bTcp), "TCP Port: %d (Raw TCP, HTTP/1.1, WebSocket)\n", activeTcp);
+        char bUdp[96] = "UDP Port: (disabled)\n";
+        char bTcp[96] = "TCP Port: (disabled)\n";
+        if (udpPort > 0) {
+            if (activeUdp > 0) snprintf(bUdp, sizeof(bUdp), "UDP Port: %d (Opcode dispatch & datagrams)\n", activeUdp);
+            else snprintf(bUdp, sizeof(bUdp), "UDP Port: FAILED to bind %d (already in use or permission denied)\n", udpPort);
+        }
+        if (tcpPort > 0) {
+            if (activeTcp > 0) snprintf(bTcp, sizeof(bTcp), "TCP Port: %d (Raw TCP, HTTP/1.1, WebSocket)\n", activeTcp);
+            else snprintf(bTcp, sizeof(bTcp), "TCP Port: FAILED to bind %d (already in use or permission denied)\n", tcpPort);
+        }
 
         NSString *banner = [NSString stringWithFormat:
             @"=== sk3 v%s Audio Engine ===\n"
@@ -149,7 +155,7 @@
             skred_version(), bUdp, bTcp];
         [self appendLog:banner];
     } else {
-        sk3_gui_format_status(0, 0, 0, skred_version(), statusBuf, sizeof(statusBuf));
+        sk3_gui_format_status(0, 0, 0, 0, 0, skred_version(), statusBuf, sizeof(statusBuf));
         self.statusLabel.stringValue = [NSString stringWithUTF8String:statusBuf];
         self.statusLabel.textColor = [NSColor systemRedColor];
         [self appendLog:@"Error: Failed to initialize audio output device.\n"];

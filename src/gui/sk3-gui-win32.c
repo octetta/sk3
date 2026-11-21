@@ -283,14 +283,20 @@ static void start_engine(HWND hwnd) {
     
     char status[256];
     if (r == 0) {
-        sk3_gui_format_status(1, active_udp, active_tcp, skred_version(), status, sizeof(status));
+        sk3_gui_format_status(1, udp_port, active_udp, tcp_port, active_tcp, skred_version(), status, sizeof(status));
         SetDlgItemTextA(hwnd, IDC_STATUS_TEXT, status);
         
         char banner[512];
-        char b_udp[64] = "UDP Port: (not opened)\r\n";
-        char b_tcp[64] = "TCP Port: (not opened)\r\n";
-        if (active_udp > 0) snprintf(b_udp, sizeof(b_udp), "UDP Port: %d (Opcode dispatch & datagrams)\r\n", active_udp);
-        if (active_tcp > 0) snprintf(b_tcp, sizeof(b_tcp), "TCP Port: %d (Raw TCP, HTTP/1.1, WebSocket)\r\n", active_tcp);
+        char b_udp[96] = "UDP Port: (disabled)\r\n";
+        char b_tcp[96] = "TCP Port: (disabled)\r\n";
+        if (udp_port > 0) {
+            if (active_udp > 0) snprintf(b_udp, sizeof(b_udp), "UDP Port: %d (Opcode dispatch & datagrams)\r\n", active_udp);
+            else snprintf(b_udp, sizeof(b_udp), "UDP Port: FAILED to bind %d (already in use or permission denied)\r\n", udp_port);
+        }
+        if (tcp_port > 0) {
+            if (active_tcp > 0) snprintf(b_tcp, sizeof(b_tcp), "TCP Port: %d (Raw TCP, HTTP/1.1, WebSocket)\r\n", active_tcp);
+            else snprintf(b_tcp, sizeof(b_tcp), "TCP Port: FAILED to bind %d (already in use or permission denied)\r\n", tcp_port);
+        }
 
         snprintf(banner, sizeof(banner),
             "=== sk3 v%s Audio Engine ===\r\n"
@@ -300,7 +306,7 @@ static void start_engine(HWND hwnd) {
             skred_version(), b_udp, b_tcp);
         append_log(g_hLogOutput, banner);
     } else {
-        sk3_gui_format_status(0, 0, 0, skred_version(), status, sizeof(status));
+        sk3_gui_format_status(0, 0, 0, 0, 0, skred_version(), status, sizeof(status));
         SetDlgItemTextA(hwnd, IDC_STATUS_TEXT, status);
         append_log(g_hLogOutput, "Error: Failed to initialize audio output device.\r\n");
     }

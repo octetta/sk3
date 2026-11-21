@@ -57,21 +57,30 @@ static inline const char *sk3_theme_name(sk3_theme_t th) {
 }
 
 /* Format status text omitting ports that were not opened */
-static inline void sk3_gui_format_status(int audio_ok, int udp_port_opened, int tcp_port_opened,
+static inline void sk3_gui_format_status(int audio_ok, int req_udp, int udp_port_opened,
+                                         int req_tcp, int tcp_port_opened,
                                          const char *version, char *out_status, size_t out_status_sz) {
     if (!audio_ok) {
         snprintf(out_status, out_status_sz, "AUDIO START FAILED");
         return;
     }
-    if (udp_port_opened > 0 && tcp_port_opened > 0) {
-        snprintf(out_status, out_status_sz, "RUNNING: sk3 v%s (UDP: %d, TCP: %d)",
-                 version, udp_port_opened, tcp_port_opened);
-    } else if (udp_port_opened > 0) {
-        snprintf(out_status, out_status_sz, "RUNNING: sk3 v%s (UDP: %d)",
-                 version, udp_port_opened);
-    } else if (tcp_port_opened > 0) {
-        snprintf(out_status, out_status_sz, "RUNNING: sk3 v%s (TCP: %d)",
-                 version, tcp_port_opened);
+    char udp_s[32] = {0};
+    if (req_udp > 0) {
+        if (udp_port_opened > 0) snprintf(udp_s, sizeof(udp_s), "UDP: %d", udp_port_opened);
+        else snprintf(udp_s, sizeof(udp_s), "UDP: FAILED");
+    }
+    char tcp_s[32] = {0};
+    if (req_tcp > 0) {
+        if (tcp_port_opened > 0) snprintf(tcp_s, sizeof(tcp_s), "TCP: %d", tcp_port_opened);
+        else snprintf(tcp_s, sizeof(tcp_s), "TCP: FAILED");
+    }
+
+    if (udp_s[0] && tcp_s[0]) {
+        snprintf(out_status, out_status_sz, "RUNNING: sk3 v%s (%s, %s)", version, udp_s, tcp_s);
+    } else if (udp_s[0]) {
+        snprintf(out_status, out_status_sz, "RUNNING: sk3 v%s (%s)", version, udp_s);
+    } else if (tcp_s[0]) {
+        snprintf(out_status, out_status_sz, "RUNNING: sk3 v%s (%s)", version, tcp_s);
     } else {
         snprintf(out_status, out_status_sz, "RUNNING: sk3 v%s", version);
     }

@@ -356,14 +356,20 @@ static void start_engine(void) {
         active_udp_port = (req_udp > 0) ? skred_udp_info() : 0;
         active_tcp_port = (hp > 0) ? hp : 0;
 
-        sk3_gui_format_status(1, active_udp_port, active_tcp_port, skred_version(),
+        sk3_gui_format_status(1, req_udp, active_udp_port, req_tcp, active_tcp_port, skred_version(),
                               status_banner, sizeof(status_banner));
 
         char banner[512];
-        char banner_udp[64] = "UDP Port: (not opened)\n";
-        char banner_tcp[64] = "TCP Port: (not opened)\n";
-        if (active_udp_port > 0) snprintf(banner_udp, sizeof(banner_udp), "UDP Port: %d (Opcode dispatch & datagrams)\n", active_udp_port);
-        if (active_tcp_port > 0) snprintf(banner_tcp, sizeof(banner_tcp), "TCP Port: %d (Raw TCP, HTTP/1.1, WebSocket)\n", active_tcp_port);
+        char banner_udp[96] = "UDP Port: (disabled)\n";
+        char banner_tcp[96] = "TCP Port: (disabled)\n";
+        if (req_udp > 0) {
+            if (active_udp_port > 0) snprintf(banner_udp, sizeof(banner_udp), "UDP Port: %d (Opcode dispatch & datagrams)\n", active_udp_port);
+            else snprintf(banner_udp, sizeof(banner_udp), "UDP Port: FAILED to bind %d (already in use or permission denied)\n", req_udp);
+        }
+        if (req_tcp > 0) {
+            if (active_tcp_port > 0) snprintf(banner_tcp, sizeof(banner_tcp), "TCP Port: %d (Raw TCP, HTTP/1.1, WebSocket)\n", active_tcp_port);
+            else snprintf(banner_tcp, sizeof(banner_tcp), "TCP Port: FAILED to bind %d (already in use or permission denied)\n", req_tcp);
+        }
 
         snprintf(banner, sizeof(banner),
             "=== sk3 v%s Audio Engine ===\n"
@@ -626,11 +632,21 @@ static void render_all(void) {
     int r2_y = r1_y + r1_h + 8;
     int cur_x = 16;
 
-    // UDP label & box
+    // UDP status dot, label & box
+    int req_udp_val = atoi(udp_port_str);
+    unsigned long udp_dot_col = (active_udp_port > 0) ? pal.status_ok_pixel :
+                                (req_udp_val > 0) ? pal.status_err_pixel : pal.border_pixel;
+    XSetForeground(dpy, gc, udp_dot_col);
+    int dot_d = 7;
+    int dot_y = r2_y + (btn_h - dot_d) / 2;
+    XFillArc(dpy, backbuffer, gc, cur_x, dot_y, dot_d, dot_d, 0, 360 * 64);
+    cur_x += dot_d + 6;
+
     XGlyphInfo ext_lbl;
     XftTextExtentsUtf8(dpy, xft_font_ui, (const FcChar8 *)"UDP:", 4, &ext_lbl);
     int ty_row2 = r2_y + (btn_h + xft_font_ui->ascent - xft_font_ui->descent) / 2;
-    XftDrawStringUtf8(xft_draw, &pal.text_dim, xft_font_ui, cur_x, ty_row2, (const FcChar8 *)"UDP:", 4);
+    XftDrawStringUtf8(xft_draw, (active_udp_port > 0) ? &pal.text_color : &pal.text_dim,
+                      xft_font_ui, cur_x, ty_row2, (const FcChar8 *)"UDP:", 4);
     cur_x += ext_lbl.width + 6;
 
     XGlyphInfo ext_5d;
@@ -645,16 +661,27 @@ static void render_all(void) {
 
     XSetForeground(dpy, gc, (active_focus == 0) ? pal.input_bg_pixel : pal.panel_pixel);
     XFillRectangle(dpy, backbuffer, gc, cur_x, r2_y, port_box_w, btn_h);
-    XSetForeground(dpy, gc, (active_focus == 0) ? pal.status_ok_pixel : pal.border_pixel);
+    unsigned long udp_border = (active_focus == 0) ? pal.status_ok_pixel :
+                               (req_udp_val > 0 && active_udp_port == 0) ? pal.status_err_pixel : pal.border_pixel;
+    XSetForeground(dpy, gc, udp_border);
     XDrawRectangle(dpy, backbuffer, gc, cur_x, r2_y, port_box_w, btn_h);
 
     int port_ty = r2_y + (btn_h + xft_font_mono->ascent - xft_font_mono->descent) / 2;
-    XftDrawStringUtf8(xft_draw, &pal.text_color, xft_font_mono, cur_x + 6, port_ty, (const FcChar8 *)udp_port_str, (int)strlen(udp_port_str));
-    cur_x += port_box_w + 12;
+    XftColor *udp_text_col = (req_udp_val > 0 && active_udp_port == 0) ? &pal.status_err : &pal.text_color;
+    XftDrawStringUtf8(xft_draw, udp_text_col, xft_font_mono, cur_x + 6, port_ty, (const FcChar8 *)udp_port_str, (int)strlen(udp_port_str));
+    cur_x += port_box_w + 14;
 
-    // TCP label & box
+    // TCP status dot, label & box
+    int req_tcp_val = atoi(tcp_port_str);
+    unsigned long tcp_dot_col = (active_tcp_port > 0) ? pal.status_ok_pixel :
+                                (req_tcp_val > 0) ? pal.status_err_pixel : pal.border_pixel;
+    XSetForeground(dpy, gc, tcp_dot_col);
+    XFillArc(dpy, backbuffer, gc, cur_x, dot_y, dot_d, dot_d, 0, 360 * 64);
+    cur_x += dot_d + 6;
+
     XftTextExtentsUtf8(dpy, xft_font_ui, (const FcChar8 *)"TCP:", 4, &ext_lbl);
-    XftDrawStringUtf8(xft_draw, &pal.text_dim, xft_font_ui, cur_x, ty_row2, (const FcChar8 *)"TCP:", 4);
+    XftDrawStringUtf8(xft_draw, (active_tcp_port > 0) ? &pal.text_color : &pal.text_dim,
+                      xft_font_ui, cur_x, ty_row2, (const FcChar8 *)"TCP:", 4);
     cur_x += ext_lbl.width + 6;
 
     rendered_tcp_box.x = cur_x;
@@ -664,11 +691,14 @@ static void render_all(void) {
 
     XSetForeground(dpy, gc, (active_focus == 1) ? pal.input_bg_pixel : pal.panel_pixel);
     XFillRectangle(dpy, backbuffer, gc, cur_x, r2_y, port_box_w, btn_h);
-    XSetForeground(dpy, gc, (active_focus == 1) ? pal.status_ok_pixel : pal.border_pixel);
+    unsigned long tcp_border = (active_focus == 1) ? pal.status_ok_pixel :
+                               (req_tcp_val > 0 && active_tcp_port == 0) ? pal.status_err_pixel : pal.border_pixel;
+    XSetForeground(dpy, gc, tcp_border);
     XDrawRectangle(dpy, backbuffer, gc, cur_x, r2_y, port_box_w, btn_h);
 
-    XftDrawStringUtf8(xft_draw, &pal.text_color, xft_font_mono, cur_x + 6, port_ty, (const FcChar8 *)tcp_port_str, (int)strlen(tcp_port_str));
-    cur_x += port_box_w + 12;
+    XftColor *tcp_text_col = (req_tcp_val > 0 && active_tcp_port == 0) ? &pal.status_err : &pal.text_color;
+    XftDrawStringUtf8(xft_draw, tcp_text_col, xft_font_mono, cur_x + 6, port_ty, (const FcChar8 *)tcp_port_str, (int)strlen(tcp_port_str));
+    cur_x += port_box_w + 14;
 
     // Restart button
     add_btn_auto(BTN_RESTART, cur_x, r2_y, "Restart");

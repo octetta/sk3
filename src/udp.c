@@ -67,6 +67,18 @@ static int udp_open(int port) {
   }
 #endif
     SOCKET sock = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sock == INVALID_SOCKET) {
+        return -1;
+    }
+    int opt = 1;
+#ifdef _WIN32
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (const char *)&opt, sizeof(opt));
+#else
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+#ifdef SO_REUSEPORT
+    setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
+#endif
+#endif
     struct sockaddr_in serve;
 #ifdef _WIN32
     memset(&serve, 0, sizeof(serve));
@@ -79,6 +91,7 @@ static int udp_open(int port) {
     if (bind(sock, (struct sockaddr *)&serve, sizeof(serve)) >= 0) {
         return sock;
     }
+    CLOSE_SOCKET(sock);
     return -1;
 }
 
@@ -166,8 +179,8 @@ static void *udp_main(void *arg) {
   while (udp_running) {
     FD_ZERO(&readfds);
     FD_SET(sock, &readfds);
-    timeout.tv_sec = 1;
-    timeout.tv_usec = 0;
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 50000; // 50ms timeout for responsive thread termination
     int ready = select(sock+1, &readfds, NULL, NULL, &timeout);
     if (ready > 0 && FD_ISSET(sock, &readfds)) {
       client_len = sizeof(client);
@@ -241,7 +254,6 @@ int udp_start(int port) {
   pthread_attr_init(&udp_attr);
   pthread_attr_setstacksize(&udp_attr, 2 * 1024 * 1024);
   pthread_create(&udp_thread_handle, &udp_attr, udp_main, NULL);
-  pthread_detach(udp_thread_handle);
   
   while (atomic_load_int(&udp_startup_status) == 0) {
 #ifdef _WIN32
@@ -260,14 +272,20 @@ int udp_start(int port) {
 }
 
 void udp_stop(void) {
+  if (!udp_running && udp_socket == INVALID_SOCKET && !atomic_load_int(&udp_thread_active)) return;
   udp_running = 0;
   if (udp_socket != INVALID_SOCKET) {
-    CLOSE_SOCKET(udp_socket);
+    SOCKET s = udp_socket;
     udp_socket = INVALID_SOCKET;
+    CLOSE_SOCKET(s);
+  }
+  if (atomic_load_int(&udp_thread_active)) {
+    pthread_join(udp_thread_handle, NULL);
   }
 #ifdef _WIN32
   WSACleanup();
 #endif
+  udp_port = 0;
 }
 
 int udp_info(void) {
