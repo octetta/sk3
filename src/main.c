@@ -16,7 +16,8 @@ static void usage(void) {
   printf("  -n                       Disable interactive line editor (for subprocess mode)\n");
   printf("  -p<udp-port>             UDP control port (0 = disable UDP, default 60440)\n");
   printf("  -e<events-port>          UDP events broadcast port (0 = disable, default 0)\n");
-  printf("  -H<http-port>            HTTP POST control port (0 = disable HTTP, default 60440)\n");
+  printf("  -T, --tcp <tcp-port>     TCP server port (Raw TCP, HTTP/1.1, WebSocket; default 60440, 0 = disable)\n");
+  printf("  -H, --http <http-port>    Alias for -T / --tcp\n");
   printf("  -o<device-id>            Select output audio device\n");
   printf("  -i<device-id>            Select input audio device\n");
   printf("  -l                       List available audio input and output devices\n");
@@ -172,10 +173,12 @@ int main(int argc, char **argv) {
         else usage();
       } else if (strncmp(argv[i], "-e", 2) == 0 && argv[i][2] != '\0') {
         events_port = (int)strtol(&argv[i][2], NULL, 0);
-      } else if (strcmp(argv[i], "-H") == 0 || strcmp(argv[i], "--http") == 0) {
+      } else if (strcmp(argv[i], "-T") == 0 || strcmp(argv[i], "--tcp") == 0 ||
+                 strcmp(argv[i], "-H") == 0 || strcmp(argv[i], "--http") == 0) {
         if (i + 1 < argc) http_port = (int)strtol(argv[++i], NULL, 0);
         else usage();
-      } else if (strncmp(argv[i], "-H", 2) == 0 && argv[i][2] != '\0') {
+      } else if ((strncmp(argv[i], "-T", 2) == 0 && argv[i][2] != '\0') ||
+                 (strncmp(argv[i], "-H", 2) == 0 && argv[i][2] != '\0')) {
         http_port = (int)strtol(&argv[i][2], NULL, 0);
       } else if (strcmp(argv[i], "-i") == 0) {
         skred_enumerate_devices(1);
@@ -233,7 +236,7 @@ int main(int argc, char **argv) {
   if (http_port > 0) {
     int hp = skred_http_start(http_port);
     if (hp > 0) {
-      printf("# sk3 HTTP POST server listening on port %d\n", hp);
+      printf("# sk3 TCP server listening on port %d (Raw TCP, HTTP/1.1, WebSocket)\n", hp);
     }
   }
 

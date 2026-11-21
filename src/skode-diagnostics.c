@@ -8,6 +8,7 @@
 #ifdef UDP
 #include "udp.h"
 #endif
+#include "http.h"
 
 void voice_show(skode_t *ctx, int v, char c, int verbose) {
   char s[1024];
@@ -143,6 +144,10 @@ void system_show(skode_t *ctx) {
               u, u > 0 ? "OK" : "Off/Fail",
               e, e > 0 ? "OK" : "Off/Fail");
   #endif
+  char tcp_stat[1024];
+  if (skred_tcp_status(tcp_stat, sizeof(tcp_stat)) > 0) {
+    ctx->printf(ctx, "%s", tcp_stat);
+  }
 }
 
 void skode_macros_show(skode_t *ctx, int pasteable) {

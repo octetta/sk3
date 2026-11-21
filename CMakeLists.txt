@@ -270,6 +270,11 @@ target_link_libraries(http_tests PRIVATE api)
 target_include_directories(http_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}/src/gen")
 add_test(NAME network.http-post-control COMMAND http_tests)
 
+add_executable(tcp_tests tests/tcp_tests.c)
+target_link_libraries(tcp_tests PRIVATE api)
+target_include_directories(tcp_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}/src/gen")
+add_test(NAME network.polymorphic-tcp-control COMMAND tcp_tests)
+
 if(SKRED_SCOPE)
     add_executable(scope_ipc_tests tests/scope_ipc_tests.c)
     target_link_libraries(scope_ipc_tests PRIVATE api)

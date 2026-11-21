@@ -10,7 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Credits](https://img.shields.io/badge/credits-acknowledgements-purple.svg)](CREDITS.md)
 [![Inspirations](https://img.shields.io/badge/history-inspirations-pink.svg)](doc/INSPIRATIONS.md)
-[![Tests](https://img.shields.io/badge/tests-16%2F16%20passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-17%2F17%20passing-brightgreen.svg)]()
 
 `sk3` (formerly skred) is a lightweight, high-performance polyphonic synthesizer, deterministic audio engine, and embedded Forth-inspired domain specific language (`skode`) for generative sound design and sequencing.
 
@@ -20,7 +20,7 @@ Version: `1.3.20`
 
 - **Polyphonic Synthesizer Engine**: Multi-voice allocation with dynamic voice pooling and voice groups.
 - **Embedded DSP & Physical Modeling Toolkit**: Comprehensive single-file C DSP library (`sk_dsp.h`) providing physical plucked strings, acoustic flute and brass waveguides, anti-aliased PolyBLEP oscillators, 5-pole formant speech synthesis with historic DECtalk/SAM personas, analog 808/909 percussion, Euler-Bernoulli modal bells, and pure C Levinson-Durbin LPC speech-to-phoneme analysis (see [DSP Toolkit Reference](doc/DSP_TOOLKIT.md) and [DSP Expansion Plan](doc/dsp_expansion_plan.md)).
-- **Multiplexed HTTP POST Control Server**: Dependency-free HTTP/1.1 endpoint on port 60440 (`-H60440`) featuring single-threaded non-blocking `select()` multiplexing, per-connection isolated Forth contexts, persistent `keep-alive` continuous streaming, and full CORS headers for browser and notebook control (see [HTTP API Guide](doc/HTTP_API.md)).
+- **Polymorphic TCP, HTTP & WebSocket Control Server**: Zero-dependency polymorphic TCP endpoint on port 60440 (`-T60440`, alias `-H60440`) featuring single-threaded non-blocking `select()` multiplexing, automatic protocol sniffing (Raw ASCII stream, HTTP/1.1 REST, and RFC 6455 WebSocket), per-connection isolated Forth contexts, persistent `keep-alive` and WebSocket frame streaming, in-engine `/s` diagnostics, and full CORS headers with Private Network Access for browser XY pads and web apps (see [TCP/HTTP/WebSocket Reference](doc/HTTP_API.md)).
 - **Bandlimited Wavetable Playback & Octave Mipmapping**: Automatic 8-level harmonic mipmap generation via in-place FFT / ksynth analysis, eliminating Nyquist aliasing foldover chirps in the upper register while unleashing 256-harmonic richness in the sub-bass, with $\pm 5\%$ boundary hysteresis and zero inner-loop CPU overhead.
 - **Hardware LFSR Noise Generator**: Configurable Linear Feedback Shift Register noise engine on `w5` with classic vintage chip presets (MOS 6581/8580 SID, Atari POKEY 4/5/9/17-bit, NES 7/15-bit) and full runtime parameter control (`NT`).
 - **Rich DSP Primitives**: Dual-oscillator algorithms, phase distortion (CZ), frequency modulation (FM), resonant filters with analog hyperbolic saturation drive (`jd`), combined filter modes (`L+B`, mode 6), exponential envelopes, sub-sample PolyBLEP anti-aliasing for hard sync, and stereo delay lines.
@@ -44,7 +44,7 @@ mise install
 make gen         # Compile declarative schemas and opcode tables
 make test-schema # Verify schema boundary invariance
 make all         # Build native libraries and sk3 CLI
-make test        # Run full engine contract and state test suite (16/16)
+make test        # Run full engine contract and state test suite (17/17)
 make dsp-demos   # Render all 8 DSP physical modeling & speech WAV demos
 make wasm        # Compile clean WebAssembly engine (build_wasm/skred_api.js/wasm)
 make wasm-test   # Run headless Node.js verification test
