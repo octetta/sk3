@@ -59,6 +59,7 @@ set(API_SOURCES
     src/skqueue.c
     src/udp.c
     src/udp-events.c
+    src/http.c
     src/api.c
     src/synth.c
     src/synth-delay.c
@@ -263,6 +264,11 @@ add_executable(recording_tests tests/recording_tests.c)
 target_link_libraries(recording_tests PRIVATE api)
 target_include_directories(recording_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}/src/gen")
 add_test(NAME recording.track-routing COMMAND recording_tests)
+
+add_executable(http_tests tests/http_tests.c)
+target_link_libraries(http_tests PRIVATE api)
+target_include_directories(http_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}/src/gen")
+add_test(NAME network.http-post-control COMMAND http_tests)
 
 if(SKRED_SCOPE)
     add_executable(scope_ipc_tests tests/scope_ipc_tests.c)

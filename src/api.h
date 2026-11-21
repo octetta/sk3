@@ -15,6 +15,12 @@ int skred_start(unsigned int req_audio_frames, unsigned int voices, int port);
 
 int skred_udp_info(void);
 
+// Optional: Start a dedicated HTTP POST control endpoint
+int skred_http_start(int port);
+void skred_http_stop(void);
+int skred_http_info(void);
+int skred_http_poll(int timeout_ms);
+
 // Optional: Start a dedicated UDP event broadcast port for the >u command
 int skred_udp_events_start(int port);
 void skred_udp_events_stop(void);

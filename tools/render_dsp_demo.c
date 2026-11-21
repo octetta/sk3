@@ -332,15 +332,17 @@ static void render_voices_demo(const char *filename, int sample_rate) {
 }
 
 static void render_percussion_demo(const char *filename, int sample_rate) {
-    printf("Rendering real-time percussion demo (808/909 voices + Karplus-Strong drum)...\n");
+    printf("Rendering real-time percussion demo (808/909 voices + Karplus-Strong drum + Modal Bells)...\n");
 
     float bpm = 124.0f;
     float step_sec = (60.0f / bpm) / 4.0f; /* 16th note step = 120.9 ms */
     int step_samples = (int)(step_sec * (float)sample_rate);
-    int total_steps = 64; /* 4 bars */
-    int total_samples = step_samples * total_steps + sample_rate * 2;
+    int drum_steps = 64; /* 4 bars */
+    int hybrid_steps = 32; /* 2 bars hybrid */
+    int total_samples = sample_rate * 32; /* 32 seconds buffer */
 
     int16_t *out = (int16_t *)calloc(total_samples, sizeof(int16_t));
+    int out_idx = 0;
 
     sk_drum_kick_t kick;
     sk_drum_snare_t snare;
@@ -360,10 +362,7 @@ static void render_percussion_demo(const char *filename, int sample_rate) {
     sk_drum_tom_init(&tom_hi, (float)sample_rate, 195.0f);
     sk_karplus_init(&ks_drum, (float)sample_rate);
 
-    /* 64-step pattern:
-     * Bar 1-2: Kick, snare, hats, cowbell groove
-     * Bar 3: Add claps and tom polyrhythms
-     * Bar 4: Karplus-Strong physical drum membrane fills & roll */
+    /* --- Part 1: 808/909 Groove + Karplus-Strong Membrane --- */
     const int kick_pat[64] = {
         1, 0, 0, 0,  1, 0, 0, 1,  0, 0, 1, 0,  0, 1, 0, 0,
         1, 0, 0, 0,  1, 0, 0, 1,  0, 0, 1, 0,  0, 0, 1, 0,
@@ -407,8 +406,7 @@ static void render_percussion_demo(const char *filename, int sample_rate) {
         0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 1,  0, 1, 1, 1
     };
 
-    int out_idx = 0;
-    for (int step = 0; step < total_steps; step++) {
+    for (int step = 0; step < drum_steps; step++) {
         if (kick_pat[step]) sk_drum_kick_trigger(&kick, 0.95f);
         if (snare_pat[step]) sk_drum_snare_trigger(&snare, 0.85f);
         if (clap_pat[step]) sk_drum_clap_trigger(&clap, 0.75f);
@@ -451,16 +449,122 @@ static void render_percussion_demo(const char *filename, int sample_rate) {
         }
     }
 
+    /* 0.8s pause */
+    for (int i = 0; i < (int)(0.8f * sample_rate); i++) out[out_idx++] = 0;
+
+    /* --- Part 2: Modal Metallic Idiophones Showcase --- */
+    sk_drum_bell_t bell;
+
+    /* 1. Bronze Church Bell (SK_BELL_CHURCH, 220 Hz A3 and 330 Hz E4) */
+    printf("  Showcasing SK_BELL_CHURCH (Bronze Church Bell)...\n");
+    sk_drum_bell_init(&bell, (float)sample_rate, SK_BELL_CHURCH, 220.0f);
+    sk_drum_bell_trigger(&bell, 0.95f);
+    for (int i = 0; i < (int)(1.8f * sample_rate); i++) {
+        float s = sk_drum_bell_step(&bell);
+        out[out_idx++] = (int16_t)(sk_softclip_cubic(s * 0.75f, 1.0f) * 25000.0f);
+    }
+    sk_drum_bell_init(&bell, (float)sample_rate, SK_BELL_CHURCH, 293.66f); /* D4 */
+    sk_drum_bell_trigger(&bell, 0.90f);
+    for (int i = 0; i < (int)(1.8f * sample_rate); i++) {
+        float s = sk_drum_bell_step(&bell);
+        out[out_idx++] = (int16_t)(sk_softclip_cubic(s * 0.75f, 1.0f) * 25000.0f);
+    }
+
+    /* 2. Orchestral Tubular Bell / Chime (SK_BELL_TUBULAR: C5, E5, G5) */
+    printf("  Showcasing SK_BELL_TUBULAR (Orchestral Tubular Chimes)...\n");
+    float tub_pitches[] = { 523.25f, 659.25f, 783.99f };
+    for (int n = 0; n < 3; n++) {
+        sk_drum_bell_init(&bell, (float)sample_rate, SK_BELL_TUBULAR, tub_pitches[n]);
+        sk_drum_bell_trigger(&bell, 0.85f);
+        for (int i = 0; i < (int)(0.9f * sample_rate); i++) {
+            float s = sk_drum_bell_step(&bell);
+            out[out_idx++] = (int16_t)(sk_softclip_cubic(s * 0.75f, 1.0f) * 25000.0f);
+        }
+    }
+
+    /* 3. Vibraphone Bar (SK_BELL_VIBE: F4, A4, C5) */
+    printf("  Showcasing SK_BELL_VIBE (Vibraphone / Tuned Metal Bar)...\n");
+    float vibe_pitches[] = { 349.23f, 440.00f, 523.25f };
+    for (int n = 0; n < 3; n++) {
+        sk_drum_bell_init(&bell, (float)sample_rate, SK_BELL_VIBE, vibe_pitches[n]);
+        sk_drum_bell_trigger(&bell, 0.80f);
+        for (int i = 0; i < (int)(0.7f * sample_rate); i++) {
+            float s = sk_drum_bell_step(&bell);
+            out[out_idx++] = (int16_t)(sk_softclip_cubic(s * 0.75f, 1.0f) * 25000.0f);
+        }
+    }
+
+    /* 4. Tibetan Singing Bowl (SK_BELL_TIBETAN: beating modal doublet pairs) */
+    printf("  Showcasing SK_BELL_TIBETAN (Tibetan Singing Bowl)...\n");
+    sk_drum_bell_init(&bell, (float)sample_rate, SK_BELL_TIBETAN, 196.0f); /* G3 */
+    sk_drum_bell_trigger(&bell, 0.95f);
+    for (int i = 0; i < (int)(3.0f * sample_rate); i++) {
+        float s = sk_drum_bell_step(&bell);
+        out[out_idx++] = (int16_t)(sk_softclip_cubic(s * 0.80f, 1.0f) * 25000.0f);
+    }
+
+    /* 5. Agogo Bell (SK_BELL_AGOGO: High and Low pair) */
+    printf("  Showcasing SK_BELL_AGOGO (Latin Agogo Bells)...\n");
+    sk_drum_bell_t agogo_lo, agogo_hi;
+    sk_drum_bell_init(&agogo_lo, (float)sample_rate, SK_BELL_AGOGO, 440.0f);
+    sk_drum_bell_init(&agogo_hi, (float)sample_rate, SK_BELL_AGOGO, 587.33f);
+    int agogo_pat[8] = { 1, 2, 1, 1, 2, 1, 2, 2 };
+    for (int p = 0; p < 8; p++) {
+        if (agogo_pat[p] == 1) sk_drum_bell_trigger(&agogo_lo, 0.85f);
+        else sk_drum_bell_trigger(&agogo_hi, 0.90f);
+        for (int i = 0; i < (int)(0.22f * sample_rate); i++) {
+            float s = sk_drum_bell_step(&agogo_lo) + sk_drum_bell_step(&agogo_hi);
+            out[out_idx++] = (int16_t)(sk_softclip_cubic(s * 0.70f, 1.0f) * 25000.0f);
+        }
+    }
+
+    /* 0.6s pause */
+    for (int i = 0; i < (int)(0.6f * sample_rate); i++) out[out_idx++] = 0;
+
+    /* --- Part 3: Hybrid Drum Machine + Modal Bells Polyphony --- */
+    printf("  Showcasing Hybrid Groove (Percussion + Modal Metallic Idiophones)...\n");
+    sk_drum_bell_init(&agogo_lo, (float)sample_rate, SK_BELL_AGOGO, 440.0f);
+    sk_drum_bell_init(&agogo_hi, (float)sample_rate, SK_BELL_AGOGO, 587.33f);
+    sk_drum_bell_t tubular_accent;
+    sk_drum_bell_init(&tubular_accent, (float)sample_rate, SK_BELL_TUBULAR, 659.25f);
+
+    for (int step = 0; step < hybrid_steps; step++) {
+        if (kick_pat[step]) sk_drum_kick_trigger(&kick, 0.95f);
+        if (snare_pat[step]) sk_drum_snare_trigger(&snare, 0.85f);
+        if (hat_pat[step] == 1) {
+            sk_drum_hat_choke(&hat);
+            sk_drum_hat_trigger(&hat, 0.60f, 0);
+        } else if (hat_pat[step] == 2) {
+            sk_drum_hat_trigger(&hat, 0.70f, 1);
+        }
+
+        /* Agogo syncopation */
+        if (step % 4 == 1) sk_drum_bell_trigger(&agogo_lo, 0.70f);
+        if (step % 4 == 3) sk_drum_bell_trigger(&agogo_hi, 0.75f);
+        /* Tubular bell downbeat hit on bar start */
+        if (step == 0 || step == 16) sk_drum_bell_trigger(&tubular_accent, 0.90f);
+
+        for (int i = 0; i < step_samples; i++) {
+            float s_k = sk_drum_kick_step(&kick);
+            float s_s = sk_drum_snare_step(&snare);
+            float s_h = sk_drum_hat_step(&hat);
+            float s_ag = sk_drum_bell_step(&agogo_lo) + sk_drum_bell_step(&agogo_hi);
+            float s_tub = sk_drum_bell_step(&tubular_accent);
+
+            float mix = (s_k * 0.80f) + (s_s * 0.65f) + (s_h * 0.40f) + (s_ag * 0.35f) + (s_tub * 0.40f);
+            float sample = sk_softclip_cubic(mix * 0.40f, 1.0f);
+            out[out_idx++] = (int16_t)(sample * 25000.0f);
+        }
+    }
+
     /* 1.5s decay tail */
     int tail_samples = (int)(1.5f * sample_rate);
     for (int i = 0; i < tail_samples; i++) {
-        float mix = (sk_drum_kick_step(&kick) * 0.85f) +
-                    (sk_drum_snare_step(&snare) * 0.70f) +
-                    (sk_drum_hat_step(&hat) * 0.45f) +
-                    (sk_drum_clap_step(&clap) * 0.50f) +
-                    (sk_drum_cowbell_step(&cowbell) * 0.40f) +
-                    (sk_drum_tom_step(&tom_lo) * 0.55f) +
-                    (sk_karplus_step(&ks_drum) * 0.65f);
+        float mix = (sk_drum_kick_step(&kick) * 0.80f) +
+                    (sk_drum_snare_step(&snare) * 0.65f) +
+                    (sk_drum_hat_step(&hat) * 0.40f) +
+                    (sk_drum_bell_step(&agogo_lo) * 0.35f) +
+                    (sk_drum_bell_step(&tubular_accent) * 0.40f);
         float sample = sk_softclip_cubic(mix * 0.40f, 1.0f);
         out[out_idx++] = (int16_t)(sample * 25000.0f);
     }

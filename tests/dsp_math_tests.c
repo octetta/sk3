@@ -492,6 +492,59 @@ static void test_polyblep_oscillators(void) {
     }
 }
 
+static void test_modal_bells(void) {
+    float sr = 48000.0f;
+    sk_drum_bell_t bell;
+
+    /* 1. Church Bell */
+    sk_drum_bell_init(&bell, sr, SK_BELL_CHURCH, 440.0f);
+    TEST_ASSERT(bell.num_modes == 6, "church bell has 6 modes");
+    sk_drum_bell_trigger(&bell, 0.8f);
+    float max_amp = 0.0f;
+    for (int i = 0; i < 4800; i++) {
+        float s = sk_drum_bell_step(&bell);
+        TEST_ASSERT(!isnan(s) && !isinf(s), "church bell finite");
+        if (fabsf(s) > max_amp) max_amp = fabsf(s);
+    }
+    TEST_ASSERT(max_amp > 0.05f, "church bell sounded");
+
+    /* 2. Tubular Bell */
+    sk_drum_bell_init(&bell, sr, SK_BELL_TUBULAR, 523.25f);
+    TEST_ASSERT(bell.num_modes == 5, "tubular bell has 5 modes");
+    sk_drum_bell_trigger(&bell, 0.9f);
+    for (int i = 0; i < 2400; i++) {
+        float s = sk_drum_bell_step(&bell);
+        TEST_ASSERT(!isnan(s) && !isinf(s), "tubular bell finite");
+    }
+
+    /* 3. Tibetan Singing Bowl */
+    sk_drum_bell_init(&bell, sr, SK_BELL_TIBETAN, 220.0f);
+    TEST_ASSERT(bell.num_modes == 5, "tibetan bowl has 5 modes");
+    sk_drum_bell_trigger(&bell, 0.7f);
+    for (int i = 0; i < 2400; i++) {
+        float s = sk_drum_bell_step(&bell);
+        TEST_ASSERT(!isnan(s) && !isinf(s), "tibetan bowl finite");
+    }
+}
+
+static void test_speech_to_phoneme(void) {
+    float sr = 48000.0f;
+    /* Synthesize simple phrase: [AA:200@120] */
+    sk_phoneme_frame_t frames[8];
+    int num_frames = sk_phoneme_compile_dsl("[AA:200@120]", frames, 8, 120.0f);
+    TEST_ASSERT(num_frames == 1, "compiled 1 frame for test");
+
+    float audio[48000];
+    int samples = sk_phoneme_render_frames(frames, num_frames, audio, 48000, sr, NULL);
+    TEST_ASSERT(samples > 1000, "rendered vowel samples");
+
+    char dsl[256];
+    int len = sk_speech_analyze_pcm(audio, samples, sr, dsl, sizeof(dsl));
+    TEST_ASSERT(len > 0, "speech analyzer produced DSL output");
+    TEST_ASSERT(strstr(dsl, "[") != NULL, "DSL contains opening bracket");
+    printf("  Speech-to-Phoneme transcription of synthesized [AA:200@120]: %s\n", dsl);
+}
+
 int main(void) {
     printf("Running sk_dsp math test suite...\n");
     test_clamping_and_safety();
@@ -513,6 +566,8 @@ int main(void) {
     test_percussion_engines();
     test_wind_and_brass();
     test_polyblep_oscillators();
+    test_modal_bells();
+    test_speech_to_phoneme();
     printf("All %d sk_dsp checks passed successfully!\n", g_pass);
     return 0;
 }

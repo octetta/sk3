@@ -38,6 +38,7 @@
 #ifdef UDP
 #include "udp.h"
 #endif
+#include "http.h"
 #include "recorder.h"
 #ifdef SCOPE
 #include "scope-ipc.h"
@@ -2212,6 +2213,7 @@ int skred_command(char* line) {
 void skred_stop(void) {
   skred_control_dispatch_stop();
   skred_midi_uninit();
+  skred_http_stop();
   #ifdef UDP
   udp_stop();
   #endif
