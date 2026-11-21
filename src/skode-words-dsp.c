@@ -1793,6 +1793,9 @@ int skode_exec_tts(skode_t *ctx, ands_t *s, const double *arg, int argc) {
     return 0;
   }
 
+  /* Peak normalize speech audio buffer so output matches full-scale oscillator levels */
+  normalize_preserve_zero(audio_buf, rendered);
+
   /* Resize and write directly into skode data buffer (ands_data) */
   ands_data_resize(ctx->parse, rendered);
   double *d = ands_data(ctx->parse);

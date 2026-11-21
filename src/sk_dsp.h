@@ -1523,31 +1523,31 @@ static inline sk_speech_voice_t sk_speech_voice_default(void) {
 
 static inline sk_speech_voice_t sk_speech_voice_paul(void) {
     /* DECtalk 'Perfect Paul' standard adult male */
-    sk_speech_voice_t v = { 1.0f, 1.0f, 1.0f, 0.02f, 8.0f, 1.05f, 0.90f, 0.05f };
+    sk_speech_voice_t v = { 1.0f, 1.0f, 1.0f, 0.0f, 8.0f, 1.05f, 0.70f, 0.0f };
     return v;
 }
 
 static inline sk_speech_voice_t sk_speech_voice_harry(void) {
     /* DECtalk 'Huge Harry' deep resonant male */
-    sk_speech_voice_t v = { 0.72f, 0.88f, 0.95f, 0.04f, 6.0f, 1.20f, 0.85f, 0.0f };
+    sk_speech_voice_t v = { 0.72f, 0.88f, 0.95f, 0.0f, 6.0f, 1.20f, 0.70f, 0.0f };
     return v;
 }
 
 static inline sk_speech_voice_t sk_speech_voice_betty(void) {
     /* DECtalk 'Beautiful Betty' female voice */
-    sk_speech_voice_t v = { 1.60f, 1.15f, 1.05f, 0.06f, 10.0f, 1.0f, 0.85f, 0.0f };
+    sk_speech_voice_t v = { 1.60f, 1.15f, 1.05f, 0.0f, 10.0f, 1.0f, 0.70f, 0.0f };
     return v;
 }
 
 static inline sk_speech_voice_t sk_speech_voice_sam(void) {
     /* Retro 1982 SAM (Software Automatic Mouth) / C64 voice */
-    sk_speech_voice_t v = { 1.12f, 1.05f, 1.15f, 0.0f, 0.0f, 1.10f, 1.0f, 0.35f };
+    sk_speech_voice_t v = { 1.12f, 1.05f, 1.15f, 0.0f, 0.0f, 1.10f, 0.80f, 0.35f };
     return v;
 }
 
 static inline sk_speech_voice_t sk_speech_voice_elf(void) {
     /* High-pitched child / elf / 'Kit the Kid' */
-    sk_speech_voice_t v = { 1.85f, 1.30f, 1.15f, 0.02f, 12.0f, 0.95f, 0.85f, 0.0f };
+    sk_speech_voice_t v = { 1.85f, 1.30f, 1.15f, 0.0f, 12.0f, 0.95f, 0.70f, 0.0f };
     return v;
 }
 
@@ -1734,7 +1734,7 @@ static inline int sk_phoneme_render_frames_voice(const sk_phoneme_frame_t *frame
             /* Direct aspiration coupling for "HH" into formant bank */
             float formant_in = glottal_diff * 26.0f;
             if (fr->flags & SK_PHO_ASP) {
-                formant_in += raw_noise * current_ng * 0.8f;
+                formant_in += raw_noise * current_ng * 0.35f;
             }
 
             /* Resonate glottal flow derivative through 5-pole DC-rejecting formant bank */
@@ -1745,11 +1745,14 @@ static inline int sk_phoneme_render_frames_voice(const sk_phoneme_frame_t *frame
             prev_voiced = voiced_raw;
             float voiced = (voiced_raw * 0.70f + lip_rad * 3.5f) * v.vowel_level;
 
-            /* Shaped noise for consonants: tuned bandpass + high-pass air shelf for crisp sibilance */
-            float bp_noise = sk_biquad_step(&noise_filter, raw_noise);
-            float hp_noise = (raw_noise - prev_noise) * 0.5f;
+            /* Shaped noise for consonants: tuned bandpass + high-pass air shelf for crisp, natural sibilance without harsh hiss */
+            float consonant_noise = 0.0f;
+            if (fr->flags & (SK_PHO_FRIC | SK_PHO_STOP)) {
+                float bp_noise = sk_biquad_step(&noise_filter, raw_noise);
+                float hp_noise = (raw_noise - prev_noise) * 0.5f;
+                consonant_noise = (bp_noise * 0.88f + hp_noise * 0.12f) * current_ng * 0.16f * v.consonant_level;
+            }
             prev_noise = raw_noise;
-            float consonant_noise = (bp_noise * 0.75f + hp_noise * 0.25f) * current_ng * 0.35f * v.consonant_level;
 
             /* Mix articulate resonant vowels + lip presence + crisp consonants */
             float sample = voiced + consonant_noise;
