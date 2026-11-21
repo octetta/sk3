@@ -64,7 +64,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libx11-dev libxft-dev ninja-build cmake xvfb scrot openbox
+          sudo apt-get install -y libasound2-dev libx11-dev libxft-dev ninja-build cmake xvfb scrot openbox python3-pil
 
       - name: Build Linux API distribution
         run: make dist-api
@@ -230,6 +230,9 @@ jobs:
       - name: Build maxed universal macOS API distribution
         run: make dist-api MACOS_UNIVERSAL=1
 
+      - name: Install macOS screenshot dependencies
+        run: pip3 install pillow
+
       - name: Capture macOS GUI screenshot
         shell: bash
         run: |
@@ -284,7 +287,7 @@ jobs:
       - name: Install Windows cross-build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build binutils-mingw-w64-x86-64 xvfb scrot
+          sudo apt-get install -y ninja-build binutils-mingw-w64-x86-64 xvfb scrot openbox python3-pil
           sudo apt-get install -y wine64 || sudo apt-get install -y wine || true
 
       - name: Build maxed Windows API distribution
@@ -296,12 +299,16 @@ jobs:
           mkdir -p release-assets
           EXE_PATH="dist/windows-x86_64/skred-${VERSION}-maxed/bin/sk3-gui.exe"
           if [ -f "$EXE_PATH" ]; then
+            export WINEARCH=win64
+            export WINEPREFIX=$HOME/.wine64
             export WINEDLLOVERRIDES="mscoree,mshtml="
             export WINEDEBUG=-all
             wineboot --init || true
-            SKRED_NO_AUDIO=1 SK3_GUI_EXPANDED=1 xvfb-run -s "-screen 0 1024x768x24" bash -c "
-              (wine64 \"$EXE_PATH\" || wine \"$EXE_PATH\") &
-              sleep 4
+            xvfb-run -s "-screen 0 1024x768x24" bash -c "
+              openbox &
+              sleep 1
+              wine \"$EXE_PATH\" &
+              sleep 5
               scrot release-assets/raw-windows.png || import -window root release-assets/raw-windows.png || true
               wineserver -k || true
             " || true
