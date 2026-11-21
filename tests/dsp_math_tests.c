@@ -308,6 +308,105 @@ static void test_phoneme_dsl(void) {
     TEST_ASSERT(samples_sam > 0, "rendered SAM voice persona");
 }
 
+static void test_percussion_engines(void) {
+    /* 1. Karplus-Strong Drum Synthesis */
+    sk_karplus_t ks;
+    sk_karplus_init(&ks, 48000.0f);
+    sk_karplus_strike_drum(&ks, 90.0f, 0.9f, 0.5f, 0.6f, NULL);
+    TEST_ASSERT(ks.drum_blend == 0.5f, "karplus drum blend set");
+    float ks_max = 0.0f;
+    for (int i = 0; i < 4800; i++) {
+        float s = sk_karplus_step(&ks);
+        TEST_ASSERT(!isnan(s) && !isinf(s), "karplus drum sample finite");
+        if (fabsf(s) > ks_max) ks_max = fabsf(s);
+    }
+    TEST_ASSERT(ks_max > 0.01f, "karplus drum produces audible energy");
+
+    /* 2. Kick Drum Engine */
+    sk_drum_kick_t kick;
+    sk_drum_kick_init(&kick, 48000.0f);
+    sk_drum_kick_trigger(&kick, 0.95f);
+    float kick_max = 0.0f;
+    for (int i = 0; i < 72000; i++) {
+        float s = sk_drum_kick_step(&kick);
+        TEST_ASSERT(!isnan(s) && !isinf(s), "kick sample finite");
+        TEST_ASSERT(fabsf(s) <= 1.0f, "kick softclipped within bounds");
+        if (fabsf(s) > kick_max) kick_max = fabsf(s);
+    }
+    TEST_ASSERT(kick_max > 0.1f, "kick produces punchy output");
+    TEST_ASSERT(kick.amp_env < 0.05f, "kick decayed properly");
+
+    /* 3. Snare Drum Engine */
+    sk_drum_snare_t snare;
+    sk_drum_snare_init(&snare, 48000.0f);
+    sk_drum_snare_trigger(&snare, 0.85f);
+    float snare_max = 0.0f;
+    for (int i = 0; i < 48000; i++) {
+        float s = sk_drum_snare_step(&snare);
+        TEST_ASSERT(!isnan(s) && !isinf(s), "snare sample finite");
+        if (fabsf(s) > snare_max) snare_max = fabsf(s);
+    }
+    TEST_ASSERT(snare_max > 0.1f, "snare produces snappy output");
+    TEST_ASSERT(snare.body_env < 0.01f, "snare body decayed");
+    TEST_ASSERT(snare.noise_env < 0.01f, "snare wires decayed");
+
+    /* 4. Hi-Hat Engine with Choke */
+    sk_drum_hat_t hat;
+    sk_drum_hat_init(&hat, 48000.0f);
+    /* Trigger open hat */
+    sk_drum_hat_trigger(&hat, 0.8f, 1);
+    TEST_ASSERT(hat.is_open == 1, "hat is open");
+    for (int i = 0; i < 1000; i++) {
+        sk_drum_hat_step(&hat);
+    }
+    float open_amp = hat.amp_env;
+    TEST_ASSERT(open_amp > 0.6f, "open hat rings sustain");
+    /* Choke with closed hat trigger */
+    sk_drum_hat_choke(&hat);
+    for (int i = 0; i < 2000; i++) {
+        sk_drum_hat_step(&hat);
+    }
+    TEST_ASSERT(hat.amp_env < 0.05f, "choke clamped ringing tail");
+
+    /* 5. Handclap Engine */
+    sk_drum_clap_t clap;
+    sk_drum_clap_init(&clap, 48000.0f);
+    sk_drum_clap_trigger(&clap, 0.9f);
+    float clap_max = 0.0f;
+    for (int i = 0; i < 48000; i++) {
+        float s = sk_drum_clap_step(&clap);
+        TEST_ASSERT(!isnan(s) && !isinf(s), "clap sample finite");
+        if (fabsf(s) > clap_max) clap_max = fabsf(s);
+    }
+    TEST_ASSERT(clap_max > 0.1f, "clap produces output");
+    TEST_ASSERT(clap.burst_count == 3, "clap completed 3 pre-bursts");
+
+    /* 6. Tom Drum Engine */
+    sk_drum_tom_t tom;
+    sk_drum_tom_init(&tom, 48000.0f, 120.0f);
+    sk_drum_tom_trigger(&tom, 0.9f);
+    float tom_max = 0.0f;
+    for (int i = 0; i < 48000; i++) {
+        float s = sk_drum_tom_step(&tom);
+        TEST_ASSERT(!isnan(s) && !isinf(s), "tom sample finite");
+        if (fabsf(s) > tom_max) tom_max = fabsf(s);
+    }
+    TEST_ASSERT(tom_max > 0.1f, "tom produces output");
+
+    /* 7. Cowbell Engine */
+    sk_drum_cowbell_t cowbell;
+    sk_drum_cowbell_init(&cowbell, 48000.0f);
+    sk_drum_cowbell_trigger(&cowbell, 0.9f);
+    float cb_max = 0.0f;
+    for (int i = 0; i < 48000; i++) {
+        float s = sk_drum_cowbell_step(&cowbell);
+        TEST_ASSERT(!isnan(s) && !isinf(s), "cowbell sample finite");
+        if (fabsf(s) > cb_max) cb_max = fabsf(s);
+    }
+    TEST_ASSERT(cb_max > 0.1f, "cowbell produces output");
+    TEST_ASSERT(cowbell.amp_env < 0.05f, "cowbell decayed");
+}
+
 int main(void) {
     printf("Running sk_dsp math test suite...\n");
     test_clamping_and_safety();
@@ -326,6 +425,7 @@ int main(void) {
     test_karplus_strong();
     test_formants_and_glottal();
     test_phoneme_dsl();
+    test_percussion_engines();
     printf("All %d sk_dsp checks passed successfully!\n", g_pass);
     return 0;
 }

@@ -857,10 +857,12 @@ typedef struct {
     float allpass_coeff;    /* Allpass 'a' coefficient */
     float dc_x;             /* DC blocker input memory */
     float dc_y;             /* DC blocker output memory */
+    float drum_blend;       /* Karplus-Strong drum blend: 1.0 = string, 0.5 = drum membrane, 0.0 = noise */
+    uint32_t rng_state;     /* Internal PRNG state for drum sign inversion */
     float sample_rate;
 } sk_karplus_t;
 
-/* Initialize Karplus-Strong string engine */
+/* Initialize Karplus-Strong physical modeling engine */
 static inline void sk_karplus_init(sk_karplus_t *ks, float sample_rate) {
     if (!ks) return;
     memset(ks, 0, sizeof(*ks));
@@ -868,6 +870,8 @@ static inline void sk_karplus_init(sk_karplus_t *ks, float sample_rate) {
     ks->sample_rate = sample_rate > 1000.0f ? sample_rate : 48000.0f;
     ks->damping = 0.5f;
     ks->feedback = 0.992f;
+    ks->drum_blend = 1.0f;
+    ks->rng_state = 123456789u;
 }
 
 /* Tune Karplus-Strong to target frequency */
@@ -950,7 +954,33 @@ static inline void sk_karplus_pluck(sk_karplus_t *ks, float freq, float velocity
     }
 }
 
-/* Step Karplus-Strong string synthesis by 1 sample */
+/* Strike Karplus-Strong as a drum membrane (Karplus & Strong 1983 drum extension)
+ * In the original 1983 CMJ paper "Digital Synthesis of Plucked-String and Drum Timbres",
+ * Kevin Karplus & Alex Strong proved that replacing the averaging lowpass filter with
+ * a random sign inversion filter:
+ *
+ *     y[n] = + 0.5 * (x[n] + x[n-1])   with probability b (blend)
+ *     y[n] = - 0.5 * (x[n] + x[n-1])   with probability 1 - b
+ *
+ * breaks harmonic phase coherence and creates a decaying modal burst that sounds
+ * remarkably like a physical drum membrane or tom.
+ *
+ * Parameters:
+ *   freq: fundamental drum tuning in Hz (e.g. 50-150 Hz)
+ *   velocity: impact force [0.0, 1.0]
+ *   drum_blend: 0.5 for standard drum membrane, 1.0 for pure string, 0.0 for harsh noise
+ *   brightness: excitation filter cutoff [0.0, 1.0]
+ *   rng: optional PRNG pointer for reproducible strikes
+ */
+static inline void sk_karplus_strike_drum(sk_karplus_t *ks, float freq, float velocity, float drum_blend, float brightness, sk_rng_t *rng) {
+    if (!ks) return;
+    ks->drum_blend = sk_clampf(drum_blend, 0.0f, 1.0f);
+    ks->feedback = 0.988f; /* Slightly faster decay for drums than strings */
+    ks->damping = 0.55f;
+    sk_karplus_pluck(ks, freq, velocity, 0.5f, brightness, rng);
+}
+
+/* Step Karplus-Strong string or drum synthesis by 1 sample */
 static inline float sk_karplus_step(sk_karplus_t *ks) {
     if (!ks) return 0.0f;
 
@@ -963,6 +993,19 @@ static inline float sk_karplus_step(sk_karplus_t *ks) {
     /* 1-pole lowpass loss filter */
     float lp_out = (1.0f - ks->damping) * sample + ks->damping * ks->filter_state;
     ks->filter_state = lp_out;
+
+    /* Karplus-Strong drum synthesis extension (Karplus & Strong 1983):
+     * With probability (1.0 - drum_blend), randomly invert the sign of the filtered sample.
+     * When drum_blend == 1.0: pure plucked string.
+     * When drum_blend == 0.5: random sign inversion 50% of the time, producing an authentic
+     * inharmonic decaying drum membrane sound. */
+    if (ks->drum_blend < 0.999f) {
+        ks->rng_state = ks->rng_state * 1664525u + 1013904223u;
+        float r = (float)(ks->rng_state >> 16) / 65536.0f;
+        if (r > ks->drum_blend) {
+            lp_out = -lp_out;
+        }
+    }
 
     /* 1st-order allpass fractional delay filter: y[n] = a * (x[n] - y[n-1]) + x[n-1] */
     float ap_out = ks->allpass_coeff * (lp_out - ks->allpass_out) + ks->allpass_in;
@@ -1663,6 +1706,453 @@ static inline int sk_phoneme_render_frames_voice(const sk_phoneme_frame_t *frame
 static inline int sk_phoneme_render_frames(const sk_phoneme_frame_t *frames, int num_frames,
                                           float *out_audio, int max_samples, float sample_rate, sk_rng_t *rng) {
     return sk_phoneme_render_frames_voice(frames, num_frames, out_audio, max_samples, sample_rate, NULL, rng);
+}
+
+/* =========================================================================
+ * 12. Real-Time Percussion Synthesizers (Analog 808/909 & Modal Idiophones)
+ * =========================================================================
+ *
+ * Real-time, zero-allocation, sample-accurate percussion synthesis engines.
+ * Each voice implements the physical and circuit models of classic acoustic
+ * and electronic drums:
+ *
+ * 1. KICK DRUM (sk_drum_kick_t):
+ *    - Bridged-T / twin-T resonant circuit model with exponential pitch envelope
+ *      sweep (f_start -> f_end), beater transient click, and cubic soft-clip drive.
+ *
+ * 2. SNARE DRUM (sk_drum_snare_t):
+ *    - Dual-mode membrane body (two detuned sine modes producing physical acoustic
+ *      beating) coupled with bandpass-filtered noise for bottom snare wires and stick snap.
+ *
+ * 3. HI-HAT (sk_drum_hat_t):
+ *    - 6-oscillator inharmonic metallic square wave cluster (TR-808/606 circuit)
+ *      passed through a high-Q bandpass/highpass filter with closed/open decay
+ *      and physical pedal choke capability.
+ *
+ * 4. HANDCLAP (sk_drum_clap_t):
+ *    - Multi-burst transient sequence (3 sharp bursts spaced ~10ms apart to model
+ *      multiple hands striking) followed by a diffuse filtered reverberant tail.
+ *
+ * 5. TOM DRUM (sk_drum_tom_t):
+ *    - Resonant circular membrane (fundamental f0 + Bessel circular mode 1.59*f0)
+ *      with dynamic pitch drop on impact.
+ *
+ * 6. COWBELL (sk_drum_cowbell_t):
+ *    - Dual square waves at TR-808 frequencies (540 Hz and 800 Hz) bandpassed
+ *      at 800 Hz with snappy punch.
+ * ========================================================================= */
+
+/* -------------------------------------------------------------------------
+ * 12.1. Analog Kick Drum Engine
+ * ------------------------------------------------------------------------- */
+typedef struct {
+    float sample_rate;
+    float phase;
+    float pitch_env;            /* Decays exponentially from 1.0 to 0.0 */
+    float pitch_decay_coeff;    /* e^(-1 / (pitch_decay_sec * sr)) */
+    float amp_env;              /* Decays exponentially from 1.0 to 0.0 */
+    float amp_decay_coeff;      /* e^(-1 / (amp_decay_sec * sr)) */
+    float click_env;            /* Fast transient click envelope */
+    float click_decay_coeff;
+    float start_freq;           /* Punch/attack pitch in Hz (e.g. 150 Hz) */
+    float end_freq;             /* Settled sub-bass pitch in Hz (e.g. 48 Hz) */
+    float click_level;          /* Transient beater click amplitude [0.0, 1.0] */
+    float drive;                /* Non-linear cubic drive [1.0 = clean, >1.0 = punchy/saturated] */
+} sk_drum_kick_t;
+
+/* Initialize kick drum with default 808/909 tuning and decay characteristics */
+static inline void sk_drum_kick_init(sk_drum_kick_t *k, float sample_rate) {
+    if (!k) return;
+    memset(k, 0, sizeof(*k));
+    k->sample_rate = sample_rate > 1000.0f ? sample_rate : 48000.0f;
+    k->start_freq = 150.0f;
+    k->end_freq = 48.0f;
+    k->click_level = 0.30f;
+    k->drive = 1.25f;
+
+    /* Pitch decay ~35 ms */
+    k->pitch_decay_coeff = expf(-1.0f / (0.035f * k->sample_rate));
+    /* Amplitude decay ~350 ms */
+    k->amp_decay_coeff = expf(-1.0f / (0.350f * k->sample_rate));
+    /* Click decay ~4 ms */
+    k->click_decay_coeff = expf(-1.0f / (0.004f * k->sample_rate));
+}
+
+/* Trigger kick drum with strike velocity [0.0, 1.0] */
+static inline void sk_drum_kick_trigger(sk_drum_kick_t *k, float velocity) {
+    if (!k) return;
+    velocity = sk_clampf(velocity, 0.0f, 1.0f);
+    k->pitch_env = 1.0f;
+    k->amp_env = velocity;
+    k->click_env = velocity * k->click_level;
+    k->phase = 0.0f;
+}
+
+/* Step kick drum by 1 sample */
+static inline float sk_drum_kick_step(sk_drum_kick_t *k) {
+    if (!k || k->amp_env < 1e-4f) return 0.0f;
+
+    /* Instantaneous frequency = end_freq + (start_freq - end_freq) * pitch_env */
+    float cur_freq = k->end_freq + (k->start_freq - k->end_freq) * k->pitch_env;
+    float phase_inc = cur_freq / k->sample_rate;
+    k->phase += phase_inc;
+    if (k->phase >= 1.0f) k->phase -= 1.0f;
+
+    /* Body sine wave */
+    float body = sinf(k->phase * 2.0f * (float)M_PI) * k->amp_env;
+
+    /* Click transient: short burst with high frequency click tone */
+    float click = sinf(k->phase * 16.0f * (float)M_PI) * k->click_env;
+
+    /* Decay envelopes */
+    k->pitch_env *= k->pitch_decay_coeff;
+    k->amp_env *= k->amp_decay_coeff;
+    k->click_env *= k->click_decay_coeff;
+
+    /* Combine body and click, pass through soft-clip saturation */
+    float mixed = body + click;
+    return sk_softclip_cubic(mixed * k->drive, 1.0f);
+}
+
+/* -------------------------------------------------------------------------
+ * 12.2. Analog Snare Drum Engine
+ * ------------------------------------------------------------------------- */
+typedef struct {
+    float sample_rate;
+    float phase1, phase2;
+    float body_env;
+    float body_decay_coeff;
+    float noise_env;
+    float noise_decay_coeff;
+    float click_env;
+    float click_decay_coeff;
+    float f1, f2;               /* Dual resonant body modes (e.g. 175 Hz and 224 Hz) */
+    float snappy_mix;           /* Mix between body (0.0) and snappy noise wires (1.0) */
+    sk_biquad_t noise_filter;   /* Bandpass filter for snare wires */
+    sk_rng_t rng;
+} sk_drum_snare_t;
+
+/* Initialize snare drum */
+static inline void sk_drum_snare_init(sk_drum_snare_t *s, float sample_rate) {
+    if (!s) return;
+    memset(s, 0, sizeof(*s));
+    s->sample_rate = sample_rate > 1000.0f ? sample_rate : 48000.0f;
+    s->f1 = 175.0f;
+    s->f2 = 224.0f;
+    s->snappy_mix = 0.55f;
+
+    /* Body decay ~85 ms */
+    s->body_decay_coeff = expf(-1.0f / (0.085f * s->sample_rate));
+    /* Snare wire noise decay ~200 ms */
+    s->noise_decay_coeff = expf(-1.0f / (0.200f * s->sample_rate));
+    /* Impact snap click decay ~3 ms */
+    s->click_decay_coeff = expf(-1.0f / (0.003f * s->sample_rate));
+
+    /* Snare rattle bandpass: center 2800 Hz, Q=1.5 */
+    sk_biquad_init(&s->noise_filter, SK_BIQUAD_BANDPASS, 2800.0f, 1.5f, s->sample_rate);
+    sk_rng_init(&s->rng, 987654321ULL);
+}
+
+/* Trigger snare drum */
+static inline void sk_drum_snare_trigger(sk_drum_snare_t *s, float velocity) {
+    if (!s) return;
+    velocity = sk_clampf(velocity, 0.0f, 1.0f);
+    s->body_env = velocity;
+    s->noise_env = velocity;
+    s->click_env = velocity * 0.4f;
+    s->phase1 = 0.0f;
+    s->phase2 = 0.0f;
+}
+
+/* Step snare drum by 1 sample */
+static inline float sk_drum_snare_step(sk_drum_snare_t *s) {
+    if (!s || (s->body_env < 1e-4f && s->noise_env < 1e-4f)) return 0.0f;
+
+    /* Dual sine body modes with detuning */
+    s->phase1 += s->f1 / s->sample_rate;
+    if (s->phase1 >= 1.0f) s->phase1 -= 1.0f;
+
+    s->phase2 += s->f2 / s->sample_rate;
+    if (s->phase2 >= 1.0f) s->phase2 -= 1.0f;
+
+    float body = (sinf(s->phase1 * 2.0f * (float)M_PI) +
+                  sinf(s->phase2 * 2.0f * (float)M_PI)) * 0.5f * s->body_env;
+
+    /* Filtered noise for snare rattle */
+    float raw_noise = sk_rng_float(&s->rng);
+    float filtered_noise = sk_biquad_step(&s->noise_filter, raw_noise) * s->noise_env;
+
+    /* Stick strike click */
+    float click = raw_noise * s->click_env;
+
+    /* Decay envelopes */
+    s->body_env *= s->body_decay_coeff;
+    s->noise_env *= s->noise_decay_coeff;
+    s->click_env *= s->click_decay_coeff;
+
+    float out = (1.0f - s->snappy_mix) * body + s->snappy_mix * filtered_noise + click;
+    return sk_softclip_cubic(out * 1.2f, 1.0f);
+}
+
+/* -------------------------------------------------------------------------
+ * 12.3. Analog Hi-Hat Engine (Closed / Open with Choke)
+ * ------------------------------------------------------------------------- */
+typedef struct {
+    float sample_rate;
+    float phases[6];
+    float phase_incs[6];
+    float amp_env;
+    float amp_decay_coeff;
+    float choke_coeff;
+    int is_open;
+    sk_biquad_t bandpass;
+    sk_biquad_t highpass;
+} sk_drum_hat_t;
+
+/* Initialize hi-hat with 6-oscillator cluster and 808 bandpass/highpass filter */
+static inline void sk_drum_hat_init(sk_drum_hat_t *h, float sample_rate) {
+    if (!h) return;
+    memset(h, 0, sizeof(*h));
+    h->sample_rate = sample_rate > 1000.0f ? sample_rate : 48000.0f;
+
+    /* TR-808 exact metallic cluster frequencies: 205.3, 304.4, 369.6, 522.7, 540.0, 800.0 Hz */
+    static const float freqs[6] = { 205.3f, 304.4f, 369.6f, 522.7f, 540.0f, 800.0f };
+    for (int i = 0; i < 6; i++) {
+        h->phase_incs[i] = freqs[i] / h->sample_rate;
+    }
+
+    /* Fast choke coefficient (~5 ms clamp) */
+    h->choke_coeff = expf(-1.0f / (0.005f * h->sample_rate));
+
+    /* Filter chain: 7500 Hz bandpass + 7000 Hz highpass for brilliant sizzle */
+    sk_biquad_init(&h->bandpass, SK_BIQUAD_BANDPASS, 7500.0f, 2.0f, h->sample_rate);
+    sk_biquad_init(&h->highpass, SK_BIQUAD_HIGHPASS, 7000.0f, 0.707f, h->sample_rate);
+}
+
+/* Trigger hi-hat: open = 0 for closed hat (~50 ms decay), open = 1 for open hat (~350 ms decay) */
+static inline void sk_drum_hat_trigger(sk_drum_hat_t *h, float velocity, int open) {
+    if (!h) return;
+    velocity = sk_clampf(velocity, 0.0f, 1.0f);
+    h->is_open = open;
+    h->amp_env = velocity;
+
+    float decay_sec = open ? 0.350f : 0.050f;
+    h->amp_decay_coeff = expf(-1.0f / (decay_sec * h->sample_rate));
+}
+
+/* Choke hi-hat (e.g. closed hat hit immediately clamps an open hat ring) */
+static inline void sk_drum_hat_choke(sk_drum_hat_t *h) {
+    if (!h) return;
+    h->amp_decay_coeff = h->choke_coeff;
+    h->is_open = 0;
+}
+
+/* Step hi-hat by 1 sample */
+static inline float sk_drum_hat_step(sk_drum_hat_t *h) {
+    if (!h || h->amp_env < 1e-4f) return 0.0f;
+
+    /* Sum of 6 square wave oscillators: sgn(sin(theta)) */
+    float cluster = 0.0f;
+    for (int i = 0; i < 6; i++) {
+        h->phases[i] += h->phase_incs[i];
+        if (h->phases[i] >= 1.0f) h->phases[i] -= 1.0f;
+        cluster += (h->phases[i] < 0.5f) ? 0.1666f : -0.1666f;
+    }
+
+    /* Dual filter stage: bandpass then highpass */
+    float bp = sk_biquad_step(&h->bandpass, cluster);
+    float hp = sk_biquad_step(&h->highpass, bp);
+
+    /* Apply amplitude envelope */
+    float out = hp * h->amp_env * 2.2f;
+    h->amp_env *= h->amp_decay_coeff;
+
+    return sk_softclip_cubic(out, 1.0f);
+}
+
+/* -------------------------------------------------------------------------
+ * 12.4. Analog Handclap Engine
+ * ------------------------------------------------------------------------- */
+typedef struct {
+    float sample_rate;
+    int sample_counter;
+    int burst_spacing;
+    int burst_count;
+    float burst_env;
+    float tail_env;
+    float tail_decay_coeff;
+    sk_biquad_t filter;
+    sk_rng_t rng;
+} sk_drum_clap_t;
+
+/* Initialize 808-style handclap with 3 multi-bursts + reverberant tail */
+static inline void sk_drum_clap_init(sk_drum_clap_t *c, float sample_rate) {
+    if (!c) return;
+    memset(c, 0, sizeof(*c));
+    c->sample_rate = sample_rate > 1000.0f ? sample_rate : 48000.0f;
+    c->burst_spacing = (int)(0.011f * c->sample_rate); /* 11 ms between hand claps */
+    c->tail_decay_coeff = expf(-1.0f / (0.220f * c->sample_rate)); /* 220 ms tail */
+
+    /* 1100 Hz bandpass filter (Q=1.2) */
+    sk_biquad_init(&c->filter, SK_BIQUAD_BANDPASS, 1100.0f, 1.2f, c->sample_rate);
+    sk_rng_init(&c->rng, 5551212ULL);
+}
+
+/* Trigger handclap */
+static inline void sk_drum_clap_trigger(sk_drum_clap_t *c, float velocity) {
+    if (!c) return;
+    velocity = sk_clampf(velocity, 0.0f, 1.0f);
+    c->sample_counter = 0;
+    c->burst_count = 0;
+    c->burst_env = velocity;
+    c->tail_env = 0.0f;
+}
+
+/* Step handclap by 1 sample */
+static inline float sk_drum_clap_step(sk_drum_clap_t *c) {
+    if (!c || (c->burst_env < 1e-4f && c->tail_env < 1e-4f && c->burst_count >= 3)) return 0.0f;
+
+    /* Trigger pre-bursts (0 ms, 11 ms, 22 ms) */
+    if (c->burst_count < 3) {
+        if (c->sample_counter % c->burst_spacing == 0) {
+            c->burst_env = 1.0f;
+            c->burst_count++;
+            if (c->burst_count == 3) {
+                c->tail_env = 1.0f; /* Start tail after 3rd burst */
+            }
+        }
+    }
+    c->sample_counter++;
+
+    /* Fast burst decay (~3 ms) */
+    c->burst_env *= 0.992f;
+    /* Longer diffused tail decay */
+    c->tail_env *= c->tail_decay_coeff;
+
+    float raw_noise = sk_rng_float(&c->rng);
+    float env = c->burst_env + c->tail_env * 0.85f;
+    float filtered = sk_biquad_step(&c->filter, raw_noise * env);
+
+    return sk_softclip_cubic(filtered * 1.8f, 1.0f);
+}
+
+/* -------------------------------------------------------------------------
+ * 12.5. Resonant Tom Drum Engine (Membrane Modes & Pitch Drop)
+ * ------------------------------------------------------------------------- */
+typedef struct {
+    float sample_rate;
+    float phase1, phase2;
+    float pitch_env;
+    float pitch_decay_coeff;
+    float amp_env;
+    float amp_decay_coeff;
+    float tune_freq;
+} sk_drum_tom_t;
+
+/* Initialize resonant tom with fundamental tuning (e.g. low=80 Hz, mid=130 Hz, hi=200 Hz) */
+static inline void sk_drum_tom_init(sk_drum_tom_t *t, float sample_rate, float tune_freq) {
+    if (!t) return;
+    memset(t, 0, sizeof(*t));
+    t->sample_rate = sample_rate > 1000.0f ? sample_rate : 48000.0f;
+    t->tune_freq = tune_freq > 20.0f ? tune_freq : 100.0f;
+
+    /* Pitch drop decay ~45 ms */
+    t->pitch_decay_coeff = expf(-1.0f / (0.045f * t->sample_rate));
+    /* Amplitude decay ~260 ms */
+    t->amp_decay_coeff = expf(-1.0f / (0.260f * t->sample_rate));
+}
+
+/* Trigger tom */
+static inline void sk_drum_tom_trigger(sk_drum_tom_t *t, float velocity) {
+    if (!t) return;
+    velocity = sk_clampf(velocity, 0.0f, 1.0f);
+    t->pitch_env = 1.0f;
+    t->amp_env = velocity;
+    t->phase1 = 0.0f;
+    t->phase2 = 0.0f;
+}
+
+/* Step tom by 1 sample */
+static inline float sk_drum_tom_step(sk_drum_tom_t *t) {
+    if (!t || t->amp_env < 1e-4f) return 0.0f;
+
+    /* Pitch drops from 1.4*tune_freq to tune_freq */
+    float f0 = t->tune_freq * (1.0f + 0.40f * t->pitch_env);
+    /* Secondary circular membrane mode (Bessel zero ratio ~1.59) */
+    float f1 = f0 * 1.59f;
+
+    t->phase1 += f0 / t->sample_rate;
+    if (t->phase1 >= 1.0f) t->phase1 -= 1.0f;
+
+    t->phase2 += f1 / t->sample_rate;
+    if (t->phase2 >= 1.0f) t->phase2 -= 1.0f;
+
+    float body = (sinf(t->phase1 * 2.0f * (float)M_PI) * 0.75f +
+                  sinf(t->phase2 * 2.0f * (float)M_PI) * 0.25f) * t->amp_env;
+
+    t->pitch_env *= t->pitch_decay_coeff;
+    t->amp_env *= t->amp_decay_coeff;
+
+    return sk_softclip_cubic(body * 1.2f, 1.0f);
+}
+
+/* -------------------------------------------------------------------------
+ * 12.6. TR-808 Dual Square-Wave Cowbell Engine
+ * ------------------------------------------------------------------------- */
+typedef struct {
+    float sample_rate;
+    float phase1, phase2;
+    float inc1, inc2;
+    float amp_env;
+    float amp_decay_coeff;
+    sk_biquad_t filter;
+} sk_drum_cowbell_t;
+
+/* Initialize 808 cowbell with 540 Hz and 800 Hz square wave oscillators and 800 Hz bandpass */
+static inline void sk_drum_cowbell_init(sk_drum_cowbell_t *c, float sample_rate) {
+    if (!c) return;
+    memset(c, 0, sizeof(*c));
+    c->sample_rate = sample_rate > 1000.0f ? sample_rate : 48000.0f;
+
+    /* TR-808 cowbell dual square oscillators */
+    c->inc1 = 540.0f / c->sample_rate;
+    c->inc2 = 800.0f / c->sample_rate;
+
+    /* Envelope decay ~160 ms */
+    c->amp_decay_coeff = expf(-1.0f / (0.160f * c->sample_rate));
+
+    /* Bandpass resonator at 800 Hz, Q=2.2 */
+    sk_biquad_init(&c->filter, SK_BIQUAD_BANDPASS, 800.0f, 2.2f, c->sample_rate);
+}
+
+/* Trigger cowbell */
+static inline void sk_drum_cowbell_trigger(sk_drum_cowbell_t *c, float velocity) {
+    if (!c) return;
+    velocity = sk_clampf(velocity, 0.0f, 1.0f);
+    c->amp_env = velocity;
+    c->phase1 = 0.0f;
+    c->phase2 = 0.0f;
+}
+
+/* Step cowbell by 1 sample */
+static inline float sk_drum_cowbell_step(sk_drum_cowbell_t *c) {
+    if (!c || c->amp_env < 1e-4f) return 0.0f;
+
+    c->phase1 += c->inc1;
+    if (c->phase1 >= 1.0f) c->phase1 -= 1.0f;
+
+    c->phase2 += c->inc2;
+    if (c->phase2 >= 1.0f) c->phase2 -= 1.0f;
+
+    /* Dual square waves: sgn(sin) */
+    float sq1 = (c->phase1 < 0.5f) ? 0.5f : -0.5f;
+    float sq2 = (c->phase2 < 0.5f) ? 0.5f : -0.5f;
+
+    float filtered = sk_biquad_step(&c->filter, (sq1 + sq2) * 0.5f);
+    float out = filtered * c->amp_env * 2.5f;
+
+    c->amp_env *= c->amp_decay_coeff;
+    return sk_softclip_cubic(out, 1.0f);
 }
 
 #ifdef __cplusplus

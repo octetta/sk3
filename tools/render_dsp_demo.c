@@ -328,10 +328,149 @@ static void render_voices_demo(const char *filename, int sample_rate) {
     free(pcm);
 }
 
+static void render_percussion_demo(const char *filename, int sample_rate) {
+    printf("Rendering real-time percussion demo (808/909 voices + Karplus-Strong drum)...\n");
+
+    float bpm = 124.0f;
+    float step_sec = (60.0f / bpm) / 4.0f; /* 16th note step = 120.9 ms */
+    int step_samples = (int)(step_sec * (float)sample_rate);
+    int total_steps = 64; /* 4 bars */
+    int total_samples = step_samples * total_steps + sample_rate * 2;
+
+    int16_t *out = (int16_t *)calloc(total_samples, sizeof(int16_t));
+
+    sk_drum_kick_t kick;
+    sk_drum_snare_t snare;
+    sk_drum_hat_t hat;
+    sk_drum_clap_t clap;
+    sk_drum_cowbell_t cowbell;
+    sk_drum_tom_t tom_lo, tom_mid, tom_hi;
+    sk_karplus_t ks_drum;
+
+    sk_drum_kick_init(&kick, (float)sample_rate);
+    sk_drum_snare_init(&snare, (float)sample_rate);
+    sk_drum_hat_init(&hat, (float)sample_rate);
+    sk_drum_clap_init(&clap, (float)sample_rate);
+    sk_drum_cowbell_init(&cowbell, (float)sample_rate);
+    sk_drum_tom_init(&tom_lo, (float)sample_rate, 85.0f);
+    sk_drum_tom_init(&tom_mid, (float)sample_rate, 130.0f);
+    sk_drum_tom_init(&tom_hi, (float)sample_rate, 195.0f);
+    sk_karplus_init(&ks_drum, (float)sample_rate);
+
+    /* 64-step pattern:
+     * Bar 1-2: Kick, snare, hats, cowbell groove
+     * Bar 3: Add claps and tom polyrhythms
+     * Bar 4: Karplus-Strong physical drum membrane fills & roll */
+    const int kick_pat[64] = {
+        1, 0, 0, 0,  1, 0, 0, 1,  0, 0, 1, 0,  0, 1, 0, 0,
+        1, 0, 0, 0,  1, 0, 0, 1,  0, 0, 1, 0,  0, 0, 1, 0,
+        1, 0, 0, 0,  1, 0, 0, 1,  0, 0, 1, 0,  0, 1, 0, 0,
+        1, 0, 0, 1,  1, 0, 1, 0,  1, 1, 0, 0,  0, 0, 0, 0
+    };
+    const int snare_pat[64] = {
+        0, 0, 0, 0,  1, 0, 0, 0,  0, 0, 0, 0,  1, 0, 0, 0,
+        0, 0, 0, 0,  1, 0, 0, 0,  0, 0, 0, 0,  1, 0, 0, 1,
+        0, 0, 0, 0,  1, 0, 0, 0,  0, 0, 0, 0,  1, 0, 0, 0,
+        0, 0, 0, 0,  1, 0, 0, 0,  0, 0, 1, 0,  1, 0, 1, 1
+    };
+    const int hat_pat[64] = {
+        1, 0, 1, 0,  1, 0, 2, 0,  1, 0, 1, 0,  1, 0, 2, 0,
+        1, 0, 1, 0,  1, 0, 2, 0,  1, 1, 1, 0,  1, 0, 2, 0,
+        1, 0, 1, 0,  1, 0, 2, 0,  1, 0, 1, 0,  1, 0, 2, 0,
+        1, 1, 1, 1,  1, 1, 2, 0,  1, 0, 1, 0,  0, 0, 2, 0
+    };
+    const int cb_pat[64] = {
+        0, 0, 0, 1,  0, 0, 0, 0,  0, 0, 1, 0,  0, 0, 1, 0,
+        0, 0, 0, 1,  0, 0, 0, 0,  0, 0, 1, 0,  0, 1, 0, 0,
+        0, 0, 0, 1,  0, 0, 0, 0,  0, 0, 1, 0,  0, 0, 1, 0,
+        0, 0, 0, 1,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0
+    };
+    const int clap_pat[64] = {
+        0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,
+        0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,
+        0, 0, 0, 0,  1, 0, 0, 0,  0, 0, 0, 0,  1, 0, 0, 0,
+        0, 0, 0, 0,  1, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0
+    };
+    const int tom_pat[64] = {
+        0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,
+        0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 1, 2, 0,
+        0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,
+        0, 0, 0, 0,  0, 0, 0, 0,  1, 2, 3, 0,  1, 2, 3, 0
+    };
+    const int ks_drum_pat[64] = {
+        0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,
+        0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,
+        0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 0,
+        0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0, 1,  0, 1, 1, 1
+    };
+
+    int out_idx = 0;
+    for (int step = 0; step < total_steps; step++) {
+        if (kick_pat[step]) sk_drum_kick_trigger(&kick, 0.95f);
+        if (snare_pat[step]) sk_drum_snare_trigger(&snare, 0.85f);
+        if (clap_pat[step]) sk_drum_clap_trigger(&clap, 0.75f);
+        if (cb_pat[step]) sk_drum_cowbell_trigger(&cowbell, 0.65f);
+
+        if (hat_pat[step] == 1) {
+            sk_drum_hat_choke(&hat);
+            sk_drum_hat_trigger(&hat, 0.60f, 0);
+        } else if (hat_pat[step] == 2) {
+            sk_drum_hat_trigger(&hat, 0.70f, 1);
+        }
+
+        if (tom_pat[step] == 1) sk_drum_tom_trigger(&tom_lo, 0.85f);
+        else if (tom_pat[step] == 2) sk_drum_tom_trigger(&tom_mid, 0.85f);
+        else if (tom_pat[step] == 3) sk_drum_tom_trigger(&tom_hi, 0.85f);
+
+        if (ks_drum_pat[step]) {
+            sk_karplus_strike_drum(&ks_drum, 95.0f, 0.90f, 0.50f, 0.70f, NULL);
+        }
+
+        for (int i = 0; i < step_samples; i++) {
+            float s_k = sk_drum_kick_step(&kick);
+            float s_s = sk_drum_snare_step(&snare);
+            float s_h = sk_drum_hat_step(&hat);
+            float s_c = sk_drum_clap_step(&clap);
+            float s_b = sk_drum_cowbell_step(&cowbell);
+            float s_t = sk_drum_tom_step(&tom_lo) + sk_drum_tom_step(&tom_mid) + sk_drum_tom_step(&tom_hi);
+            float s_kd = sk_karplus_step(&ks_drum);
+
+            float mix = (s_k * 0.85f) +
+                        (s_s * 0.70f) +
+                        (s_h * 0.45f) +
+                        (s_c * 0.50f) +
+                        (s_b * 0.40f) +
+                        (s_t * 0.55f) +
+                        (s_kd * 0.65f);
+
+            float sample = sk_softclip_cubic(mix, 1.0f);
+            out[out_idx++] = (int16_t)(sample * 26000.0f);
+        }
+    }
+
+    /* 1.5s decay tail */
+    int tail_samples = (int)(1.5f * sample_rate);
+    for (int i = 0; i < tail_samples; i++) {
+        float mix = (sk_drum_kick_step(&kick) * 0.85f) +
+                    (sk_drum_snare_step(&snare) * 0.70f) +
+                    (sk_drum_hat_step(&hat) * 0.45f) +
+                    (sk_drum_clap_step(&clap) * 0.50f) +
+                    (sk_drum_cowbell_step(&cowbell) * 0.40f) +
+                    (sk_drum_tom_step(&tom_lo) * 0.55f) +
+                    (sk_karplus_step(&ks_drum) * 0.65f);
+        float sample = sk_softclip_cubic(mix, 1.0f);
+        out[out_idx++] = (int16_t)(sample * 26000.0f);
+    }
+
+    write_wav_file(filename, out, out_idx, sample_rate);
+    free(out);
+}
+
 int main(int argc, char **argv) {
     (void)argc; (void)argv;
     int sample_rate = 48000;
     render_pluck_demo("pluck_demo.wav", sample_rate);
+    render_percussion_demo("percussion_demo.wav", sample_rate);
     render_vowel_demo("vowel_demo.wav", sample_rate);
     render_phoneme_demo("phoneme_demo.wav", sample_rate);
     render_speech_demo("speech_demo.wav", sample_rate);
