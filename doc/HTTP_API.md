@@ -87,9 +87,9 @@ To avoid collision with Skode's native `/` operator prefix (such as `/ks` for lo
 
 | Protocol | Method / Path | Payload Format | Description |
 | :--- | :--- | :--- | :--- |
-| **WebSocket** | `ws://localhost:60440/` | RFC 6455 Text Frame | Full-duplex live streaming, macros, and parameter updates. Replies with text frame (`OK\n` or query data). |
-| **Raw TCP** | `localhost:60440` | ASCII lines (`\n`) | Direct line-by-line Skode command streaming. Replies with raw ASCII (`OK\n` or query data). |
-| **HTTP** | `POST /` | `text/plain` | Evaluates Skode command body in the connection's dedicated context. |
+| **WebSocket** | `ws://localhost:60440/` | RFC 6455 Text Frame | Full-duplex live streaming, macros, and parameter updates. Silent on commands; replies with text frame only on queries (`v0 ?`, `??`, `/s`) or errors. |
+| **Raw TCP** | `localhost:60440` | ASCII lines (`\n`) | Direct line-by-line Skode command streaming. Silent on commands; replies with ASCII text only on queries (`v0 ?`, `??`, `/s`) or errors. |
+| **HTTP** | `POST /` | `text/plain` | Evaluates Skode command body in the connection's dedicated context. Returns captured output log or `OK\n`. |
 | **HTTP** | `POST /-skode` or `/.skode` | `text/plain` | Explicit endpoint for Skode evaluation (synonymous with `/`). |
 | **HTTP** | `POST /-reset` or `/.reset` | `text/plain` | Resets the connection's `skode_t` context, clearing all macros. |
 | **HTTP** | `GET /` | `text/plain` | Welcome banner with endpoint overview and version. |
@@ -226,25 +226,26 @@ Save this snippet as `xy_pad.html` and open it directly in your browser:
 
 When you connect directly via TCP without sending HTTP headers, `sk3` operates as a raw ASCII streaming server.
 
+> [!NOTE]
+> **Silence on Success**: In Raw TCP and WebSocket streaming modes, commands that succeed without generating diagnostics (such as `v0 w0 f440 a0 l1` or `v0 K1200`) are **completely silent** (zero reverse bytes). This eliminates buffer bloat and reverse network traffic when high-frequency parameter streams (e.g. 120 Hz XY pads or rotary encoders) are active. The server only emits data when you explicitly perform a **query** (e.g. `v0 ?`, `??`, `/s`, `-status`, `-version`) or when an **error** occurs (`# SKODE_ERROR...`).
+
 ### A. Netcat (`nc`)
 
-#### 1. One-Shot Command
+#### 1. One-Shot Command (Silent Execution)
 ```bash
 echo "v0 w0 f440 a0 l1" | nc -N localhost 60440
 ```
 
-#### 2. Interactive Terminal REPL
+#### 2. Interactive Terminal REPL & Queries
 ```bash
 nc localhost 60440
 ```
-Type any command interactively; responses return instantly:
+Commands execute silently, while queries return diagnostic data immediately:
 ```forth
 v0 w0 f440 a0 l1
-OK
 [lead]:v0 n60 l1; lead
-OK
 v0 ?
-OK
+voice 0: freq=261.63 wave=0 amp=1.00 gate=1 ...
 -status
 {"status":"ok","version":"1.3.20","port":60440,"active_connections":1,"raw_clients":1,"http_clients":0,"ws_clients":0,"total_requests":4,"total_commands":4,"errors":0}
 ```
@@ -260,11 +261,10 @@ echo "v0 w0 f440 a0 l1" | socat - TCP:localhost:60440
 set s [socket localhost 60440]
 fconfigure $s -buffering line
 
-# Send Skode command
+# Send Skode command (executes silently in engine)
 puts $s "v0 w0 f440 a0 l1"
-puts [gets $s]  ;# Returns "OK"
 
-# Query voice status
+# Query voice status (returns diagnostic line)
 puts $s "v0 ?"
 puts [gets $s]
 

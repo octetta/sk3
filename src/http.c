@@ -362,8 +362,7 @@ static void client_read_raw_tcp(sk_http_client_t *c) {
                 skode_free(&c->ctx);
                 skode_init(&c->ctx);
                 c->ctx.log_enable = 1;
-                const char *msg = "OK reset\n";
-                raw_tcp_send(c, msg, (int)strlen(msg));
+                /* Silent reset */
             } else if (path_match(line, "version") || strcmp(line, "version") == 0) {
                 char vmsg[64];
                 snprintf(vmsg, sizeof(vmsg), "%s\n", skred_version());
@@ -387,8 +386,10 @@ static void client_read_raw_tcp(sk_http_client_t *c) {
 
                 skred_command_ctx(line, &c->ctx);
 
-                const char *resp = (c->ctx.log_len > 0) ? c->ctx.log : "OK\n";
-                raw_tcp_send(c, resp, (int)strlen(resp));
+                /* Silence on success: only emit output if command generated log (queries, errors) */
+                if (c->ctx.log_len > 0) {
+                    raw_tcp_send(c, c->ctx.log, c->ctx.log_len);
+                }
             }
         }
 
@@ -532,8 +533,7 @@ static void client_read_websocket(sk_http_client_t *c) {
                             skode_free(&c->ctx);
                             skode_init(&c->ctx);
                             c->ctx.log_enable = 1;
-                            snprintf(c->ctx.log, sizeof(c->ctx.log), "OK reset\n");
-                            c->ctx.log_len = (int)strlen(c->ctx.log);
+                            /* Silent reset */
                         } else {
                             skred_command_ctx(line, &c->ctx);
                         }
@@ -542,8 +542,10 @@ static void client_read_websocket(sk_http_client_t *c) {
                 }
                 free(buf);
 
-                const char *resp = (c->ctx.log_len > 0) ? c->ctx.log : "OK\n";
-                ws_send_frame(c, 0x1, resp, (int)strlen(resp));
+                /* Silence on success: only send frame if command generated log (queries, errors) */
+                if (c->ctx.log_len > 0) {
+                    ws_send_frame(c, 0x1, c->ctx.log, c->ctx.log_len);
+                }
             }
         }
 
