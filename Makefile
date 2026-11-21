@@ -138,19 +138,19 @@ dist-api: native
 
 dist-api-linux-armhf: gen
 	$(CMAKE) -B build_linux_armhf -S . -DCMAKE_BUILD_TYPE=$(BUILD_TYPE) -DCMAKE_C_COMPILER="arm-linux-gnueabihf-gcc"
-	$(CMAKE) --build build_linux_armhf --target api api_shared mini-skred
+	$(CMAKE) --build build_linux_armhf --target api api_shared mini-skred sk3 skred
 	$(CMAKE) --install build_linux_armhf --prefix $(DIST_DIR)/linux-armhf/skred-$(VERSION)-maxed
 	$(CMAKE) -E chdir $(DIST_DIR)/linux-armhf $(CMAKE) -E tar czf skred-$(VERSION)-maxed-linux-armhf.tar.gz --format=gnutar skred-$(VERSION)-maxed
 
 dist-api-linux-aarch64: gen
 	$(CMAKE) -B build_linux_aarch64 -S . -DCMAKE_BUILD_TYPE=$(BUILD_TYPE) -DCMAKE_C_COMPILER="aarch64-linux-gnu-gcc"
-	$(CMAKE) --build build_linux_aarch64 --target api api_shared mini-skred
+	$(CMAKE) --build build_linux_aarch64 --target api api_shared mini-skred sk3 skred
 	$(CMAKE) --install build_linux_aarch64 --prefix $(DIST_DIR)/linux-aarch64/skred-$(VERSION)-maxed
 	$(CMAKE) -E chdir $(DIST_DIR)/linux-aarch64 $(CMAKE) -E tar czf skred-$(VERSION)-maxed-linux-aarch64.tar.gz --format=gnutar skred-$(VERSION)-maxed
 
 windows-cross-libs: gen
 	$(ZIG_ENV) $(CMAKE) --preset cross-windows-zig-maxed
-	$(ZIG_ENV) $(CMAKE) --build --preset cross-windows-zig-maxed --target api api_shared mini-skred
+	$(ZIG_ENV) $(CMAKE) --build --preset cross-windows-zig-maxed --target api api_shared mini-skred sk3 skred
 	$(CMAKE) --install build_cross_windows_zig_maxed --prefix $(DIST_DIR)/windows-x86_64/skred-$(VERSION)-maxed
 
 dist-api-windows: windows-cross-libs
