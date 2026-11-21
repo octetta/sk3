@@ -196,6 +196,7 @@ int skode_program_push_ex(event_program_t *program, skode_opcode_t code,
     struct ands_s *parser, const double *arg, int argc, int arg_offset, char mode,
     uint8_t default_mask);
 int skode_execute_voice_opcode(const opcode_event_t *opcode, int voice);
+int skode_voice_valid(int voice);
 int skode_emit_control_event_opcode(const opcode_event_t *opcode, int voice,
   int pattern, int step, int tag);
 int skode_opcode_supported(skode_opcode_t opcode);

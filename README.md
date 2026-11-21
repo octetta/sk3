@@ -36,17 +36,19 @@ Version: `1.4.0`
 
 | Community & Sound Client | Connection Type | Protocol | How It Connects & What It Unlocks |
 | :--- | :--- | :--- | :--- |
-| **SynthDIY & Hardware Hackers**<br>*(ESP32, Teensy, Pico W, Arduino)* | **Raw TCP** | Plain ASCII (`\n`) | `client.println("v0 K1200 Q3.5")`<br>Zero HTTP/JSON/TLS library overhead on microcontrollers; physical potentiometers and rotary encoders stream straight to DSP voices. |
+| **Chiptune & Tracker Replay**<br>*(SID-to-Skode, MOD-to-Skode)* | **BOP (Binary) / UDP** | 40-byte Binary Opcode Protocol | 50/60 Hz raster-tick dispatching of pitch, PW, and gate updates with zero string allocations, zero GC pressure, and microsecond-level timing accuracy. |
+| **Urbit Ecosystem**<br>*(Mars, Hoon Gall agents)* | **WebSocket / HTTP** | RFC 6455 Binary / ASCII | Gall agents pack Hoon `@ux` binary opcode structs directly to `%iris` / `%eyre` WebSocket channels without costly atom-to-tape string parsing. |
+| **SynthDIY & Hardware Hackers**<br>*(ESP32, Teensy, Pico W, Arduino)* | **Raw TCP / UDP / BOP** | ASCII or 40-byte Binary | `client.println("v0 K1200 Q3.5")` or binary UDP struct dispatch; physical potentiometers stream straight to DSP voices with zero library overhead. |
 | **Livecoding & Algorave**<br>*(TidalCycles, FoxDot, Orca, Sonic Pi)* | **Raw TCP / Pipe** | ASCII Lines | `nc localhost 60440`<br>Instant terminal REPL with Unix pipes; per-connection isolated Forth namespaces allow multi-user jam sessions on the same engine without macro collision. |
-| **Browser Web Apps & Strudel**<br>*(Strudel.cc, Canvas, WebAudio)* | **WebSocket** | RFC 6455 | `new WebSocket("ws://localhost:60440/")`<br>Bypasses browser sandbox limits; direct, zero-daemon communication from public web pages with Chromium Private Network Access (PNA). |
+| **Browser Web Apps & Strudel**<br>*(Strudel.cc, Canvas, AudioWorklet)* | **WebSocket / WASM** | RFC 6455 (Text & Binary) | `new WebSocket("ws://localhost:60440/")` or `SharedArrayBuffer` AudioWorklet ringbuffer; high-rate XY controller sweeps execute with zero reverse packet backpressure. |
 | **Visuals & Generative Art**<br>*(TouchDesigner, Hydra, Max/MSP, p5.js)* | **WebSocket / TCP** | RFC 6455 / Raw TCP | Native TouchDesigner TCP/WebSocket DATs, Max/MSP `[tcpsocket]`, or Hydra web canvas modulating filter cutoffs (`K`) and resonance (`Q`) at 60–120 Hz with sub-millisecond response. |
-| **Visual Audio Patching**<br>*(PureData, SuperCollider)* | **Raw TCP** | ASCII Lines | Pd `[netsend]` or SuperCollider `NetAddr`<br>Native socket streaming without external VST/OSC bridge daemons or JACK routing ceremony. |
-| **BEAM Ecosystem**<br>*(Gleam, Elixir, Erlang, LFE)* | **Raw TCP** | `:gen_tcp` line mode | `:gen_tcp.connect('localhost', 60440, [:binary, packet: :line])`<br>1:1 conceptual match with BEAM actors; Phoenix LiveView sliders or LFE S-expressions stream directly into isolated engine contexts. |
-| **Game Dev & Creative Engines**<br>*(Godot, LÖVE 2D, Bevy / Rust)* | **TCP / WebSocket** | `StreamPeerTCP` / `LuaSocket` | Procedural sound generation driven directly from game scripts without compiling native C++ audio driver plugins. |
+| **Visual Audio Patching**<br>*(PureData, SuperCollider)* | **Raw TCP / UDP** | ASCII / Binary BOP | Pd `[netsend -u -b]` or SuperCollider `NetAddr.sendRaw`<br>Native socket streaming without external VST/OSC bridge daemons or JACK routing ceremony. |
+| **BEAM Ecosystem**<br>*(Gleam, Elixir, Erlang, LFE)* | **Raw TCP / UDP** | `:gen_tcp` / `:gen_udp` | Elixir binary pattern matching (`<<opcode::16, voice::16, argc::8, ...>>`); GenStage pipelines stream binary frames to `sk3` at line rate. |
+| **Game Dev & Creative Engines**<br>*(Godot, LÖVE 2D, Bevy / Rust)* | **TCP / WebSocket / C** | StreamPeerTCP / C API | Procedural sound generation driven directly from game scripts or C ABI without compiling native audio driver plugins. |
 | **AI & Computational Music**<br>*(Jupyter, Python, Julia, R)* | **HTTP REST / WS** | POST / WebSocket | `urllib.request` / `requests.post`<br>Audition algorithmic compositions directly from notebook cells without audio device kernel locking. |
 | **Glitch, Demoscene & Trackers**<br>*(Shell pipes, Renoise Lua, byte-mangling)* | **Raw TCP / Shell** | Fuzzed ASCII / Text | Uncrashable parser with graceful `# SKODE_ERROR` reporting; vintage hardware LFSR noise models (`w5` MOS 6581 SID, POKEY, NES) and analog saturation drive (`jd`). |
 
-See the [TCP, HTTP & WebSocket Reference](doc/HTTP_API.md) for complete standalone code examples, including an interactive browser XY controller pad.
+See the [TCP, HTTP & WebSocket Reference](doc/HTTP_API.md) and the [Binary Opcode Protocol (BOP) Specification](doc/BINARY_OPCODE_PROTOCOL.md) for complete standalone code examples, including interactive browser XY controller pads and chiptune replay dispatchers.
 
 ## Quick Start
 

@@ -501,8 +501,8 @@ static void client_read_websocket(sk_http_client_t *c) {
             ws_send_frame(c, 0xA, payload, (int)payload_len);
         } else if (opcode == 0xA) {
             /* Pong frame: do nothing */
-        } else if (opcode == 0x1 || opcode == 0x2) {
-            /* Text or binary Skode command frame */
+        } else if (opcode == 0x1) {
+            /* Text Skode command frame */
             atomic_fetch_add_uint64(&metric_requests, 1);
 
             char *buf = (char *)malloc(payload_len + 1);
@@ -547,6 +547,18 @@ static void client_read_websocket(sk_http_client_t *c) {
                     ws_send_frame(c, 0x1, c->ctx.log, c->ctx.log_len);
                 }
             }
+        } else if (opcode == 0x2) {
+            /* Binary Opcode Protocol (BOP) frame */
+            atomic_fetch_add_uint64(&metric_requests, 1);
+            int processed = 0;
+            int r = skred_dispatch_batch(payload, (size_t)payload_len, &processed);
+            if (processed > 0) {
+                atomic_fetch_add_uint64(&metric_commands, (uint64_t)processed);
+            }
+            if (r < 0) {
+                atomic_fetch_add_uint64(&metric_errors, 1);
+            }
+            /* Silence on success: zero reverse packet flood for binary streams */
         }
 
         int total_frame_len = hdr_len + (int)payload_len;

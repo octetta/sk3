@@ -1,5 +1,6 @@
 #include "api.h"
 #include "http.h"
+#include "skode.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -211,6 +212,27 @@ int main(void) {
     assert(opcode == 0xA); /* 0xA = Pong */
     assert(strcmp(ws_frame_resp, ping_data) == 0);
     printf("  [WebSocket] Ping -> Pong echoed '%s' perfectly!\n", ws_frame_resp);
+
+    /* Test WebSocket Binary Opcode Protocol (BOP frame opcode 0x2) */
+    skred_opcode_msg_t bop_frame;
+    memset(&bop_frame, 0, sizeof(bop_frame));
+    bop_frame.opcode = SKODE_OP_FREQ;
+    bop_frame.voice = 2;
+    bop_frame.argc = 1;
+    bop_frame.args[0] = 777.0f;
+    /* Send as binary frame (opcode 0x2) with variable wire framing (12 bytes) */
+    char bop_wire[12];
+    memcpy(bop_wire, &bop_frame, 8);
+    memcpy(bop_wire + 8, bop_frame.args, 4);
+    send_ws_masked_frame(ws_sock, 0x2, bop_wire, 12);
+
+    /* Verify with query that voice 2 now has frequency 777 */
+    send_ws_masked_frame(ws_sock, 0x1, "v2 ?\n", 5);
+    n = read_ws_server_frame(ws_sock, &opcode, ws_frame_resp, sizeof(ws_frame_resp));
+    assert(n > 0);
+    assert(opcode == 0x1);
+    assert(strstr(ws_frame_resp, "777") != NULL);
+    printf("  [WebSocket] Binary frame (opcode 0x2) dispatched BOP successfully (v2 frequency updated to 777 Hz)!\n");
 
     /* -------------------------------------------------------------
      * TEST 4: DIAGNOSTICS & /s COMMAND INSPECTION

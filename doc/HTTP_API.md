@@ -328,6 +328,13 @@ fetch("http://localhost:60440/-skode", {
 
 | Protocol | Best For | Handshake Overhead | Per-Message Overhead | Latency |
 | :--- | :--- | :--- | :--- | :--- |
+| **BOP (Binary WebSocket / UDP)** | Chiptune replayers (SID/MOD), Urbit, 120Hz XY pads | Handshake once or None (UDP) | 8 bytes + 4*N bytes | < 0.05 ms (Zero GC) |
 | **WebSocket** | XY pads, continuous parameter sweeps, browser GUIs | 1 HTTP GET upgrade | 2–6 bytes frame header | < 0.1 ms |
 | **Raw TCP** | Terminal REPL, Netcat scripts, microcontrollers, Tcl | None (Instant) | 0 bytes (Raw text + `\n`) | < 0.1 ms |
 | **HTTP/1.1** | One-shot cURL, monitoring scrapers, REST APIs | TCP 3-way handshake | ~150 bytes HTTP headers | ~0.5 ms |
+
+---
+
+## 9. Binary Opcode Protocol (BOP)
+
+For high-velocity, zero-allocation binary streaming (AudioWorklets, Amiga MOD / C64 SID chiptune replay, Urbit Hoon Gall agents, and Elixir/BEAM pipelines), see the dedicated [Binary Opcode Protocol (BOP) Specification](BINARY_OPCODE_PROTOCOL.md). WebSocket clients simply emit binary frames (`opcode == 0x2`) with 40-byte cache-line aligned or variable-length (`8 + 4*N`) structs.

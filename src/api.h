@@ -39,6 +39,30 @@ void skred_process_stereo_with_input(float *out_left, float *out_right, const fl
 // Note: opcode is the skode_opcode_t enum (e.g. SKODE_OP_ENVELOPE_ATTACK)
 int skred_execute_opcode(int voice, int opcode, int argc, const double *args);
 
+/* =========================================================================
+ * Binary Opcode Protocol (BOP)
+ * Zero-allocation, 40-byte cache-line aligned binary control interface.
+ * ========================================================================= */
+#define SKRED_OPCODE_MSG_MAX_ARGS 8
+#define SKRED_BOP_FLAG_FIXED 0x01
+
+#pragma pack(push, 1)
+typedef struct {
+    uint16_t opcode;    /* 2 bytes: Opcode ID (SKODE_OP_* or discrete opcode ID) */
+    int16_t  voice;     /* 2 bytes: Target voice index (0..63) or negative for all/broadcast */
+    uint8_t  argc;      /* 1 byte:  Number of float arguments (0..8) */
+    uint8_t  flags;     /* 1 byte:  Flags (0x01 = fixed 40-byte record stride) */
+    uint16_t reserved;  /* 2 bytes: Alignment padding / reserved */
+    float    args[SKRED_OPCODE_MSG_MAX_ARGS]; /* 32 bytes: IEEE 754 32-bit float arguments */
+} skred_opcode_msg_t;
+#pragma pack(pop)
+
+/* Core C dispatchers */
+int skred_dispatch_opcode(int voice, uint16_t opcode, const float *args, int argc);
+int skred_dispatch_word(int voice, const char *word, const float *args, int argc);
+int skred_dispatch_msg(const skred_opcode_msg_t *msg);
+int skred_dispatch_batch(const void *buf, size_t bytes, int *processed);
+
 // Send an ASCII control protocol message to the engine. Audio-device commands
 // (/als, /aout, /ain, /a? and /m* MIDI management) are handled here before
 // other text reaches Skode.

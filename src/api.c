@@ -31,6 +31,7 @@
 #include "synth-types.h"
 #include "synth.h"
 #include "skode.h"
+#include "skode_dict_gen.h"
 #include "polyphony.h"
 #include "portable_atomic.h"
 #include "midi.h"
@@ -2081,16 +2082,138 @@ int skred_execute_opcode(int voice, int opcode, int argc, const double *args) {
   
   opcode_event_t event;
   memset(&event, 0, sizeof(event));
-  event.code = (uint8_t)opcode;
+  event.code = (uint16_t)opcode;
   event.argc = argc > SEQ_OPCODE_ARG_MAX ? SEQ_OPCODE_ARG_MAX : argc;
   event.mode = 0;
   event.var_mask = 0;
+  event.stream_mask = 0;
   
   for (int i = 0; i < event.argc; i++) {
-    event.arg[i] = args[i];
+    event.arg[i] = (float)args[i];
   }
   
   return skode_execute_voice_opcode(&event, voice);
+}
+
+/* =========================================================================
+ * Binary Opcode Protocol (BOP) Implementations
+ * ========================================================================= */
+
+int skred_dispatch_opcode(int voice, uint16_t opcode, const float *args, int argc) {
+  if (!engine_started) return -1;
+  if (argc < 0 || argc > SKRED_OPCODE_MSG_MAX_ARGS) return -1;
+  if (!skode_opcode_is_realtime((skode_opcode_t)opcode)) return -1;
+
+  opcode_event_t event;
+  memset(&event, 0, sizeof(event));
+  event.code = opcode;
+  event.argc = (uint8_t)argc;
+  event.mode = 0;
+  event.var_mask = 0;
+  event.stream_mask = 0;
+
+  for (int i = 0; i < argc; i++) {
+    event.arg[i] = args ? args[i] : 0.0f;
+  }
+
+  if (voice < 0) {
+    int ret = 0;
+    for (int v = 0; v < synth_config.voice_max; v++) {
+      int r = skode_execute_voice_opcode(&event, v);
+      if (r < 0) ret = r;
+    }
+    return ret;
+  }
+
+  if (!skode_voice_valid(voice)) return -1;
+  return skode_execute_voice_opcode(&event, voice);
+}
+
+int skred_dispatch_word(int voice, const char *word, const float *args, int argc) {
+  if (!engine_started) return -1;
+  if (!word || !word[0] || argc < 0 || argc > SKRED_OPCODE_MSG_MAX_ARGS) return -1;
+
+  const skode_def_word_t *gw = skode_dict_find(word);
+  if (!gw) return -1;
+
+  double dargs[SKRED_OPCODE_MSG_MAX_ARGS];
+  for (int i = 0; i < argc; i++) {
+    dargs[i] = (double)(args ? args[i] : 0.0f);
+  }
+
+  const skode_clause_t *c = skode_clause_match(gw, argc, dargs);
+  if (!c) return -1;
+
+  if (c->opcode_id != 0) {
+    return skred_dispatch_opcode(voice, c->opcode_id, args, argc);
+  }
+
+  if (c->rt_handler) {
+    if (voice < 0) {
+      int ret = 0;
+      for (int v = 0; v < synth_config.voice_max; v++) {
+        int r = c->rt_handler(v, args, argc);
+        if (r < 0) ret = r;
+      }
+      return ret;
+    }
+    if (!skode_voice_valid(voice)) return -1;
+    return c->rt_handler(voice, args, argc);
+  }
+
+  return -1;
+}
+
+int skred_dispatch_msg(const skred_opcode_msg_t *msg) {
+  if (!msg) return -1;
+  if (msg->argc > SKRED_OPCODE_MSG_MAX_ARGS) return -1;
+  return skred_dispatch_opcode(msg->voice, msg->opcode, msg->args, msg->argc);
+}
+
+int skred_dispatch_batch(const void *buf, size_t bytes, int *processed) {
+  if (processed) *processed = 0;
+  if (!buf || bytes < 8) return -1;
+
+  const uint8_t *ptr = (const uint8_t *)buf;
+  size_t rem = bytes;
+  int count = 0;
+  int err = 0;
+
+  while (rem >= 8) {
+    skred_opcode_msg_t local_msg;
+    memset(&local_msg, 0, sizeof(local_msg));
+    memcpy(&local_msg, ptr, 8);
+
+    if (local_msg.argc > SKRED_OPCODE_MSG_MAX_ARGS) {
+      err = -1;
+      break;
+    }
+
+    size_t record_len = (local_msg.flags & SKRED_BOP_FLAG_FIXED)
+      ? sizeof(skred_opcode_msg_t)
+      : (8 + (size_t)local_msg.argc * sizeof(float));
+
+    if (rem < record_len) {
+      err = -2;
+      break;
+    }
+
+    if (local_msg.argc > 0) {
+      memcpy(local_msg.args, ptr + 8, (size_t)local_msg.argc * sizeof(float));
+    }
+
+    int r = skred_dispatch_opcode(local_msg.voice, local_msg.opcode, local_msg.args, local_msg.argc);
+    if (r < 0) {
+      err = r;
+    }
+    count++;
+
+    ptr += record_len;
+    rem -= record_len;
+  }
+
+  if (processed) *processed = count;
+  return (err < 0) ? err : 0;
 }
 
 static size_t base64_decode(const char *src, unsigned char *out);

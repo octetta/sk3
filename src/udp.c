@@ -177,11 +177,24 @@ static void *udp_main(void *arg) {
         line[n] = '\0';
         skode_t *w = udp_context_for(user, &client, ++use_counter);
         int handled = 0;
-        if (line[0] == '-' || line[0] == '.') {
+        int processed = 0;
+
+        /* Check for Binary Opcode Protocol (BOP) datagram:
+         * At least 8 bytes header, and byte 4 (argc) <= 8. In ASCII Forth commands,
+         * byte 4 is a printable ASCII character (>= 32, '\n'=10, '\t'=9), never <= 8. */
+        if (n >= 8 && (uint8_t)line[4] <= SKRED_OPCODE_MSG_MAX_ARGS &&
+            ((uint8_t)line[0] < 0x20 || (uint8_t)line[0] >= 0x80 || line[1] == '\0')) {
+          if (skred_dispatch_batch(line, (size_t)n, &processed) == 0 && processed > 0) {
+            handled = 1;
+            atomic_fetch_add_uint64(&udp_commands, (uint64_t)processed);
+          }
+        }
+
+        if (!handled && (line[0] == '-' || line[0] == '.')) {
           handled = skred_command_ctx(line, w);
         }
         if (handled) {
-          atomic_fetch_add_uint64(&udp_commands, 1);
+          if (!processed) atomic_fetch_add_uint64(&udp_commands, 1);
         } else if (skode_consume(line, w) >= 0) {
           atomic_fetch_add_uint64(&udp_commands, 1);
         } else {
