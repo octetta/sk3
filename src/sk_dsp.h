@@ -1364,10 +1364,13 @@ static inline const sk_phoneme_def_t *sk_phoneme_lookup(const char *code) {
     return NULL;
 }
 
-/* Compile a phonetic DSL string (e.g. "[S:50 K:40 R:70 EH1:120@130>105~ D:60]") into flat frame array */
-static inline int sk_phoneme_compile_dsl(const char *dsl, sk_phoneme_frame_t *out_frames, int max_frames, float default_pitch) {
+/* Compile a phonetic DSL string (e.g. "[S:50 K:40 R:70 EH1:120@130>105~ D:60]") into flat frame array.
+   Optional err_token captures the first unrecognized phoneme token for diagnostics. */
+static inline int sk_phoneme_compile_dsl_ex(const char *dsl, sk_phoneme_frame_t *out_frames, int max_frames,
+                                            float default_pitch, char *err_token, size_t err_token_sz) {
     if (!dsl || !out_frames || max_frames <= 0) return 0;
     if (default_pitch < 40.0f) default_pitch = 120.0f;
+    if (err_token && err_token_sz > 0) err_token[0] = '\0';
 
     int frame_count = 0;
     const char *p = dsl;
@@ -1396,6 +1399,10 @@ static inline int sk_phoneme_compile_dsl(const char *dsl, sk_phoneme_frame_t *ou
 
         const sk_phoneme_def_t *def = sk_phoneme_lookup(code);
         if (!def) {
+            /* Record unknown token for caller diagnostic */
+            if (err_token && err_token[0] == '\0' && err_token_sz > 0) {
+                snprintf(err_token, err_token_sz, "%s", code);
+            }
             /* Fallback to pause if unknown */
             def = sk_phoneme_lookup("_");
         }
@@ -1424,60 +1431,58 @@ static inline int sk_phoneme_compile_dsl(const char *dsl, sk_phoneme_frame_t *ou
             amp_scale *= 1.05f;
         }
 
-        /* Parse optional duration ':dur' */
-        if (*p == ':') {
-            p++;
-            char *end;
-            float parsed_dur = strtof(p, &end);
-            if (end > p && parsed_dur > 0.0f) {
-                dur = parsed_dur;
-                p = end;
-            }
-        }
-        dur *= stress_dur_mult;
-        pitch *= stress_pitch_mult;
-
-        /* Parse optional pitch '@pitch' or pitch inflection glide '@start>end' / '@start<end' */
-        if (*p == '@') {
-            p++;
-            char *end;
-            float parsed_pitch = strtof(p, &end);
-            if (end > p && parsed_pitch > 20.0f) {
-                pitch = parsed_pitch;
-                p = end;
-                if (*p == '>' || *p == '<' || *p == '~') {
-                    p++;
-                    float parsed_end = strtof(p, &end);
-                    if (end > p && parsed_end > 20.0f) {
-                        pitch_end = parsed_end;
-                        p = end;
+        /* Parse optional modifiers in any order (:dur, @pitch, @start>end, ~rate, *amp) */
+        while (*p && *p != ' ' && *p != '\t' && *p != '\n' && *p != '\r' && *p != ',' && *p != ']') {
+            if (*p == ':') {
+                p++;
+                char *end;
+                float parsed_dur = strtof(p, &end);
+                if (end > p && parsed_dur > 0.0f) {
+                    dur = parsed_dur;
+                    p = end;
+                }
+            } else if (*p == '@') {
+                p++;
+                char *end;
+                float parsed_pitch = strtof(p, &end);
+                if (end > p && parsed_pitch > 20.0f) {
+                    pitch = parsed_pitch;
+                    p = end;
+                    if (*p == '>' || *p == '<') {
+                        p++;
+                        float parsed_end = strtof(p, &end);
+                        if (end > p && parsed_end > 20.0f) {
+                            pitch_end = parsed_end;
+                            p = end;
+                        }
                     }
                 }
+            } else if (*p == '~') {
+                p++;
+                vib_depth = 0.035f; /* 3.5% clear audible vocal vibrato wobble */
+                vib_rate = 5.5f;
+                char *end;
+                float parsed_rate = strtof(p, &end);
+                if (end > p && parsed_rate > 0.5f) {
+                    vib_rate = parsed_rate;
+                    p = end;
+                }
+            } else if (*p == '*') {
+                p++;
+                char *end;
+                float parsed_amp = strtof(p, &end);
+                if (end > p && parsed_amp >= 0.0f) {
+                    amp_scale *= parsed_amp;
+                    p = end;
+                }
+            } else {
+                p++;
             }
         }
 
-        /* Parse optional vibrato '~' or '~rate' */
-        if (*p == '~') {
-            p++;
-            vib_depth = 0.025f; /* 2.5% natural pitch wobble */
-            vib_rate = 5.5f;
-            char *end;
-            float parsed_rate = strtof(p, &end);
-            if (end > p && parsed_rate > 0.5f) {
-                vib_rate = parsed_rate;
-                p = end;
-            }
-        }
-
-        /* Parse optional amplitude/stress multiplier '*amp' */
-        if (*p == '*') {
-            p++;
-            char *end;
-            float parsed_amp = strtof(p, &end);
-            if (end > p && parsed_amp >= 0.0f) {
-                amp_scale *= parsed_amp;
-                p = end;
-            }
+        dur *= stress_dur_mult;
+        if (pitch == default_pitch) {
+            pitch *= stress_pitch_mult;
         }
 
         /* Fill frame */
@@ -1502,6 +1507,10 @@ static inline int sk_phoneme_compile_dsl(const char *dsl, sk_phoneme_frame_t *ou
     }
 
     return frame_count;
+}
+
+static inline int sk_phoneme_compile_dsl(const char *dsl, sk_phoneme_frame_t *out_frames, int max_frames, float default_pitch) {
+    return sk_phoneme_compile_dsl_ex(dsl, out_frames, max_frames, default_pitch, NULL, 0);
 }
 
 /* Voice configuration parameters (inspired by DECtalk, SAM, & Kraftwerk) */

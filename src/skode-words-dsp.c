@@ -1708,8 +1708,9 @@ int skode_exec_tts(skode_t *ctx, ands_t *s, const double *arg, int argc) {
   if (!ctx || !ctx->parse) return -1;
   const char *phrase = ands_string(ctx->parse);
   if (!phrase || phrase[0] == '\0') {
-    ctx->printf(ctx, "# tts! requires bracketed phonetic DSL string, e.g. [HH:70 EH1:110 L:70 OW1:150] tts!\n");
-    return 0;
+    skode_set_error(ctx, SK_ERR_INVALID_PARAM, "tts! requires bracketed phonetic string");
+    ctx->printf(ctx, "# tts: error: requires bracketed phonetic DSL string, e.g. [HH:70 EH1:110 L:70 OW1:150] tts!\n");
+    return SK_ERR_INVALID_PARAM;
   }
 
   int wave_slot = -1;
@@ -1744,10 +1745,15 @@ int skode_exec_tts(skode_t *ctx, ands_t *s, const double *arg, int argc) {
 
   /* Compile phonetic DSL string into acoustic parameter frames */
   sk_phoneme_frame_t frames[SK_PHONEME_MAX_TOKENS];
-  int num_frames = sk_phoneme_compile_dsl(phrase, frames, SK_PHONEME_MAX_TOKENS, base_pitch);
+  char bad_token[32] = {0};
+  int num_frames = sk_phoneme_compile_dsl_ex(phrase, frames, SK_PHONEME_MAX_TOKENS, base_pitch, bad_token, sizeof(bad_token));
+  if (bad_token[0] != '\0') {
+    ctx->printf(ctx, "# tts: warning: unrecognized phoneme token '%s' (fallback to silence)\n", bad_token);
+  }
   if (num_frames <= 0) {
-    ctx->printf(ctx, "# tts: no valid phonemes parsed from [%s]\n", phrase);
-    return 0;
+    skode_set_error(ctx, SK_ERR_INVALID_PARAM, "tts: no valid phonemes parsed from [%s]", phrase);
+    ctx->printf(ctx, "# tts: error: no valid phonemes parsed from [%s]\n", phrase);
+    return SK_ERR_INVALID_PARAM;
   }
 
   /* Compute duration with safety cap of 30.0s (prevent OOM) */
