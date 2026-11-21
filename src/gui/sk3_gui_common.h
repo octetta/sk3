@@ -158,7 +158,7 @@ static inline void sk3_gui_config_init_defaults(sk3_gui_config_t *cfg) {
     cfg->window_width = 700;
     cfg->window_height = 560;
     cfg->prev_expanded_h = 560;
-    cfg->console_collapsed = 1;
+    cfg->console_collapsed = 0;
 }
 
 static inline int sk3_gui_config_save(const sk3_gui_config_t *cfg) {

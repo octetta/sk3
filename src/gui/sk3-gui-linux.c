@@ -1102,25 +1102,6 @@ static void copy_full_log(void) {
     append_log("[Log copied to clipboard]");
 }
 
-static void send_wm_resize(int w, int h) {
-    Atom net_move_resize = XInternAtom(dpy, "_NET_MOVERESIZE_WINDOW", False);
-    XEvent ev = {0};
-    ev.type = ClientMessage;
-    ev.xclient.window = win;
-    ev.xclient.message_type = net_move_resize;
-    ev.xclient.format = 32;
-    ev.xclient.data.l[0] = (1 << 10) | (1 << 11) | (1 << 12);
-    ev.xclient.data.l[1] = 0;
-    ev.xclient.data.l[2] = 0;
-    ev.xclient.data.l[3] = w;
-    ev.xclient.data.l[4] = h;
-
-    XSendEvent(dpy, RootWindow(dpy, screen), False,
-               SubstructureRedirectMask | SubstructureNotifyMask, &ev);
-    XResizeWindow(dpy, win, w, h);
-    XFlush(dpy);
-}
-
 static void toggle_console(void) {
     is_collapsed = !is_collapsed;
     log_scroll_x = 0;
@@ -1134,7 +1115,7 @@ static void toggle_console(void) {
         cursor_visible = 1;
     }
     win_h = target_h;
-    send_wm_resize(win_w, target_h);
+    XResizeWindow(dpy, win, win_w, target_h);
 
     if (backbuffer) XFreePixmap(dpy, backbuffer);
     if (xft_draw) XftDrawDestroy(xft_draw);
@@ -1195,8 +1176,8 @@ int main(int argc, char **argv) {
         win_h = is_collapsed ? DEFAULT_COLLAPSED_HEIGHT : cfg.window_height;
     } else {
         win_w = DEFAULT_WIDTH;
-        win_h = DEFAULT_COLLAPSED_HEIGHT;
-        is_collapsed = 1;
+        win_h = DEFAULT_HEIGHT;
+        is_collapsed = 0;
         prev_expanded_h = DEFAULT_HEIGHT;
     }
 
@@ -1259,6 +1240,8 @@ int main(int argc, char **argv) {
 
     XMapWindow(dpy, win);
     start_engine();
+    render_all();
+    XFlush(dpy);
 
     int running = 1;
     int x11_fd = ConnectionNumber(dpy);
