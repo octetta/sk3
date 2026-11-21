@@ -280,6 +280,60 @@ target_link_libraries(synth_callback_bench PRIVATE api)
 target_include_directories(synth_callback_bench PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}/src/gen")
 target_compile_definitions(synth_callback_bench PRIVATE SKRED_BENCH_PD=1 SKRED_BENCH_FM=1)
 
+# =========================================================================
+# DSP Toolkit Experiments & Standalone Examples
+# =========================================================================
+
+add_executable(render_dsp_demo tools/render_dsp_demo.c)
+target_link_libraries(render_dsp_demo PRIVATE m)
+target_include_directories(render_dsp_demo PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+
+add_executable(pluck_example examples/pluck_example.c)
+target_link_libraries(pluck_example PRIVATE m)
+target_include_directories(pluck_example PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+
+add_executable(drum_example examples/drum_example.c)
+target_link_libraries(drum_example PRIVATE m)
+target_include_directories(drum_example PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+
+add_executable(wind_brass_example examples/wind_brass_example.c)
+target_link_libraries(wind_brass_example PRIVATE m)
+target_include_directories(wind_brass_example PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+
+add_executable(polyblep_example examples/polyblep_example.c)
+target_link_libraries(polyblep_example PRIVATE m)
+target_include_directories(polyblep_example PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+
+add_executable(vowel_example examples/vowel_example.c)
+target_link_libraries(vowel_example PRIVATE m)
+target_include_directories(vowel_example PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+
+add_executable(speech_example examples/speech_example.c)
+target_link_libraries(speech_example PRIVATE m)
+target_include_directories(speech_example PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+
+# Meta-target to build all DSP experiments at once:
+#   cmake --build build --target dsp_experiments
+add_custom_target(dsp_experiments
+    DEPENDS
+        render_dsp_demo
+        pluck_example
+        drum_example
+        wind_brass_example
+        polyblep_example
+        vowel_example
+        speech_example
+)
+
+# Convenience target to build and run all audio demo renders:
+#   cmake --build build --target run_dsp_demos
+add_custom_target(run_dsp_demos
+    COMMAND ${CMAKE_CURRENT_BINARY_DIR}/render_dsp_demo
+    DEPENDS render_dsp_demo
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    COMMENT "Rendering all DSP audio demo WAV files in repository root..."
+)
+
 set_source_files_properties(
     src/skode.c
     src/skode-words-dsp.c
