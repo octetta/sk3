@@ -186,7 +186,7 @@ float s = sk_drum_bell_step(&bell);
 * **Aspiration & Plosive Injection**: Immediate transient burst injection for stop consonants (P, T, K, B, D, G) and high-pass presence shelf for sibilants (S, Z, SH).
 
 ### B. ASCII Speech DSL Specification
-Compiled directly via `sk_phoneme_compile_dsl()`:
+Compiled directly via `sk_phoneme_compile_dsl()` (see [doc/PHONEMES.md](PHONEMES.md) for the complete 40-phoneme catalog, stress modifiers, and multilingual guide):
 ```
 [PHONEME:duration_ms@pitch_hz>target_pitch_hz~]
 ```

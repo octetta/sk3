@@ -1775,7 +1775,7 @@ Usage: slot rate one_shot d>w
 **Description & Details**:
 
 ```text
-Renders bracketed phonetic DSL string into active data array.
+Renders bracketed phonetic DSL string into active data array. See doc/PHONEMES.md for full catalog and syntax.
 Usage: [phonemes] tts!
 ```
 

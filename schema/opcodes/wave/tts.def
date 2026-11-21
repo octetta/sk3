@@ -7,7 +7,7 @@
 @match    ()
 @summary  render bracketed phonetic DSL string to data array
 @doc
-Renders bracketed phonetic DSL string into active data array.
+Renders bracketed phonetic DSL string into active data array. See doc/PHONEMES.md for full catalog and syntax.
 Usage: [phonemes] tts!
 @code
     return skode_exec_tts(ctx, s, args, argc);
