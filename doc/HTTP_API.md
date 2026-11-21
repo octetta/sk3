@@ -94,7 +94,7 @@ To avoid collision with Skode's native `/` operator prefix (such as `/ks` for lo
 | **HTTP** | `POST /-reset` or `/.reset` | `text/plain` | Resets the connection's `skode_t` context, clearing all macros. |
 | **HTTP** | `GET /` | `text/plain` | Welcome banner with endpoint overview and version. |
 | **HTTP** | `GET /-status` or `/.status` | `application/json` | JSON health check and metrics (`active_connections`, `raw_clients`, `http_clients`, `ws_clients`, `total_requests`, `total_commands`, `errors`). |
-| **HTTP** | `GET /-version` or `/.version`| `text/plain` | Returns current engine version string (e.g. `1.3.20\n`). |
+| **HTTP** | `GET /-version` or `/.version`| `text/plain` | Returns current engine version string (e.g. `1.4.0\n`). |
 | **HTTP** | `OPTIONS *` | *(none)* | CORS preflight: returns HTTP 204 No Content with PNA headers. |
 
 ---
@@ -247,7 +247,7 @@ v0 w0 f440 a0 l1
 v0 ?
 voice 0: freq=261.63 wave=0 amp=1.00 gate=1 ...
 -status
-{"status":"ok","version":"1.3.20","port":60440,"active_connections":1,"raw_clients":1,"http_clients":0,"ws_clients":0,"total_requests":4,"total_commands":4,"errors":0}
+{"status":"ok","version":"1.4.0","port":60440,"active_connections":1,"raw_clients":1,"http_clients":0,"ws_clients":0,"total_requests":4,"total_commands":4,"errors":0}
 ```
 
 ### B. `socat`

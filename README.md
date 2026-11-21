@@ -14,7 +14,7 @@
 
 `sk3` (formerly skred) is a lightweight, high-performance polyphonic synthesizer, deterministic audio engine, and embedded Forth-inspired domain specific language (`skode`) for generative sound design and sequencing.
 
-Version: `1.3.20`
+Version: `1.4.0`
 
 ## Features
 
