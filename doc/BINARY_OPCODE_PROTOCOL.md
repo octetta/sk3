@@ -21,10 +21,42 @@ BOP satisfies these demands with:
 
 ## 2. Binary Framing & Memory Layout
 
-### 2.1 C Struct Definition (`skred_opcode_msg_t`)
+### 2.1 Visual Memory & Wire Map
 
-Defined in [src/api.h](file:///home/stewartj/book/sk3/src/api.h):
+```text
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|       Opcode (uint16_t)       |        Voice (int16_t)        |  Bytes 0..3
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|  argc (uint8) | flags (uint8) |       Reserved (uint16_t)     |  Bytes 4..7
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                    args[0] (IEEE 754 Float32)                 |  Bytes 8..11
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                    args[1] (IEEE 754 Float32)                 |  Bytes 12..15
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                              ...                              |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                    args[7] (IEEE 754 Float32)                 |  Bytes 36..39
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+```
 
+| Byte Offset | Field | Type | Description |
+| :---: | :--- | :--- | :--- |
+| `0..1` | `opcode` | `uint16_t` (Little-Endian) | Opcode ID (0..65535). Built-ins (1..127) or discrete opcodes (128+). |
+| `2..3` | `voice` | `int16_t` (Little-Endian) | Target voice index (0..63), or `-1` for polyphonic broadcast. |
+| `4` | `argc` | `uint8_t` | Number of active float arguments (0..8). |
+| `5` | `flags` | `uint8_t` | `0x00` = Variable-length wire frame (`8 + 4*argc` bytes); `0x01` = Fixed 40-byte stride. |
+| `6..7` | `reserved` | `uint16_t` | Reserved for alignment / future flags (must be 0). |
+| `8..11` | `args[0]` | `float` (IEEE 754 LE) | 1st parameter (e.g. frequency, amplitude, cutoff). |
+| `12..15`| `args[1]` | `float` (IEEE 754 LE) | 2nd parameter (e.g. resonance, detune). |
+| `...` | `args[2..7]` | `float` (IEEE 754 LE) | Parameters 3 through 8 (e.g. delay parameters, step programs). |
+
+### 2.2 Polyglot Client Definitions
+
+Different clients and languages consume this layout through their native idioms:
+
+#### C / C++ (Packed Struct)
 ```c
 #define SKRED_OPCODE_MSG_MAX_ARGS 8
 #define SKRED_BOP_FLAG_FIXED 0x01
@@ -41,7 +73,108 @@ typedef struct {
 #pragma pack(pop)
 ```
 
-### 2.2 Wire Framing (Variable-Length vs Fixed-Length)
+#### Python / NumPy (AI, SciPy, Jupyter, TouchDesigner)
+```python
+import struct
+import numpy as np
+
+# Format string: < (little-endian), H (uint16), h (int16), B (uint8), B (uint8), x (1 pad), x (1 pad), 8f (8 floats)
+BOP_STRUCT_FMT = "<HhbBx8f"
+BOP_HEADER_FMT = "<HhbBx"
+
+def pack_bop(opcode: int, voice: int, args: list[float], fixed: bool = False) -> bytes:
+    argc = len(args)
+    flags = 1 if fixed else 0
+    header = struct.pack("<HhBBH", opcode, voice, argc, flags, 0)
+    payload = struct.pack(f"<{argc}f", *args) if not fixed else struct.pack("<8f", *args + [0.0]*(8-argc))
+    return header + payload
+
+# NumPy Structured Dtype for zero-copy streaming arrays:
+bop_dtype = np.dtype([
+    ('opcode', '<u2'),
+    ('voice', '<i2'),
+    ('argc', 'u1'),
+    ('flags', 'u1'),
+    ('reserved', '<u2'),
+    ('args', '<f4', (8,))
+])
+```
+
+#### Rust (Game Dev, Bevy, Embedded)
+```rust
+#[repr(C, packed)]
+#[derive(Debug, Clone, Copy)]
+pub struct SkredOpcodeMsg {
+    pub opcode: u16,
+    pub voice: i16,
+    pub argc: u8,
+    pub flags: u8,
+    pub reserved: u16,
+    pub args: [f32; 8],
+}
+```
+
+#### Gleam (skode, mod-to-skode, sid-to-skode)
+```gleam
+import gleam/list
+
+pub fn pack_bop(opcode: Int, voice: Int, args: List(Float)) -> BitArray {
+  let argc = list.length(args)
+  let args_bits = list.fold(args, <<>>, fn(acc, f) {
+    <<acc:bits, f:float-32-little>>
+  })
+  <<opcode:16-little, voice:16-signed-little, argc:8, 0:8, 0:16, args_bits:bits>>
+}
+```
+
+#### TypeScript / JavaScript (WebAudio, Strudel, skred-web)
+```typescript
+export interface BopMessage {
+  opcode: number;
+  voice: number;
+  args: number[];
+}
+
+export function packBop(msg: BopMessage): ArrayBuffer {
+  const byteLength = 8 + msg.args.length * 4;
+  const buffer = new ArrayBuffer(byteLength);
+  const view = new DataView(buffer);
+  view.setUint16(0, msg.opcode, true);
+  view.setInt16(2, msg.voice, true);
+  view.setUint8(4, msg.args.length);
+  view.setUint8(5, 0); // flags = variable wire length
+  view.setUint16(6, 0, true);
+  for (let i = 0; i < msg.args.length; i++) {
+    view.setFloat32(8 + i * 4, msg.args[i], true);
+  }
+  return buffer;
+}
+```
+
+#### BEAM / Elixir
+```elixir
+def pack_bop(opcode, voice, args) when is_list(args) do
+  argc = length(args)
+  floats = for f <- args, into: <<>>, do: <<f::float-little-32>>
+  <<opcode::little-16, voice::little-signed-16, argc::8, 0::8, 0::16, floats::binary>>
+end
+```
+
+#### Urbit (Hoon)
+```hoon
+|=  [op=@ud v=@ud args=(list @rs)]
+^-  @ux
+%+  can  3
+:~  [2 op]
+    [2 v]
+    [1 (lent args)]
+    [1 0]
+    [2 0]
+    [4 `@ux`(snag 0 args)]
+==
+```
+
+### 2.3 Wire Framing Modes
 
 - **Packed Variable-Length Framing (Default, `flags & 0x01 == 0`)**:
   - Record Size: `8 + (argc * 4)` bytes.
@@ -251,3 +384,65 @@ Commonly used opcodes for direct BOP dispatching:
 | `72` | `SKODE_OP_POLY_NOTE` | 4..5 | Polyphonic note (group, key, vel, note, detune) |
 | `73` | `SKODE_OP_POLY_RELEASE` | 2..3 | Polyphonic note release |
 | `128+`| Discrete Opcodes | 1..8 | High-level synthesis macros and DSP modifiers |
+
+---
+
+## 6. Code Generation & Contract Architecture (`mkopcodes` & `mksynth`)
+
+All supported opcodes, their discrete opcode IDs (128+), clause arities, parameter matching constraints, and reference documentation are **100% declaratively generated** from modular `.def` schema specifications:
+
+```
+ schema/opcodes/*.def  ──> tools/mkopcodes ──> src/gen/skode_dict_gen.h (Enums & Clauses)
+                                           ──> src/gen/skred_opcodes_gen.c (RT Dispatch Table)
+                                           ──> doc/REFERENCE.md (Full Opcode Manual)
+                                           ──> src/gen/skode-doc.inc (In-Engine REPL Help)
+
+ schema/synth/*.def    ──> tools/mksynth   ──> src/gen/synth_state_gen.h (Voice States)
+                                           ──> src/gen/synth_voice_ops_gen.c (Voice Ops)
+                                           ──> src/gen/test_schema_bounds_gen.c (Tests)
+                                           ──> ../skode/src/skode/gen/*.gleam (Gleam Bindings)
+```
+
+1. **`tools/mkopcodes`**:
+   - Parses `schema/opcodes/*.def` covering 304 words and 613 clauses.
+   - Automatically assigns discrete realtime opcode IDs starting at `SKODE_OP_DISCRETE_BASE = 128` (up to `SKODE_REALTIME_OPS_CAPACITY = 1024`).
+   - Generates [doc/REFERENCE.md](REFERENCE.md), which documents every word, clause arity, execution model (Realtime vs Immediate), and discrete opcode ID.
+   - Runs on `make gen` in the repository root.
+
+2. **`tools/mksynth`**:
+   - Compiles `schema/synth/*.def` specifying all voice parameters (frequency, amplitude, envelope stages, wave tables, filters, links).
+   - Guarantees strict boundary invariants and compiles directly to both C headers and typed Gleam source files in `skode/src/skode/gen/`.
+
+---
+
+## 7. Gleam / Skode Ecosystem & Chiptune Integration
+
+The Gleam client suite (`skode`, `mod-to-skode`, `sid-to-skode`, and `skode/app/editor`) integrates with BOP through a unified architecture:
+
+### 7.1 Gleam `BitArray` Driver
+Gleam programs can pack BOP frames directly using type-safe bitstrings without FFI glue:
+
+```gleam
+import gleam/list
+
+pub fn pack_opcode(opcode: Int, voice: Int, args: List(Float)) -> BitArray {
+  let argc = list.length(args)
+  let payload = list.fold(args, <<>>, fn(acc, val) {
+    <<acc:bits, val:float-32-little>>
+  })
+  <<opcode:16-little, voice:16-signed-little, argc:8, 0:8, 0:16, payload:bits>>
+}
+```
+
+### 7.2 `sid-to-skode` & `mod-to-skode` Acceleration
+In the chiptune replayers, the audio driver previously serialized register changes into ASCII Forth commands (`v0 f440 w2 a0.8`) on every 50/60 Hz raster tick. 
+
+Under BOP:
+- Each voice register update maps directly to a 12-byte packed message (`SKODE_OP_FREQ`, `SKODE_OP_AMP`, `SKODE_OP_PHASE_DISTORTION`, `SKODE_OP_TRIGGER`).
+- All 3 SID voices or 4 MOD channels for a tick are batched into a contiguous 36–48 byte typed `Uint8Array`.
+- In WebAssembly, this is dispatched directly via `_skred_dispatch_batch(ptr, len, processed)` or over a binary WebSocket frame, completely eliminating JavaScript string allocation and garbage collection pauses.
+
+### 7.3 `skode` Editor App
+The `skode` editor app utilizes a dual-path architecture:
+- **ASCII Forth Path**: Used for the text editor, script saving, macro definitions, and REPL interactions where human readability and Forth dynamism are desired.
+- **BOP Binary Path**: Used for high-rate continuous parameter controls (XY controller pads, virtual sliders, modulation wheels, and live oscilloscope data streaming) with sub-millisecond, zero-allocation response.
