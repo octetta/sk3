@@ -1127,13 +1127,7 @@ static void toggle_console(void) {
     render_all();
 }
 
-static int ignore_x_errors(Display *d, XErrorEvent *e) {
-    char msg[256];
-    XGetErrorText(d, e->error_code, msg, sizeof(msg));
-    fprintf(stderr, "X11 ERROR: %s (request_code=%d, minor_code=%d, resource_id=0x%lx)\n",
-            msg, e->request_code, e->minor_code, e->resourceid);
-    return 0;
-}
+
 
 int main(int argc, char **argv) {
     (void)argc; (void)argv;
@@ -1144,7 +1138,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    XSetErrorHandler(ignore_x_errors);
+
 
     screen = DefaultScreen(dpy);
     Window root = RootWindow(dpy, screen);
@@ -1205,46 +1199,7 @@ int main(int argc, char **argv) {
     XClassHint class_hint = { "sk3-gui", "Sk3" };
     XSetClassHint(dpy, win, &class_hint);
 
-    Atom atom_net_wm_type = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE", False);
-    Atom atom_net_wm_type_normal = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE_NORMAL", False);
-    XChangeProperty(dpy, win, atom_net_wm_type, XA_ATOM, 32, PropModeReplace,
-                    (unsigned char *)&atom_net_wm_type_normal, 1);
-
-    // Disable minimization/iconification via Motif WM Hints (only allow MOVE, RESIZE, CLOSE)
-    struct {
-        unsigned long flags;
-        unsigned long functions;
-        unsigned long decorations;
-        long input_mode;
-        unsigned long status;
-    } mwm = {
-        .flags = (1L << 0), /* MWM_HINTS_FUNCTIONS */
-        .functions = (1L << 1) | (1L << 2) | (1L << 5), /* RESIZE | MOVE | CLOSE (NO MINIMIZE) */
-        .decorations = 1,
-        .input_mode = 0,
-        .status = 0
-    };
-    Atom atom_motif = XInternAtom(dpy, "_MOTIF_WM_HINTS", False);
-    XChangeProperty(dpy, win, atom_motif, atom_motif, 32, PropModeReplace,
-                    (unsigned char *)&mwm, 5);
-
-    // Disallow MINIMIZE action in EWMH
-    Atom atom_allowed = XInternAtom(dpy, "_NET_WM_ALLOWED_ACTIONS", False);
-    Atom allowed_acts[4] = {
-        XInternAtom(dpy, "_NET_WM_ACTION_MOVE", False),
-        XInternAtom(dpy, "_NET_WM_ACTION_RESIZE", False),
-        XInternAtom(dpy, "_NET_WM_ACTION_CLOSE", False),
-        XInternAtom(dpy, "_NET_WM_ACTION_FULLSCREEN", False)
-    };
-    XChangeProperty(dpy, win, atom_allowed, XA_ATOM, 32, PropModeReplace,
-                    (unsigned char *)allowed_acts, 4);
-
-    Atom atom_net_wm_state = XInternAtom(dpy, "_NET_WM_STATE", False);
-    Atom atom_net_wm_state_above = XInternAtom(dpy, "_NET_WM_STATE_ABOVE", False);
-    XChangeProperty(dpy, win, atom_net_wm_state, XA_ATOM, 32, PropModeReplace,
-                    (unsigned char *)&atom_net_wm_state_above, 1);
-
-    // Set WM hints to accept keyboard input
+    // Set WM hints to accept keyboard input and initialize in normal state
     XWMHints *hints = XAllocWMHints();
     if (hints) {
         hints->flags = InputHint | StateHint;
@@ -1278,20 +1233,9 @@ int main(int argc, char **argv) {
     backbuffer = XCreatePixmap(dpy, win, win_w, win_h, DefaultDepth(dpy, screen));
     xft_draw = XftDrawCreate(dpy, backbuffer, visual, cmap);
 
-    XMapRaised(dpy, win);
+    XMapWindow(dpy, win);
     start_engine();
     render_all();
-
-    Atom atom_net_active = XInternAtom(dpy, "_NET_ACTIVE_WINDOW", False);
-    XEvent act_ev = {0};
-    act_ev.xclient.type = ClientMessage;
-    act_ev.xclient.window = win;
-    act_ev.xclient.message_type = atom_net_active;
-    act_ev.xclient.format = 32;
-    act_ev.xclient.data.l[0] = 2; // Pager / user request
-    act_ev.xclient.data.l[1] = CurrentTime;
-    XSendEvent(dpy, root, False, SubstructureRedirectMask | SubstructureNotifyMask, &act_ev);
-
     XFlush(dpy);
 
     int running = 1;
@@ -1695,31 +1639,7 @@ int main(int argc, char **argv) {
                 }
                 break;
 
-            case UnmapNotify:
-                if (ev.xunmap.window == win && running) {
-                    XMapRaised(dpy, win);
-                }
-                break;
 
-            case PropertyNotify:
-                if (ev.xproperty.window == win && running) {
-                    Atom actual_type;
-                    int actual_format;
-                    unsigned long nitems, bytes_after;
-                    unsigned char *prop = NULL;
-                    Atom atom_wm_state = XInternAtom(dpy, "WM_STATE", False);
-                    if (ev.xproperty.atom == atom_wm_state &&
-                        XGetWindowProperty(dpy, win, atom_wm_state, 0, 2, False,
-                                           AnyPropertyType, &actual_type, &actual_format,
-                                           &nitems, &bytes_after, &prop) == Success && prop) {
-                        unsigned long state = *(unsigned long *)prop;
-                        XFree(prop);
-                        if (state == IconicState) {
-                            XMapRaised(dpy, win);
-                        }
-                    }
-                }
-                break;
 
             case ClientMessage:
                 if ((Atom)ev.xclient.data.l[0] == atom_wm_delete_window) {
