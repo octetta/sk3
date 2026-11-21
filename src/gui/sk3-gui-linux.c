@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <sys/time.h>
 #include <sys/select.h>
+#include <poll.h>
 
 #include "api.h"
 #include "skred.h"
@@ -1201,10 +1202,10 @@ int main(int argc, char **argv) {
     XClassHint class_hint = { "sk3-gui", "Sk3" };
     XSetClassHint(dpy, win, &class_hint);
 
-    Atom atom_net_wm_pid = XInternAtom(dpy, "_NET_WM_PID", False);
-    unsigned long current_pid = (unsigned long)getpid();
-    XChangeProperty(dpy, win, atom_net_wm_pid, XA_CARDINAL, 32, PropModeReplace,
-                    (const unsigned char *)&current_pid, 1);
+    Atom atom_net_wm_type = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE", False);
+    Atom atom_net_wm_type_normal = XInternAtom(dpy, "_NET_WM_WINDOW_TYPE_NORMAL", False);
+    XChangeProperty(dpy, win, atom_net_wm_type, XA_ATOM, 32, PropModeReplace,
+                    (unsigned char *)&atom_net_wm_type_normal, 1);
 
     // Set WM hints to accept keyboard input
     XWMHints *hints = XAllocWMHints();
@@ -1232,15 +1233,28 @@ int main(int argc, char **argv) {
     XChangeProperty(dpy, win, atom_xdnd_aware, XA_ATOM, 32,
                     PropModeReplace, (unsigned char *)&xdnd_version, 1);
 
-    gc = XCreateGC(dpy, win, 0, NULL);
+    XGCValues gcv;
+    gcv.graphics_exposures = False;
+    gc = XCreateGC(dpy, win, GCGraphicsExposures, &gcv);
     cur_buf_w = win_w;
     cur_buf_h = win_h;
     backbuffer = XCreatePixmap(dpy, win, win_w, win_h, DefaultDepth(dpy, screen));
     xft_draw = XftDrawCreate(dpy, backbuffer, visual, cmap);
 
-    XMapWindow(dpy, win);
+    XMapRaised(dpy, win);
     start_engine();
     render_all();
+
+    Atom atom_net_active = XInternAtom(dpy, "_NET_ACTIVE_WINDOW", False);
+    XEvent act_ev = {0};
+    act_ev.xclient.type = ClientMessage;
+    act_ev.xclient.window = win;
+    act_ev.xclient.message_type = atom_net_active;
+    act_ev.xclient.format = 32;
+    act_ev.xclient.data.l[0] = 2; // Pager / user request
+    act_ev.xclient.data.l[1] = CurrentTime;
+    XSendEvent(dpy, root, False, SubstructureRedirectMask | SubstructureNotifyMask, &act_ev);
+
     XFlush(dpy);
 
     int running = 1;
@@ -1249,34 +1263,10 @@ int main(int argc, char **argv) {
     gettimeofday(&last_blink, NULL);
 
     while (running) {
-        // Handle cursor blinking timer when no events are queued
-        while (XPending(dpy) == 0) {
-            struct timeval now;
-            gettimeofday(&now, NULL);
-            long elapsed_ms = (now.tv_sec - last_blink.tv_sec) * 1000 + (now.tv_usec - last_blink.tv_usec) / 1000;
-            long remain_ms = 500 - elapsed_ms;
-            if (remain_ms <= 0) {
-                cursor_visible = !cursor_visible;
-                last_blink = now;
-                if (!is_collapsed && active_focus == 2) {
-                    render_all();
-                }
-                remain_ms = 500;
-            }
-
-            fd_set fds;
-            FD_ZERO(&fds);
-            FD_SET(x11_fd, &fds);
-            struct timeval tv;
-            tv.tv_sec = remain_ms / 1000;
-            tv.tv_usec = (remain_ms % 1000) * 1000;
-            int sr = select(x11_fd + 1, &fds, NULL, NULL, &tv);
-            if (sr > 0) break;
-        }
-
-        XEvent ev;
-        XNextEvent(dpy, &ev);
-        switch (ev.type) {
+        while (XPending(dpy) > 0) {
+            XEvent ev;
+            XNextEvent(dpy, &ev);
+            switch (ev.type) {
             case Expose:
                 render_all();
                 break;
@@ -1680,7 +1670,31 @@ int main(int argc, char **argv) {
                     handle_xdnd_drop(&ev.xclient);
                 }
                 break;
+            }
+            if (!running) break;
         }
+
+        if (!running) break;
+
+        // Check cursor blinking timer when no events are queued
+        struct timeval now;
+        gettimeofday(&now, NULL);
+        long elapsed_ms = (now.tv_sec - last_blink.tv_sec) * 1000 + (now.tv_usec - last_blink.tv_usec) / 1000;
+        int timeout_ms = 500 - (int)elapsed_ms;
+        if (timeout_ms <= 0) {
+            cursor_visible = !cursor_visible;
+            last_blink = now;
+            if (!is_collapsed && active_focus == 2) {
+                render_all();
+            }
+            timeout_ms = 500;
+        }
+
+        struct pollfd pfd;
+        pfd.fd = x11_fd;
+        pfd.events = POLLIN;
+        pfd.revents = 0;
+        poll(&pfd, 1, timeout_ms);
     }
 
     save_gui_config();

@@ -40,7 +40,7 @@ DIST_LINUX_PLATFORM_ROOT ?= $(DIST_DIR)/linux-x86_64
 DIST_LINUX_PREFIX ?= $(DIST_LINUX_PLATFORM_ROOT)/skred-$(VERSION)-maxed
 DIST_LINUX_ARCHIVE ?= $(DIST_LINUX_PLATFORM_ROOT)/skred-$(VERSION)-maxed-linux-x86_64.tar.gz
 
-.PHONY: default help all gen test test-schema native clean wasm wasm-test dist-api dist-api-wasm dist-api-linux-armhf dist-api-linux-aarch64 dist-api-windows windows-cross-libs sync-skode dsp-demos dsp-experiments
+.PHONY: default help all gen test test-schema native gui clean wasm wasm-test dist-api dist-api-wasm dist-api-linux-armhf dist-api-linux-aarch64 dist-api-windows windows-cross-libs sync-skode dsp-demos dsp-experiments
 
 default: help
 
@@ -50,6 +50,7 @@ help:
 	@echo "  make all           - Build native C engine, libraries, and sk3 CLI"
 	@echo "  make gen           - Run declarative compilers (mksynth and mkopcodes)"
 	@echo "  make native        - Build native library and executables in $(BUILD_DIR)/"
+	@echo "  make gui           - Build native sk3-gui executable in $(BUILD_DIR)/"
 	@echo "  make dsp-demos     - Build & render all standalone DSP audio demo WAV files"
 	@echo "  make dsp-experiments - Build all standalone DSP toolkit experiment binaries"
 	@echo "  make test          - Run all schema and engine contract tests"
@@ -94,6 +95,10 @@ test-schema: $(SYNTH_GEN_OUTPUTS)
 native: gen
 	$(CMAKE) -B $(BUILD_DIR) -S . -DCMAKE_BUILD_TYPE=$(BUILD_TYPE) $(CMAKE_PLATFORM_ARGS)
 	$(CMAKE) --build $(BUILD_DIR)
+
+gui: gen
+	$(CMAKE) -B $(BUILD_DIR) -S . -DCMAKE_BUILD_TYPE=$(BUILD_TYPE) $(CMAKE_PLATFORM_ARGS)
+	$(CMAKE) --build $(BUILD_DIR) --target sk3-gui
 
 dsp-experiments: native
 	$(CMAKE) --build $(BUILD_DIR) --target dsp_experiments
