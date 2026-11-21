@@ -60,7 +60,7 @@ static HFONT g_hFontMono = NULL;
 
 static sk3_font_size_t g_curFontSize = SK3_FONT_SIZE_MEDIUM;
 static sk3_theme_t g_curTheme = SK3_THEME_DARK;
-static int g_isCollapsed = 1; /* Start collapsed by default */
+static int g_isCollapsed = 0; /* Default expanded */
 static int g_prevExpandedH = CLIENT_DEFAULT_H;
 
 typedef struct {
@@ -715,6 +715,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         g_prevExpandedH = cfg.prev_expanded_h;
         if (cfg.window_width >= CLIENT_DEFAULT_W) client_w = cfg.window_width;
         if (cfg.window_height >= CLIENT_COLLAPSED_H) client_h = g_isCollapsed ? CLIENT_COLLAPSED_H : cfg.window_height;
+    }
+
+    if (getenv("SK3_GUI_EXPANDED") || getenv("SKRED_GUI_EXPANDED")) {
+        g_isCollapsed = 0;
+        client_h = (g_prevExpandedH > CLIENT_COLLAPSED_H + 100) ? g_prevExpandedH : CLIENT_DEFAULT_H;
     }
 
     RECT winRc;

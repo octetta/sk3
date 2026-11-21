@@ -143,8 +143,10 @@ dist-api: native
 		chmod +x $(DIST_PREFIX)/sk3.app/Contents/MacOS/sk3-gui; \
 		if command -v xattr >/dev/null 2>&1; then xattr -cr $(DIST_PREFIX)/sk3.app; fi; \
 		if command -v codesign >/dev/null 2>&1; then codesign --force --deep --sign - --entitlements assets/macos/entitlements.plist $(DIST_PREFIX)/sk3.app; fi; \
+		if [ -f "$(DIST_PLATFORM_ROOT)/macos-gui-screenshot.png" ]; then cp -f "$(DIST_PLATFORM_ROOT)/macos-gui-screenshot.png" "$(DIST_PREFIX)/"; fi; \
 		$(CMAKE) -E chdir $(DIST_PLATFORM_ROOT) $(CMAKE) -E tar czf skred-$(VERSION)-maxed.tar.gz --format=gnutar skred-$(VERSION)-maxed; \
 	else \
+		if [ -f "$(DIST_PLATFORM_ROOT)/linux-gui-screenshot.png" ]; then cp -f "$(DIST_PLATFORM_ROOT)/linux-gui-screenshot.png" "$(DIST_PREFIX)/"; fi; \
 		$(CMAKE) -E chdir $(DIST_PLATFORM_ROOT) $(CMAKE) -E tar czf skred-$(VERSION)-maxed-linux-x86_64.tar.gz --format=gnutar skred-$(VERSION)-maxed; \
 	fi
 	@echo "==> Distribution archive ready at $(DIST_PLATFORM_ROOT)"
@@ -167,6 +169,9 @@ windows-cross-libs: gen
 	$(CMAKE) --install build_cross_windows_zig_maxed --prefix $(DIST_DIR)/windows-x86_64/skred-$(VERSION)-maxed
 
 dist-api-windows: windows-cross-libs
+	@if [ -f "$(DIST_DIR)/windows-x86_64/windows-gui-screenshot.png" ]; then \
+		cp -f "$(DIST_DIR)/windows-x86_64/windows-gui-screenshot.png" "$(DIST_DIR)/windows-x86_64/skred-$(VERSION)-maxed/"; \
+	fi
 	$(CMAKE) -E chdir $(DIST_DIR)/windows-x86_64 $(CMAKE) -E tar cf skred-$(VERSION)-maxed.zip \
 		--format=zip skred-$(VERSION)-maxed
 

@@ -1230,6 +1230,11 @@ int main(int argc, char **argv) {
         prev_expanded_h = DEFAULT_HEIGHT;
     }
 
+    if (getenv("SK3_GUI_EXPANDED") || getenv("SKRED_GUI_EXPANDED")) {
+        is_collapsed = 0;
+        win_h = (prev_expanded_h > DEFAULT_COLLAPSED_HEIGHT + 100) ? prev_expanded_h : DEFAULT_HEIGHT;
+    }
+
     update_palette();
     load_fonts();
 

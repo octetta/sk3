@@ -64,10 +64,31 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev libx11-dev libxft-dev ninja-build cmake
+          sudo apt-get install -y libasound2-dev libx11-dev libxft-dev ninja-build cmake xvfb scrot openbox
 
       - name: Build Linux API distribution
         run: make dist-api
+
+      - name: Capture Linux GUI screenshot
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          SKRED_NO_AUDIO=1 SK3_GUI_EXPANDED=1 xvfb-run -s "-screen 0 1024x768x24" bash -c '
+            openbox &
+            sleep 1
+            dist/linux-x86_64/skred-${VERSION}-maxed/bin/sk3-gui &
+            APP_PID=$!
+            sleep 3
+            scrot release-assets/raw-screenshot.png || import -window root release-assets/raw-screenshot.png || true
+            kill $APP_PID 2>/dev/null || true
+          '
+          if [ -f release-assets/raw-screenshot.png ]; then
+            # Crop to show ONLY the app window
+            convert release-assets/raw-screenshot.png -trim +repage release-assets/linux-gui-screenshot.png || cp release-assets/raw-screenshot.png release-assets/linux-gui-screenshot.png
+            rm -f release-assets/raw-screenshot.png
+            cp release-assets/linux-gui-screenshot.png "dist/linux-x86_64/skred-${VERSION}-maxed/"
+            cmake -E chdir dist/linux-x86_64 cmake -E tar czf "skred-${VERSION}-maxed-linux-x86_64.tar.gz" --format=gnutar "skred-${VERSION}-maxed"
+          fi
 
       - name: Verify and name release asset
         shell: bash
@@ -78,6 +99,7 @@ jobs:
           tar -tzf "$source" > archive-contents.txt
           grep -q "skred-${VERSION}-maxed/include/skred/api.h" archive-contents.txt
           grep -q "skred-${VERSION}-maxed/bin/sk3-gui" archive-contents.txt
+          grep -q "skred-${VERSION}-maxed/linux-gui-screenshot.png" archive-contents.txt
           mkdir -p release-assets
           cp "$source" "release-assets/"
 
@@ -208,6 +230,44 @@ jobs:
       - name: Build maxed universal macOS API distribution
         run: make dist-api MACOS_UNIVERSAL=1
 
+      - name: Capture macOS GUI screenshot
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          APP_PATH="dist/macos-universal/skred-${VERSION}-maxed/sk3.app/Contents/MacOS/sk3-gui"
+          if [ -f "$APP_PATH" ]; then
+            SKRED_NO_AUDIO=1 SK3_GUI_EXPANDED=1 "$APP_PATH" &
+            APP_PID=$!
+            sleep 3
+            screencapture -x release-assets/raw-macos.png || true
+            kill $APP_PID 2>/dev/null || true
+          fi
+          if [ -f release-assets/raw-macos.png ]; then
+            # Crop menu bar (top 30px) and trim black desktop wallpaper to show ONLY the window
+            python3 -c "
+from PIL import Image
+im = Image.open('release-assets/raw-macos.png')
+w, h = im.size
+min_x, min_y, max_x, max_y = w, h, 0, 0
+for y in range(32, h):
+    for x in range(w):
+        r, g, b = im.getpixel((x, y))[:3]
+        if (r, g, b) != (0, 0, 0):
+            if x < min_x: min_x = x
+            if x > max_x: max_x = x
+            if y < min_y: min_y = y
+            if y > max_y: max_y = y
+if max_x > min_x and max_y > min_y:
+    cropped = im.crop((min_x, min_y, max_x + 1, max_y + 1))
+    cropped.save('release-assets/macos-gui-screenshot.png')
+else:
+    im.save('release-assets/macos-gui-screenshot.png')
+" || cp release-assets/raw-macos.png release-assets/macos-gui-screenshot.png
+            rm -f release-assets/raw-macos.png
+            cp release-assets/macos-gui-screenshot.png "dist/macos-universal/skred-${VERSION}-maxed/"
+            cmake -E chdir dist/macos-universal cmake -E tar czf "skred-${VERSION}-maxed.tar.gz" --format=gnutar "skred-${VERSION}-maxed"
+          fi
+
       - name: Verify and name release asset
         shell: bash
         run: |
@@ -218,21 +278,9 @@ jobs:
           tar -tzf "$source" > archive-contents.txt
           grep -q "skred-${VERSION}-maxed/include/skred/api.h" archive-contents.txt
           grep -q "skred-${VERSION}-maxed/sk3.app/Contents/MacOS/sk3-gui" archive-contents.txt
+          grep -q "skred-${VERSION}-maxed/macos-gui-screenshot.png" archive-contents.txt
           mkdir -p release-assets
           cp "$source" "release-assets/$asset"
-
-      - name: Capture macOS GUI screenshot
-        shell: bash
-        run: |
-          mkdir -p release-assets
-          APP_PATH="dist/macos-universal/skred-${VERSION}-maxed/sk3.app/Contents/MacOS/sk3-gui"
-          if [ -f "$APP_PATH" ]; then
-            "$APP_PATH" &
-            APP_PID=$!
-            sleep 3
-            screencapture -x release-assets/macos-gui-screenshot.png || true
-            kill $APP_PID 2>/dev/null || true
-          fi
 
       - uses: actions/upload-artifact@v4
         with:
@@ -253,10 +301,37 @@ jobs:
           version: 0.13.0
 
       - name: Install Windows cross-build dependencies
-        run: sudo apt-get update && sudo apt-get install -y ninja-build binutils-mingw-w64-x86-64
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build binutils-mingw-w64-x86-64 xvfb scrot
+          sudo apt-get install -y wine64 || sudo apt-get install -y wine || true
 
       - name: Build maxed Windows API distribution
         run: make dist-api-windows
+
+      - name: Capture Windows GUI screenshot
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          EXE_PATH="dist/windows-x86_64/skred-${VERSION}-maxed/bin/sk3-gui.exe"
+          if [ -f "$EXE_PATH" ]; then
+            export WINEDLLOVERRIDES="mscoree,mshtml="
+            export WINEDEBUG=-all
+            wineboot --init || true
+            SKRED_NO_AUDIO=1 SK3_GUI_EXPANDED=1 xvfb-run -s "-screen 0 1024x768x24" bash -c "
+              (wine64 \"$EXE_PATH\" || wine \"$EXE_PATH\") &
+              sleep 4
+              scrot release-assets/raw-windows.png || import -window root release-assets/raw-windows.png || true
+              wineserver -k || true
+            " || true
+          fi
+          if [ -f release-assets/raw-windows.png ]; then
+            # Crop to show ONLY the app window
+            convert release-assets/raw-windows.png -trim +repage release-assets/windows-gui-screenshot.png || cp release-assets/raw-windows.png release-assets/windows-gui-screenshot.png
+            rm -f release-assets/raw-windows.png
+            cp release-assets/windows-gui-screenshot.png "dist/windows-x86_64/skred-${VERSION}-maxed/"
+            cmake -E chdir dist/windows-x86_64 cmake -E tar cf "skred-${VERSION}-maxed.zip" --format=zip "skred-${VERSION}-maxed"
+          fi
 
       - name: Verify and name release asset
         shell: bash
@@ -268,6 +343,7 @@ jobs:
           unzip -l "$source" > archive-contents.txt
           grep -q "skred-${VERSION}-maxed/include/skred/api.h" archive-contents.txt
           grep -q "skred-${VERSION}-maxed/bin/sk3-gui.exe" archive-contents.txt
+          grep -q "skred-${VERSION}-maxed/windows-gui-screenshot.png" archive-contents.txt
           mkdir -p release-assets
           cp "$source" "release-assets/$asset"
 
@@ -356,6 +432,14 @@ jobs:
           for asset in "${expected[@]}"; do
             test -s "release-assets/$asset"
           done
+          screenshots=(
+            "linux-gui-screenshot.png"
+            "macos-gui-screenshot.png"
+            "windows-gui-screenshot.png"
+          )
+          for shot in "${screenshots[@]}"; do
+            test -s "release-assets/$shot"
+          done
           (
             cd release-assets
             sha256sum "${expected[@]}" > SHA256SUMS
@@ -365,13 +449,27 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          notes_body=$(cat << 'EOF'
+### Native Desktop GUIs
+
+| Linux (X11 / Xft) | macOS (Cocoa) | Windows (Win32) |
+| :---: | :---: | :---: |
+| <a href="https://github.com/octetta/sk3/releases/download/TAG_PLACEHOLDER/linux-gui-screenshot.png"><img src="https://github.com/octetta/sk3/releases/download/TAG_PLACEHOLDER/linux-gui-screenshot.png" alt="Linux GUI" width="300" /></a> | <a href="https://github.com/octetta/sk3/releases/download/TAG_PLACEHOLDER/macos-gui-screenshot.png"><img src="https://github.com/octetta/sk3/releases/download/TAG_PLACEHOLDER/macos-gui-screenshot.png" alt="macOS GUI" width="300" /></a> | <a href="https://github.com/octetta/sk3/releases/download/TAG_PLACEHOLDER/windows-gui-screenshot.png"><img src="https://github.com/octetta/sk3/releases/download/TAG_PLACEHOLDER/windows-gui-screenshot.png" alt="Windows GUI" width="300" /></a> |
+
+EOF
+          )
+          notes_body="${notes_body//TAG_PLACEHOLDER/$TAG}"
+          echo "$notes_body" > /tmp/release_notes_intro.md
+
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists; uploading assets if needed."
             gh release upload "$TAG" release-assets/* --clobber
+            gh release edit "$TAG" --notes-file /tmp/release_notes_intro.md
           else
             release_args=(
               --target "$GITHUB_SHA"
               --title "SKRED $VERSION"
+              --notes-file /tmp/release_notes_intro.md
               --generate-notes
             )
             if [[ "$VERSION" == *-* ]]; then

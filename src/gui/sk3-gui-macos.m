@@ -8,12 +8,23 @@
 #include "sk3_gui_common.h"
 
 #define DEFAULT_WIDTH  640
-#define DEFAULT_HEIGHT 580
-#define COLLAPSED_HEIGHT 120
+#define DEFAULT_HEIGHT 520
+#define COLLAPSED_HEIGHT 84
+
+@interface Sk3FlippedView : NSView
+@end
+
+@implementation Sk3FlippedView
+- (BOOL)isFlipped {
+    return YES;
+}
+@end
 
 @interface Sk3AppDelegate : NSObject <NSApplicationDelegate, NSWindowDelegate, NSTextFieldDelegate, NSDraggingDestination>
 @property (strong, nonatomic) NSWindow *window;
 @property (strong, nonatomic) NSTextField *statusLabel;
+@property (strong, nonatomic) NSTextField *udpLbl;
+@property (strong, nonatomic) NSTextField *tcpLbl;
 @property (strong, nonatomic) NSTextField *udpField;
 @property (strong, nonatomic) NSTextField *tcpField;
 @property (strong, nonatomic) NSButton *restartBtn;
@@ -86,8 +97,25 @@
             break;
     }
 
+    if (self.curTheme == SK3_THEME_LIGHT) {
+        self.window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+    } else {
+        self.window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
+    }
+
     self.window.backgroundColor = bg;
     self.statusLabel.textColor = statusOk;
+
+    self.udpLbl.textColor = textDim;
+    self.tcpLbl.textColor = textDim;
+
+    self.udpField.backgroundColor = panel;
+    self.udpField.textColor = text;
+    self.udpField.font = [self currentMonoFont];
+
+    self.tcpField.backgroundColor = panel;
+    self.tcpField.textColor = text;
+    self.tcpField.font = [self currentMonoFont];
 
     self.cmdInput.backgroundColor = panel;
     self.cmdInput.textColor = text;
@@ -204,6 +232,48 @@
     sk3_gui_config_save(&cfg);
 }
 
+- (void)repositionViews {
+    NSRect b = self.window.contentView.bounds;
+    CGFloat w = b.size.width;
+    CGFloat h = b.size.height;
+
+    // Row 1
+    self.statusLabel.frame = NSMakeRect(16, 12, MAX(100, w - 170), 22);
+    self.themeBtn.frame = NSMakeRect(w - 146, 10, 78, 26);
+    self.fontBtn.frame = NSMakeRect(w - 64, 10, 48, 26);
+
+    // Row 2
+    self.udpLbl.frame = NSMakeRect(16, 46, 36, 20);
+    self.udpField.frame = NSMakeRect(54, 44, 58, 22);
+    self.tcpLbl.frame = NSMakeRect(120, 46, 36, 20);
+    self.tcpField.frame = NSMakeRect(158, 44, 58, 22);
+    self.restartBtn.frame = NSMakeRect(226, 42, 70, 26);
+    self.exitBtn.frame = NSMakeRect(300, 42, 56, 26);
+    self.toggleBtn.frame = NSMakeRect(360, 42, 62, 26);
+
+    if (!self.isCollapsed) {
+        // Row 3
+        self.cmdInput.frame = NSMakeRect(16, 78, MAX(100, w - 100), 24);
+        self.sendBtn.frame = NSMakeRect(w - 80, 76, 64, 26);
+
+        // Row 4
+        for (int i = 0; i < 10 && i < (int)self.macroBtns.count; i++) {
+            self.macroBtns[i].frame = NSMakeRect(16 + i * 32, 108, 30, 24);
+        }
+        self.silenceBtn.frame = NSMakeRect(MAX(340, w - 212), 108, 64, 24);
+        self.btnCopyLog.frame = NSMakeRect(MAX(408, w - 144), 108, 68, 24);
+        self.clearBtn.frame = NSMakeRect(MAX(480, w - 72), 108, 56, 24);
+
+        // Row 5
+        CGFloat logH = MAX(50, h - 146);
+        self.logScroll.frame = NSMakeRect(16, 138, MAX(100, w - 32), logH);
+    }
+}
+
+- (void)windowDidResize:(NSNotification *)notification {
+    [self repositionViews];
+}
+
 - (void)toggleConsole:(id)sender {
     self.isCollapsed = !self.isCollapsed;
     NSRect frame = self.window.frame;
@@ -236,6 +306,7 @@
         [self.window makeFirstResponder:self.cmdInput];
     }
     [self.window setFrame:frame display:YES animate:YES];
+    [self repositionViews];
 }
 
 - (void)cycleTheme:(id)sender {
@@ -389,8 +460,12 @@
     } else {
         self.curFontSize = SK3_FONT_SIZE_MEDIUM;
         self.curTheme = SK3_THEME_DARK;
-        self.isCollapsed = YES;
+        self.isCollapsed = NO; // Start expanded by default
         self.prevExpandedH = DEFAULT_HEIGHT;
+    }
+
+    if (getenv("SK3_GUI_EXPANDED") || getenv("SKRED_GUI_EXPANDED")) {
+        self.isCollapsed = NO;
     }
 
     CGFloat initW = cfg.window_width > 0 ? (CGFloat)cfg.window_width : DEFAULT_WIDTH;
@@ -411,99 +486,81 @@
 
     [self.window registerForDraggedTypes:@[NSPasteboardTypeFileURL]];
 
-    NSView *content = self.window.contentView;
-    content.autoresizesSubviews = YES;
+    Sk3FlippedView *content = [[Sk3FlippedView alloc] initWithFrame:frame];
+    self.window.contentView = content;
 
     // Status Label
-    self.statusLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(20, 542, 450, 24)];
+    self.statusLabel = [[NSTextField alloc] initWithFrame:NSZeroRect];
     self.statusLabel.editable = NO;
     self.statusLabel.bezeled = NO;
     self.statusLabel.drawsBackground = NO;
     self.statusLabel.font = [NSFont boldSystemFontOfSize:14.0];
     self.statusLabel.stringValue = @"Starting audio engine...";
-    self.statusLabel.autoresizingMask = NSViewWidthSizable | NSViewMinYMargin;
     [content addSubview:self.statusLabel];
 
     // Theme Button (Row 1, right-aligned)
     self.themeBtn = [NSButton buttonWithTitle:[NSString stringWithUTF8String:sk3_theme_name(self.curTheme)] target:self action:@selector(cycleTheme:)];
-    self.themeBtn.frame = NSMakeRect(484, 540, 88, 28);
     self.themeBtn.bezelStyle = NSBezelStyleRounded;
-    self.themeBtn.autoresizingMask = NSViewMinXMargin | NSViewMinYMargin;
     [content addSubview:self.themeBtn];
 
     // Font Button (Row 1, right-aligned)
     self.fontBtn = [NSButton buttonWithTitle:[NSString stringWithUTF8String:sk3_font_size_name(self.curFontSize)] target:self action:@selector(cycleFontSize:)];
-    self.fontBtn.frame = NSMakeRect(576, 540, 50, 28);
     self.fontBtn.bezelStyle = NSBezelStyleRounded;
-    self.fontBtn.autoresizingMask = NSViewMinXMargin | NSViewMinYMargin;
     [content addSubview:self.fontBtn];
 
     // Ports Row: UDP
-    NSTextField *udpLbl = [[NSTextField alloc] initWithFrame:NSMakeRect(20, 508, 40, 22)];
-    udpLbl.editable = NO;
-    udpLbl.bezeled = NO;
-    udpLbl.drawsBackground = NO;
-    udpLbl.stringValue = @"UDP:";
-    udpLbl.font = [NSFont systemFontOfSize:13.0];
-    udpLbl.autoresizingMask = NSViewMinYMargin;
-    [content addSubview:udpLbl];
+    self.udpLbl = [[NSTextField alloc] initWithFrame:NSZeroRect];
+    self.udpLbl.editable = NO;
+    self.udpLbl.bezeled = NO;
+    self.udpLbl.drawsBackground = NO;
+    self.udpLbl.stringValue = @"UDP:";
+    self.udpLbl.font = [NSFont systemFontOfSize:13.0];
+    [content addSubview:self.udpLbl];
 
-    self.udpField = [[NSTextField alloc] initWithFrame:NSMakeRect(60, 506, 60, 24)];
+    self.udpField = [[NSTextField alloc] initWithFrame:NSZeroRect];
     self.udpField.stringValue = @"60440";
     self.udpField.font = [self currentMonoFont];
-    self.udpField.autoresizingMask = NSViewMinYMargin;
     [content addSubview:self.udpField];
 
     // TCP
-    NSTextField *tcpLbl = [[NSTextField alloc] initWithFrame:NSMakeRect(128, 508, 40, 22)];
-    tcpLbl.editable = NO;
-    tcpLbl.bezeled = NO;
-    tcpLbl.drawsBackground = NO;
-    tcpLbl.stringValue = @"TCP:";
-    tcpLbl.font = [NSFont systemFontOfSize:13.0];
-    tcpLbl.autoresizingMask = NSViewMinYMargin;
-    [content addSubview:tcpLbl];
+    self.tcpLbl = [[NSTextField alloc] initWithFrame:NSZeroRect];
+    self.tcpLbl.editable = NO;
+    self.tcpLbl.bezeled = NO;
+    self.tcpLbl.drawsBackground = NO;
+    self.tcpLbl.stringValue = @"TCP:";
+    self.tcpLbl.font = [NSFont systemFontOfSize:13.0];
+    [content addSubview:self.tcpLbl];
 
-    self.tcpField = [[NSTextField alloc] initWithFrame:NSMakeRect(168, 506, 60, 24)];
+    self.tcpField = [[NSTextField alloc] initWithFrame:NSZeroRect];
     self.tcpField.stringValue = @"60440";
     self.tcpField.font = [self currentMonoFont];
-    self.tcpField.autoresizingMask = NSViewMinYMargin;
     [content addSubview:self.tcpField];
 
     // Restart Button
     self.restartBtn = [NSButton buttonWithTitle:@"Restart" target:self action:@selector(restartClicked:)];
-    self.restartBtn.frame = NSMakeRect(236, 504, 70, 28);
     self.restartBtn.bezelStyle = NSBezelStyleRounded;
-    self.restartBtn.autoresizingMask = NSViewMinYMargin;
     [content addSubview:self.restartBtn];
 
     // Exit Button
     self.exitBtn = [NSButton buttonWithTitle:@"Exit" target:self action:@selector(exitClicked:)];
-    self.exitBtn.frame = NSMakeRect(310, 504, 60, 28);
     self.exitBtn.bezelStyle = NSBezelStyleRounded;
-    self.exitBtn.autoresizingMask = NSViewMinYMargin;
     [content addSubview:self.exitBtn];
 
     // Console Toggle Button
     self.toggleBtn = [NSButton buttonWithTitle:self.isCollapsed ? @"Show" : @"Hide" target:self action:@selector(toggleConsole:)];
-    self.toggleBtn.frame = NSMakeRect(374, 504, 65, 28);
     self.toggleBtn.bezelStyle = NSBezelStyleRounded;
-    self.toggleBtn.autoresizingMask = NSViewMinYMargin;
     [content addSubview:self.toggleBtn];
 
     // Command Input Field (Monospaced! No label above it taking up space)
-    self.cmdInput = [[NSTextField alloc] initWithFrame:NSMakeRect(20, 442, 500, 28)];
+    self.cmdInput = [[NSTextField alloc] initWithFrame:NSZeroRect];
     self.cmdInput.placeholderString = @"e.g. v0 w1 f440 a-6 l1; or (120 4 (b-1 c0))";
     self.cmdInput.font = [self currentMonoFont];
     self.cmdInput.delegate = self;
-    self.cmdInput.autoresizingMask = NSViewWidthSizable | NSViewMinYMargin;
     [content addSubview:self.cmdInput];
 
     // Send Button
     self.sendBtn = [NSButton buttonWithTitle:@"Send" target:self action:@selector(sendClicked:)];
-    self.sendBtn.frame = NSMakeRect(530, 441, 90, 30);
     self.sendBtn.bezelStyle = NSBezelStyleRounded;
-    self.sendBtn.autoresizingMask = NSViewMinXMargin | NSViewMinYMargin;
     [content addSubview:self.sendBtn];
 
     // Action Buttons: Macros 0..9, Silence, Copy Log, Clear Log
@@ -512,45 +569,35 @@
         NSString *title = [NSString stringWithFormat:@"%d", i];
         NSButton *mBtn = [NSButton buttonWithTitle:title target:self action:@selector(macroClicked:)];
         mBtn.tag = i;
-        mBtn.frame = NSMakeRect(20 + i * 36, 404, 34, 28);
         mBtn.bezelStyle = NSBezelStyleRounded;
-        mBtn.autoresizingMask = NSViewMinYMargin;
         [content addSubview:mBtn];
         [self.macroBtns addObject:mBtn];
     }
 
     self.silenceBtn = [NSButton buttonWithTitle:@"Silence" target:self action:@selector(silenceClicked:)];
-    self.silenceBtn.frame = NSMakeRect(386, 404, 76, 28);
     self.silenceBtn.bezelStyle = NSBezelStyleRounded;
-    self.silenceBtn.autoresizingMask = NSViewMinXMargin | NSViewMinYMargin;
     [content addSubview:self.silenceBtn];
 
     self.btnCopyLog = [NSButton buttonWithTitle:@"Copy Log" target:self action:@selector(copyLog:)];
-    self.btnCopyLog.frame = NSMakeRect(466, 404, 82, 28);
     self.btnCopyLog.bezelStyle = NSBezelStyleRounded;
-    self.btnCopyLog.autoresizingMask = NSViewMinXMargin | NSViewMinYMargin;
     [content addSubview:self.btnCopyLog];
 
     self.clearBtn = [NSButton buttonWithTitle:@"Clear Log" target:self action:@selector(clearClicked:)];
-    self.clearBtn.frame = NSMakeRect(552, 404, 82, 28);
     self.clearBtn.bezelStyle = NSBezelStyleRounded;
-    self.clearBtn.autoresizingMask = NSViewMinXMargin | NSViewMinYMargin;
     [content addSubview:self.clearBtn];
 
     // Log ScrollView & TextView (Monospaced!)
-    self.logScroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(20, 20, 600, 366)];
+    self.logScroll = [[NSScrollView alloc] initWithFrame:NSZeroRect];
     self.logScroll.hasVerticalScroller = YES;
     self.logScroll.hasHorizontalScroller = NO;
     self.logScroll.borderType = NSBezelBorder;
-    self.logScroll.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
 
-    NSSize contentSize = [self.logScroll contentSize];
+    NSSize contentSize = NSMakeSize(500, 300);
     self.logView = [[NSTextView alloc] initWithFrame:NSMakeRect(0, 0, contentSize.width, contentSize.height)];
     self.logView.minSize = NSMakeSize(0.0, contentSize.height);
     self.logView.maxSize = NSMakeSize(FLT_MAX, FLT_MAX);
     self.logView.verticallyResizable = YES;
     self.logView.horizontallyResizable = NO;
-    self.logView.autoresizingMask = NSViewWidthSizable;
     self.logView.textContainer.containerSize = NSMakeSize(contentSize.width, FLT_MAX);
     self.logView.textContainer.widthTracksTextView = YES;
     self.logView.editable = NO;
@@ -571,6 +618,7 @@
         self.logScroll.hidden = YES;
     }
 
+    [self repositionViews];
     [self applyTheme];
 
     // Set dock icon
