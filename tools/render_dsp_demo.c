@@ -162,11 +162,42 @@ static void render_vowel_demo(const char *filename, int sample_rate) {
     free(out);
 }
 
+static void render_speech_demo(const char *filename, int sample_rate) {
+    printf("Rendering phoneme DSL speech synthesis demo...\n");
+    const char *dsl = 
+        "[S:80 K:50 R:80 EH:140@130 D:80] [_:300] "
+        "[HH:70@115 EH:110@135 L:80@130 OW:200@105] [_:300] "
+        "[W:70 IH:80 L:70] [_:100] [R:80 AA:140@120 K:70] [_:100] [Y:70 UW:220@105] [_:400]";
+
+    printf("Compiling phoneme DSL: %s\n", dsl);
+    sk_phoneme_frame_t frames[SK_PHONEME_MAX_TOKENS];
+    int num_frames = sk_phoneme_compile_dsl(dsl, frames, SK_PHONEME_MAX_TOKENS, 120.0f);
+    printf("Compiled into %d acoustic phoneme frames\n", num_frames);
+
+    int max_samples = sample_rate * 8; /* 8 sec buffer */
+    float *float_buf = (float *)calloc(max_samples, sizeof(float));
+    sk_rng_t rng;
+    sk_rng_init(&rng, 98765);
+
+    int num_samples = sk_phoneme_render_frames(frames, num_frames, float_buf, max_samples, (float)sample_rate, &rng);
+    printf("Rendered %d audio samples\n", num_samples);
+
+    int16_t *pcm = (int16_t *)malloc(num_samples * sizeof(int16_t));
+    for (int i = 0; i < num_samples; i++) {
+        pcm[i] = (int16_t)(float_buf[i] * 28000.0f);
+    }
+
+    write_wav_file(filename, pcm, num_samples, sample_rate);
+    free(float_buf);
+    free(pcm);
+}
+
 int main(int argc, char **argv) {
     (void)argc; (void)argv;
     int sample_rate = 48000;
     render_pluck_demo("pluck_demo.wav", sample_rate);
     render_vowel_demo("vowel_demo.wav", sample_rate);
+    render_speech_demo("speech_demo.wav", sample_rate);
     printf("DSP demo rendering complete!\n");
     return 0;
 }

@@ -1137,6 +1137,281 @@ static inline float sk_formant_bank_step(sk_formant_bank_t *fb, float in) {
     return sum;
 }
 
+/* =========================================================================
+ * 11. Phoneme DSL & Standalone Speech Synthesis Engine
+ * ========================================================================= */
+
+#define SK_PHONEME_MAX_TOKENS 128
+
+typedef enum {
+    SK_PHO_VOICED   = (1 << 0),
+    SK_PHO_FRIC     = (1 << 1),
+    SK_PHO_STOP     = (1 << 2),
+    SK_PHO_NASAL    = (1 << 3),
+    SK_PHO_ASP      = (1 << 4)
+} sk_phoneme_flags_t;
+
+typedef struct {
+    char code[4];          /* ARPAbet code: "AA", "S", "K", "R", "EH", "D", etc. */
+    uint16_t flags;
+    float default_ms;      /* Default duration in milliseconds */
+    float voice_gain;      /* Glottal pulse level (0.0 to 1.0) */
+    float noise_gain;      /* Aspiration/frication noise level (0.0 to 1.0) */
+    float noise_freq;      /* Frication filter center frequency in Hz */
+    float noise_bw;        /* Frication filter bandwidth in Hz */
+    float f1, f2, f3, f4;  /* Formant target frequencies in Hz */
+    float b1, b2, b3, b4;  /* Formant bandwidths in Hz */
+    float g1, g2, g3, g4;  /* Formant relative gains */
+} sk_phoneme_def_t;
+
+/* Acoustic parameter frame (compiled from DSL token) */
+typedef struct {
+    float duration_ms;
+    float pitch_hz;
+    float voice_gain;
+    float noise_gain;
+    float noise_freq;
+    float noise_bw;
+    uint16_t flags;
+    float f1, f2, f3, f4;
+    float b1, b2, b3, b4;
+    float g1, g2, g3, g4;
+} sk_phoneme_frame_t;
+
+/* Static ARPAbet acoustic reference table */
+static inline const sk_phoneme_def_t *sk_phoneme_lookup(const char *code) {
+    static const sk_phoneme_def_t TABLE[] = {
+        /* VOWELS */
+        { "AA", SK_PHO_VOICED, 140.0f, 1.0f, 0.0f, 0.0f, 0.0f, 730, 1090, 2440, 3500, 130, 100, 170, 250, 1.0f, 0.50f, 0.25f, 0.10f },
+        { "AE", SK_PHO_VOICED, 140.0f, 1.0f, 0.0f, 0.0f, 0.0f, 660, 1720, 2410, 3500, 100, 100, 200, 250, 1.0f, 0.50f, 0.25f, 0.10f },
+        { "AH", SK_PHO_VOICED, 120.0f, 1.0f, 0.0f, 0.0f, 0.0f, 640, 1190, 2390, 3500, 100, 100, 180, 250, 1.0f, 0.50f, 0.20f, 0.10f },
+        { "AO", SK_PHO_VOICED, 140.0f, 1.0f, 0.0f, 0.0f, 0.0f, 570,  840, 2410, 3500, 100,  90, 160, 250, 1.0f, 0.40f, 0.15f, 0.08f },
+        { "EH", SK_PHO_VOICED, 120.0f, 1.0f, 0.0f, 0.0f, 0.0f, 530, 1840, 2480, 3500, 100, 100, 150, 250, 1.0f, 0.40f, 0.20f, 0.10f },
+        { "ER", SK_PHO_VOICED, 150.0f, 1.0f, 0.0f, 0.0f, 0.0f, 490, 1350, 1690, 3500, 100, 100, 150, 250, 1.0f, 0.40f, 0.35f, 0.10f },
+        { "EY", SK_PHO_VOICED, 150.0f, 1.0f, 0.0f, 0.0f, 0.0f, 480, 2000, 2600, 3500,  90, 100, 160, 250, 1.0f, 0.40f, 0.20f, 0.10f },
+        { "IH", SK_PHO_VOICED, 110.0f, 1.0f, 0.0f, 0.0f, 0.0f, 390, 1990, 2550, 3500,  90, 100, 180, 250, 1.0f, 0.40f, 0.20f, 0.10f },
+        { "IY", SK_PHO_VOICED, 130.0f, 1.0f, 0.0f, 0.0f, 0.0f, 270, 2290, 3010, 3500,  60, 100, 200, 250, 1.0f, 0.30f, 0.15f, 0.10f },
+        { "OW", SK_PHO_VOICED, 150.0f, 1.0f, 0.0f, 0.0f, 0.0f, 500,  850, 2250, 3500,  80,  80, 100, 250, 1.0f, 0.40f, 0.10f, 0.05f },
+        { "UH", SK_PHO_VOICED, 110.0f, 1.0f, 0.0f, 0.0f, 0.0f, 440, 1020, 2240, 3500,  80,  80, 100, 250, 1.0f, 0.40f, 0.10f, 0.05f },
+        { "UW", SK_PHO_VOICED, 130.0f, 1.0f, 0.0f, 0.0f, 0.0f, 300,  870, 2240, 3500,  60,  80, 100, 250, 1.0f, 0.30f, 0.08f, 0.05f },
+
+        /* FRICATIVES */
+        { "S",  SK_PHO_FRIC,   80.0f, 0.0f, 0.75f, 6200, 2200, 300, 1500, 2500, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.10f, 0.05f },
+        { "SH", SK_PHO_FRIC,   90.0f, 0.0f, 0.85f, 3600, 1800, 300, 1800, 2800, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.10f, 0.05f },
+        { "Z",  SK_PHO_VOICED|SK_PHO_FRIC, 80.0f, 0.6f, 0.55f, 6200, 2200, 300, 1500, 2500, 3500, 80, 100, 150, 250, 0.6f, 0.10f, 0.10f, 0.05f },
+        { "ZH", SK_PHO_VOICED|SK_PHO_FRIC, 90.0f, 0.6f, 0.60f, 3600, 1800, 300, 1800, 2800, 3500, 80, 100, 150, 250, 0.6f, 0.10f, 0.10f, 0.05f },
+        { "F",  SK_PHO_FRIC,   70.0f, 0.0f, 0.50f, 4500, 3000, 300, 1200, 2400, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.10f, 0.05f },
+        { "V",  SK_PHO_VOICED|SK_PHO_FRIC, 70.0f, 0.7f, 0.35f, 4500, 3000, 300, 1200, 2400, 3500, 80, 100, 150, 250, 0.7f, 0.10f, 0.10f, 0.05f },
+        { "TH", SK_PHO_FRIC,   70.0f, 0.0f, 0.40f, 5000, 2800, 300, 1400, 2400, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.10f, 0.05f },
+        { "HH", SK_PHO_ASP,    60.0f, 0.0f, 0.60f, 2200, 2000, 500, 1500, 2500, 3500, 100, 100, 150, 250, 0.2f, 0.20f, 0.10f, 0.05f },
+
+        /* STOPS / PLOSIVES (with closure & release burst) */
+        { "P",  SK_PHO_STOP,   60.0f, 0.0f, 0.70f, 1500,  800, 300,  900, 2200, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.05f, 0.02f },
+        { "B",  SK_PHO_VOICED|SK_PHO_STOP, 60.0f, 0.5f, 0.50f, 1500, 800, 250,  900, 2200, 3500,  80, 100, 150, 250, 0.5f, 0.10f, 0.05f, 0.02f },
+        { "T",  SK_PHO_STOP,   60.0f, 0.0f, 0.85f, 4800, 1600, 300, 1600, 2600, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.05f, 0.02f },
+        { "D",  SK_PHO_VOICED|SK_PHO_STOP, 60.0f, 0.6f, 0.60f, 4200, 1600, 250, 1600, 2600, 3500,  80, 100, 150, 250, 0.6f, 0.10f, 0.05f, 0.02f },
+        { "K",  SK_PHO_STOP,   70.0f, 0.0f, 0.80f, 2600, 1000, 300, 1800, 2600, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.05f, 0.02f },
+        { "G",  SK_PHO_VOICED|SK_PHO_STOP, 70.0f, 0.6f, 0.55f, 2400, 1000, 250, 1800, 2600, 3500,  80, 100, 150, 250, 0.6f, 0.10f, 0.05f, 0.02f },
+
+        /* NASALS */
+        { "M",  SK_PHO_VOICED|SK_PHO_NASAL, 90.0f, 0.85f, 0.0f, 0.0f, 0.0f, 250, 1100, 2200, 3500, 50, 100, 150, 250, 1.0f, 0.20f, 0.08f, 0.02f },
+        { "N",  SK_PHO_VOICED|SK_PHO_NASAL, 90.0f, 0.85f, 0.0f, 0.0f, 0.0f, 250, 1500, 2200, 3500, 50, 100, 150, 250, 1.0f, 0.20f, 0.08f, 0.02f },
+        { "NG", SK_PHO_VOICED|SK_PHO_NASAL, 90.0f, 0.85f, 0.0f, 0.0f, 0.0f, 250, 1800, 2200, 3500, 50, 100, 150, 250, 1.0f, 0.20f, 0.08f, 0.02f },
+
+        /* GLIDES & LIQUIDS */
+        { "L",  SK_PHO_VOICED, 80.0f, 0.90f, 0.0f, 0.0f, 0.0f, 380, 1200, 2700, 3500, 60, 100, 150, 250, 0.9f, 0.35f, 0.15f, 0.05f },
+        { "R",  SK_PHO_VOICED, 80.0f, 0.90f, 0.0f, 0.0f, 0.0f, 420, 1300, 1600, 3500, 60, 100, 120, 250, 0.9f, 0.40f, 0.35f, 0.05f },
+        { "W",  SK_PHO_VOICED, 80.0f, 0.90f, 0.0f, 0.0f, 0.0f, 300,  800, 2200, 3500, 60,  80, 100, 250, 0.9f, 0.30f, 0.10f, 0.05f },
+        { "Y",  SK_PHO_VOICED, 80.0f, 0.90f, 0.0f, 0.0f, 0.0f, 280, 2200, 3000, 3500, 60,  90, 150, 250, 0.9f, 0.30f, 0.15f, 0.05f },
+
+        /* PAUSE / SILENCE */
+        { "_",  0,             80.0f, 0.0f, 0.0f, 0.0f, 0.0f, 300, 1200, 2400, 3500, 100, 100, 150, 250, 0.0f, 0.0f,  0.0f,  0.0f }
+    };
+    static const int COUNT = sizeof(TABLE) / sizeof(TABLE[0]);
+
+    if (!code || !code[0]) return NULL;
+    for (int i = 0; i < COUNT; i++) {
+        if (strcasecmp(TABLE[i].code, code) == 0) {
+            return &TABLE[i];
+        }
+    }
+    return NULL;
+}
+
+/* Compile a phonetic DSL string (e.g. "[S:50 K:40 R:70 EH:120@130 D:60]") into flat frame array */
+static inline int sk_phoneme_compile_dsl(const char *dsl, sk_phoneme_frame_t *out_frames, int max_frames, float default_pitch) {
+    if (!dsl || !out_frames || max_frames <= 0) return 0;
+    if (default_pitch < 40.0f) default_pitch = 120.0f;
+
+    int frame_count = 0;
+    const char *p = dsl;
+
+    while (*p && frame_count < max_frames) {
+        /* Skip brackets, spaces, commas */
+        while (*p && (*p == '[' || *p == ']' || *p == ' ' || *p == '\t' || *p == '\n' || *p == '\r' || *p == ',')) {
+            p++;
+        }
+        if (!*p) break;
+
+        /* Read phoneme code */
+        char code[8];
+        int c_idx = 0;
+        while (*p && *p != ':' && *p != '@' && *p != ' ' && *p != '\t' && *p != ',' && *p != ']' && c_idx < 7) {
+            code[c_idx++] = *p++;
+        }
+        code[c_idx] = '\0';
+        if (c_idx == 0) break;
+
+        const sk_phoneme_def_t *def = sk_phoneme_lookup(code);
+        if (!def) {
+            /* Fallback to pause if unknown */
+            def = sk_phoneme_lookup("_");
+        }
+
+        float dur = def ? def->default_ms : 80.0f;
+        float pitch = default_pitch;
+
+        /* Parse optional duration ':dur' */
+        if (*p == ':') {
+            p++;
+            char *end;
+            float parsed_dur = strtof(p, &end);
+            if (end > p && parsed_dur > 0.0f) {
+                dur = parsed_dur;
+                p = end;
+            }
+        }
+
+        /* Parse optional pitch '@pitch' */
+        if (*p == '@') {
+            p++;
+            char *end;
+            float parsed_pitch = strtof(p, &end);
+            if (end > p && parsed_pitch > 20.0f) {
+                pitch = parsed_pitch;
+                p = end;
+            }
+        }
+
+        /* Fill frame */
+        sk_phoneme_frame_t *f = &out_frames[frame_count++];
+        f->duration_ms = dur;
+        f->pitch_hz = pitch;
+        if (def) {
+            f->flags = def->flags;
+            f->voice_gain = def->voice_gain;
+            f->noise_gain = def->noise_gain;
+            f->noise_freq = def->noise_freq;
+            f->noise_bw = def->noise_bw;
+            f->f1 = def->f1; f->f2 = def->f2; f->f3 = def->f3; f->f4 = def->f4;
+            f->b1 = def->b1; f->b2 = def->b2; f->b3 = def->b3; f->b4 = def->b4;
+            f->g1 = def->g1; f->g2 = def->g2; f->g3 = def->g3; f->g4 = def->g4;
+        } else {
+            memset(f, 0, sizeof(*f));
+            f->duration_ms = dur;
+            f->pitch_hz = pitch;
+        }
+    }
+
+    return frame_count;
+}
+
+/* Standalone renderer: renders compiled phoneme frames into PCM float audio buffer */
+static inline int sk_phoneme_render_frames(const sk_phoneme_frame_t *frames, int num_frames,
+                                          float *out_audio, int max_samples, float sample_rate, sk_rng_t *rng) {
+    if (!frames || num_frames <= 0 || !out_audio || max_samples <= 0) return 0;
+    if (sample_rate < 1000.0f) sample_rate = 48000.0f;
+
+    sk_formant_bank_t fb;
+    sk_formant_bank_init(&fb, sample_rate);
+
+    sk_biquad_t noise_filter;
+    sk_biquad_init(&noise_filter, SK_BIQUAD_BANDPASS, 4000.0f, 1.5f, sample_rate);
+
+    float current_f1 = frames[0].f1;
+    float current_f2 = frames[0].f2;
+    float current_f3 = frames[0].f3;
+    float current_f4 = frames[0].f4;
+    float current_vg = 0.0f;
+    float current_ng = 0.0f;
+    float current_pitch = frames[0].pitch_hz;
+
+    float phase = 0.0f;
+    int out_idx = 0;
+
+    for (int fi = 0; fi < num_frames && out_idx < max_samples; fi++) {
+        const sk_phoneme_frame_t *fr = &frames[fi];
+        int frame_samples = (int)(fr->duration_ms * 0.001f * sample_rate);
+        if (frame_samples < 1) frame_samples = 1;
+
+        int is_stop = (fr->flags & SK_PHO_STOP) != 0;
+        int closure_samples = is_stop ? (int)(frame_samples * 0.70f) : 0;
+
+        /* Update noise filter center frequency if fricative/stop */
+        if (fr->noise_freq > 200.0f) {
+            float q = fr->noise_freq / (fr->noise_bw > 50.0f ? fr->noise_bw : 50.0f);
+            if (q < 0.5f) q = 0.5f;
+            if (q > 8.0f) q = 8.0f;
+            sk_biquad_init(&noise_filter, SK_BIQUAD_BANDPASS, fr->noise_freq, q, sample_rate);
+        }
+
+        /* Coarticulation slew coefficient: ~15ms transition time */
+        float slew = 1.0f - expf(-1.0f / (0.015f * sample_rate));
+
+        for (int i = 0; i < frame_samples && out_idx < max_samples; i++) {
+            /* Slew formant frequencies and gains toward target */
+            current_f1 += slew * (fr->f1 - current_f1);
+            current_f2 += slew * (fr->f2 - current_f2);
+            current_f3 += slew * (fr->f3 - current_f3);
+            current_f4 += slew * (fr->f4 - current_f4);
+            current_pitch += slew * (fr->pitch_hz - current_pitch);
+
+            float target_vg = fr->voice_gain;
+            float target_ng = fr->noise_gain;
+
+            /* Stop consonant handling: silence during closure, then burst */
+            if (is_stop) {
+                if (i < closure_samples) {
+                    target_ng = 0.0f;
+                    if (!(fr->flags & SK_PHO_VOICED)) target_vg = 0.0f;
+                } else {
+                    target_ng = fr->noise_gain * 1.5f; /* Burst transient */
+                }
+            }
+
+            current_vg += slew * (target_vg - current_vg);
+            current_ng += slew * (target_ng - current_ng);
+
+            /* Update formant resonators with slewed frequencies */
+            sk_formant_resonator_set(&fb.formants[0], current_f1, fr->b1, fr->g1, sample_rate);
+            sk_formant_resonator_set(&fb.formants[1], current_f2, fr->b2, fr->g2, sample_rate);
+            sk_formant_resonator_set(&fb.formants[2], current_f3, fr->b3, fr->g3, sample_rate);
+            sk_formant_resonator_set(&fb.formants[3], current_f4, fr->b4, fr->g4, sample_rate);
+
+            /* Glottal oscillator */
+            float phase_inc = current_pitch / sample_rate;
+            phase += phase_inc;
+            if (phase >= 1.0f) phase -= 1.0f;
+            float glottal = sk_glottal_pulse(phase, 0.65f) * current_vg;
+
+            /* Noise generator */
+            float raw_noise = rng ? sk_rng_float(rng) : (((float)rand() / (float)RAND_MAX) * 2.0f - 1.0f);
+            float shaped_noise = sk_biquad_step(&noise_filter, raw_noise) * current_ng;
+
+            /* Resonate voiced excitation through vocal tract formants */
+            float voiced_out = sk_formant_bank_step(&fb, glottal);
+
+            /* Mix voiced vocal tract + shaped frication noise */
+            float sample = voiced_out + shaped_noise;
+
+            /* Soft-clip to prevent clipping */
+            out_audio[out_idx++] = sk_softclip_cubic(sample * 0.7f, 1.0f);
+        }
+    }
+
+    return out_idx;
+}
+
 #ifdef __cplusplus
 }
 #endif

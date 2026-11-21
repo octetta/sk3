@@ -260,6 +260,26 @@ static void test_formants_and_glottal(void) {
     TEST_ASSERT(!isnan(out_xy) && !isinf(out_xy), "formant step finite for XY morph");
 }
 
+static void test_phoneme_dsl(void) {
+    sk_phoneme_frame_t frames[16];
+    const char *dsl = "[S:50 K:40 R:60 EH:100@130 D:50]";
+    int n = sk_phoneme_compile_dsl(dsl, frames, 16, 120.0f);
+    TEST_ASSERT(n == 5, "compiled 5 phonemes from DSL");
+    TEST_ASSERT((frames[0].flags & SK_PHO_FRIC) != 0, "frame 0 is fricative");
+    TEST_ASSERT(frames[3].pitch_hz == 130.0f, "frame 3 pitch is 130");
+    TEST_ASSERT((frames[4].flags & SK_PHO_STOP) != 0, "frame 4 is stop plosive");
+
+    float out[4800];
+    sk_rng_t rng;
+    sk_rng_init(&rng, 1111);
+    int samples = sk_phoneme_render_frames(frames, n, out, 4800, 48000.0f, &rng);
+    TEST_ASSERT(samples > 0, "rendered speech samples");
+    for (int i = 0; i < samples; i++) {
+        TEST_ASSERT(!isnan(out[i]) && !isinf(out[i]), "speech samples finite");
+        TEST_ASSERT(fabsf(out[i]) <= 1.0f, "speech samples clamped");
+    }
+}
+
 int main(void) {
     printf("Running sk_dsp math test suite...\n");
     test_clamping_and_safety();
@@ -277,6 +297,7 @@ int main(void) {
     test_glissando_tools();
     test_karplus_strong();
     test_formants_and_glottal();
+    test_phoneme_dsl();
     printf("All %d sk_dsp checks passed successfully!\n", g_pass);
     return 0;
 }
