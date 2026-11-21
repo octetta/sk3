@@ -53,7 +53,7 @@ int main(void) {
         phase += dt;
         if (phase >= 1.0f) phase -= 1.0f;
 
-        out[out_idx++] = (int16_t)(sk_softclip_cubic(s * 0.85f, 1.0f) * 26000.0f);
+        out[out_idx++] = (int16_t)(sk_softclip_cubic(s * 0.85f, 1.0f) * 16000.0f);
     }
 
     /* 0.5s pause */
@@ -71,7 +71,7 @@ int main(void) {
         sk_polyblep_osc_set_freq(&osc, freq);
 
         float s = sk_polyblep_osc_step(&osc);
-        out[out_idx++] = (int16_t)(sk_softclip_cubic(s * 0.85f, 1.0f) * 26000.0f);
+        out[out_idx++] = (int16_t)(sk_softclip_cubic(s * 0.85f, 1.0f) * 16000.0f);
     }
 
     /* 0.5s pause */
@@ -89,7 +89,7 @@ int main(void) {
         sk_polyblep_osc_set_pwm(&osc, pwm);
 
         float s = sk_polyblep_osc_step(&osc);
-        out[out_idx++] = (int16_t)(sk_softclip_cubic(s * 0.85f, 1.0f) * 26000.0f);
+        out[out_idx++] = (int16_t)(sk_softclip_cubic(s * 0.85f, 1.0f) * 16000.0f);
     }
 
     write_wav_16("polyblep_demo.wav", out, out_idx, sr);

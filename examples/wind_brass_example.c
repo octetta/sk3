@@ -61,12 +61,12 @@ int main(void) {
 
         for (int i = 0; i < play_samples; i++) {
             float s = sk_flute_step(&flute);
-            out[out_idx++] = (int16_t)(s * 25000.0f);
+            out[out_idx++] = (int16_t)(s * 16000.0f);
         }
         sk_flute_set_pressure(&flute, 0.0f);
         for (int i = 0; i < rest_samples; i++) {
             float s = sk_flute_step(&flute);
-            out[out_idx++] = (int16_t)(s * 25000.0f);
+            out[out_idx++] = (int16_t)(s * 16000.0f);
         }
     }
 
@@ -92,19 +92,19 @@ int main(void) {
 
         for (int i = 0; i < play_samples; i++) {
             float s = sk_brass_step(&brass);
-            out[out_idx++] = (int16_t)(s * 26000.0f);
+            out[out_idx++] = (int16_t)(s * 16000.0f);
         }
         sk_brass_set_pressure(&brass, 0.0f);
         for (int i = 0; i < rest_samples; i++) {
             float s = sk_brass_step(&brass);
-            out[out_idx++] = (int16_t)(s * 26000.0f);
+            out[out_idx++] = (int16_t)(s * 16000.0f);
         }
     }
 
     /* Decay tail */
     for (int i = 0; i < sr / 2; i++) {
         float s = sk_brass_step(&brass);
-        out[out_idx++] = (int16_t)(s * 26000.0f);
+        out[out_idx++] = (int16_t)(s * 16000.0f);
     }
 
     write_wav_16("wind_brass_demo.wav", out, out_idx, sr);

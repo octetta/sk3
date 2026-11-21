@@ -27,7 +27,7 @@ DIST_LINUX_PLATFORM_ROOT ?= $(DIST_DIR)/linux-x86_64
 DIST_LINUX_PREFIX ?= $(DIST_LINUX_PLATFORM_ROOT)/skred-$(VERSION)-maxed
 DIST_LINUX_ARCHIVE ?= $(DIST_LINUX_PLATFORM_ROOT)/skred-$(VERSION)-maxed-linux-x86_64.tar.gz
 
-.PHONY: default help all gen test test-schema native clean wasm wasm-test dist-api dist-api-wasm sync-skode
+.PHONY: default help all gen test test-schema native clean wasm wasm-test dist-api dist-api-wasm sync-skode dsp-demos dsp-experiments
 
 default: help
 
@@ -37,6 +37,8 @@ help:
 	@echo "  make all           - Build native C engine, libraries, and sk3 CLI"
 	@echo "  make gen           - Run declarative compilers (mksynth and mkopcodes)"
 	@echo "  make native        - Build native library and executables in $(BUILD_DIR)/"
+	@echo "  make dsp-demos     - Build & render all standalone DSP audio demo WAV files"
+	@echo "  make dsp-experiments - Build all standalone DSP toolkit experiment binaries"
 	@echo "  make test          - Run all schema and engine contract tests"
 	@echo "  make test-schema   - Run automated boundary invariance tests"
 	@echo "  make wasm          - Compile C DSP engine to WebAssembly (skred_api.js/wasm)"
@@ -79,6 +81,12 @@ test-schema: $(SYNTH_GEN_OUTPUTS)
 native: gen
 	$(CMAKE) -B $(BUILD_DIR) -S . -DCMAKE_BUILD_TYPE=$(BUILD_TYPE)
 	$(CMAKE) --build $(BUILD_DIR)
+
+dsp-experiments: native
+	$(CMAKE) --build $(BUILD_DIR) --target dsp_experiments
+
+dsp-demos: native
+	$(CMAKE) --build $(BUILD_DIR) --target run_dsp_demos
 
 test: gen test-schema native
 	ctest --test-dir $(BUILD_DIR) --output-on-failure

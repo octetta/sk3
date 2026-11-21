@@ -38,6 +38,7 @@ int main(void) {
 
     float f0 = 130.81f; /* C3 vocal pitch */
     float phase = 0.0f;
+    float prev_glottal = 0.0f;
 
     for (int i = 0; i < total_samples; i++) {
         float t = (float)i / (float)sr;
@@ -46,6 +47,8 @@ int main(void) {
         if (phase >= 1.0f) phase -= 1.0f;
 
         float glottal = sk_glottal_pulse(phase, 0.65f);
+        float glottal_diff = glottal - prev_glottal;
+        prev_glottal = glottal;
 
         /* 2D Vowel trajectory: U (-0.8, -0.6) -> O (-0.6, 0.0) -> A (0.0, 0.9) -> E (0.5, 0.2) -> I (0.9, -0.7) */
         float p = t / dur;
@@ -65,8 +68,9 @@ int main(void) {
         }
         sk_formant_bank_set_xy(&fb, x, y);
 
-        float s = sk_formant_bank_step(&fb, glottal);
-        out[i] = (int16_t)(sk_softclip_cubic(s * 1.5f, 1.0f) * 26000.0f);
+        /* Filter differentiated glottal pulse through formant bank */
+        float s = sk_formant_bank_step(&fb, glottal_diff * 26.0f) * 1.4f + glottal_diff * 1.0f;
+        out[i] = (int16_t)(sk_softclip_cubic(s * 3.6f, 1.0f) * 24000.0f);
     }
 
     write_wav_16("vowel_demo.wav", out, total_samples, sr);

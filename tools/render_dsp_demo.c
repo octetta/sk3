@@ -79,7 +79,7 @@ static void render_pluck_demo(const char *filename, int sample_rate) {
             float s = sk_karplus_step(&ks);
             /* Soft clip and scale to 16-bit PCM */
             s = sk_softclip_cubic(s, 1.0f);
-            out[write_idx++] = (int16_t)(s * 28000.0f);
+            out[write_idx++] = (int16_t)(s * 24000.0f);
         }
     }
 
@@ -87,7 +87,7 @@ static void render_pluck_demo(const char *filename, int sample_rate) {
     for (int i = 0; i < sample_rate; i++) {
         float s = sk_karplus_step(&ks);
         s = sk_softclip_cubic(s, 1.0f);
-        out[write_idx++] = (int16_t)(s * 28000.0f);
+        out[write_idx++] = (int16_t)(s * 24000.0f);
     }
 
     write_wav_file(filename, out, total_samples, sample_rate);
@@ -106,6 +106,7 @@ static void render_vowel_demo(const char *filename, int sample_rate) {
 
     float f0 = 130.81f; /* C3 fundamental vocal pitch */
     float phase = 0.0f;
+    float prev_glottal = 0.0f;
 
     for (int i = 0; i < total_samples; i++) {
         float t = (float)i / (float)sample_rate;
@@ -120,6 +121,8 @@ static void render_vowel_demo(const char *filename, int sample_rate) {
 
         /* Rosenberg glottal pulse excitation */
         float glottal = sk_glottal_pulse(phase, 0.65f);
+        float glottal_diff = glottal - prev_glottal;
+        prev_glottal = glottal;
 
         /* Vowel trajectory over time: U -> O -> A -> E -> I */
         /* Map progress 0.0 to 1.0 to 2D formant space */
@@ -149,12 +152,12 @@ static void render_vowel_demo(const char *filename, int sample_rate) {
 
         sk_formant_bank_set_xy(&fb, x, y);
 
-        /* Filter glottal excitation through formant bank */
-        float s = sk_formant_bank_step(&fb, glottal);
+        /* Filter glottal excitation derivative through formant bank + air */
+        float s = sk_formant_bank_step(&fb, glottal_diff * 26.0f) * 1.4f + glottal_diff * 1.0f;
 
         /* Soft clip and scale */
-        s = sk_softclip_cubic(s * 0.7f, 1.0f);
-        out[i] = (int16_t)(s * 26000.0f);
+        s = sk_softclip_cubic(s * 3.6f, 1.0f);
+        out[i] = (int16_t)(s * 24000.0f);
     }
 
     write_wav_file(filename, out, total_samples, sample_rate);
@@ -198,7 +201,7 @@ static void render_phoneme_demo(const char *filename, int sample_rate) {
 
     int16_t *pcm = (int16_t *)malloc(num_samples * sizeof(int16_t));
     for (int i = 0; i < num_samples; i++) {
-        pcm[i] = (int16_t)(float_buf[i] * 28000.0f);
+        pcm[i] = (int16_t)(sk_softclip_cubic(float_buf[i] * 3.5f, 1.0f) * 24000.0f);
     }
 
     write_wav_file(filename, pcm, num_samples, sample_rate);
@@ -264,7 +267,7 @@ static void render_speech_demo(const char *filename, int sample_rate) {
 
     int16_t *pcm = (int16_t *)malloc(num_samples * sizeof(int16_t));
     for (int i = 0; i < num_samples; i++) {
-        pcm[i] = (int16_t)(float_buf[i] * 28000.0f);
+        pcm[i] = (int16_t)(sk_softclip_cubic(float_buf[i] * 1.30f, 1.0f) * 24000.0f);
     }
 
     write_wav_file(filename, pcm, num_samples, sample_rate);
@@ -320,7 +323,7 @@ static void render_voices_demo(const char *filename, int sample_rate) {
 
     int16_t *pcm = (int16_t *)malloc(total_write_idx * sizeof(int16_t));
     for (int i = 0; i < total_write_idx; i++) {
-        pcm[i] = (int16_t)(total_float[i] * 28000.0f);
+        pcm[i] = (int16_t)(sk_softclip_cubic(total_float[i] * 0.90f, 1.0f) * 24000.0f);
     }
 
     write_wav_file(filename, pcm, total_write_idx, sample_rate);
@@ -443,8 +446,8 @@ static void render_percussion_demo(const char *filename, int sample_rate) {
                         (s_t * 0.55f) +
                         (s_kd * 0.65f);
 
-            float sample = sk_softclip_cubic(mix, 1.0f);
-            out[out_idx++] = (int16_t)(sample * 26000.0f);
+            float sample = sk_softclip_cubic(mix * 0.40f, 1.0f);
+            out[out_idx++] = (int16_t)(sample * 25000.0f);
         }
     }
 
@@ -458,8 +461,8 @@ static void render_percussion_demo(const char *filename, int sample_rate) {
                     (sk_drum_cowbell_step(&cowbell) * 0.40f) +
                     (sk_drum_tom_step(&tom_lo) * 0.55f) +
                     (sk_karplus_step(&ks_drum) * 0.65f);
-        float sample = sk_softclip_cubic(mix, 1.0f);
-        out[out_idx++] = (int16_t)(sample * 26000.0f);
+        float sample = sk_softclip_cubic(mix * 0.40f, 1.0f);
+        out[out_idx++] = (int16_t)(sample * 25000.0f);
     }
 
     write_wav_file(filename, out, out_idx, sample_rate);
@@ -491,12 +494,12 @@ static void render_wind_brass_demo(const char *filename, int sample_rate) {
         int rest_samples = flute_note_samples - play_samples;
         for (int i = 0; i < play_samples; i++) {
             float s = sk_flute_step(&flute);
-            out[out_idx++] = (int16_t)(s * 25000.0f);
+            out[out_idx++] = (int16_t)(s * 16000.0f);
         }
         sk_flute_set_pressure(&flute, 0.0f);
         for (int i = 0; i < rest_samples; i++) {
             float s = sk_flute_step(&flute);
-            out[out_idx++] = (int16_t)(s * 25000.0f);
+            out[out_idx++] = (int16_t)(s * 16000.0f);
         }
     }
 
@@ -515,18 +518,18 @@ static void render_wind_brass_demo(const char *filename, int sample_rate) {
         int rest_samples = brass_note_samples - play_samples;
         for (int i = 0; i < play_samples; i++) {
             float s = sk_brass_step(&brass);
-            out[out_idx++] = (int16_t)(s * 26000.0f);
+            out[out_idx++] = (int16_t)(s * 16000.0f);
         }
         sk_brass_set_pressure(&brass, 0.0f);
         for (int i = 0; i < rest_samples; i++) {
             float s = sk_brass_step(&brass);
-            out[out_idx++] = (int16_t)(s * 26000.0f);
+            out[out_idx++] = (int16_t)(s * 16000.0f);
         }
     }
 
     for (int i = 0; i < sample_rate / 2; i++) {
         float s = sk_brass_step(&brass);
-        out[out_idx++] = (int16_t)(s * 26000.0f);
+        out[out_idx++] = (int16_t)(s * 16000.0f);
     }
 
     write_wav_file(filename, out, out_idx, sample_rate);
@@ -551,7 +554,7 @@ static void render_polyblep_demo(const char *filename, int sample_rate) {
         float s = 2.0f * phase - 1.0f;
         phase += dt;
         if (phase >= 1.0f) phase -= 1.0f;
-        out[out_idx++] = (int16_t)(sk_softclip_cubic(s * 0.85f, 1.0f) * 26000.0f);
+        out[out_idx++] = (int16_t)(sk_softclip_cubic(s * 0.85f, 1.0f) * 16000.0f);
     }
 
     for (int i = 0; i < sample_rate / 2; i++) out[out_idx++] = 0;
@@ -566,7 +569,7 @@ static void render_polyblep_demo(const char *filename, int sample_rate) {
         float freq = 440.0f * powf(5000.0f / 440.0f, frac);
         sk_polyblep_osc_set_freq(&osc, freq);
         float s = sk_polyblep_osc_step(&osc);
-        out[out_idx++] = (int16_t)(sk_softclip_cubic(s * 0.85f, 1.0f) * 26000.0f);
+        out[out_idx++] = (int16_t)(sk_softclip_cubic(s * 0.85f, 1.0f) * 16000.0f);
     }
 
     for (int i = 0; i < sample_rate / 2; i++) out[out_idx++] = 0;
@@ -580,7 +583,7 @@ static void render_polyblep_demo(const char *filename, int sample_rate) {
         float pwm = 0.50f + 0.38f * sinf(frac * 4.0f * (float)M_PI);
         sk_polyblep_osc_set_pwm(&osc, pwm);
         float s = sk_polyblep_osc_step(&osc);
-        out[out_idx++] = (int16_t)(sk_softclip_cubic(s * 0.85f, 1.0f) * 26000.0f);
+        out[out_idx++] = (int16_t)(sk_softclip_cubic(s * 0.85f, 1.0f) * 16000.0f);
     }
 
     write_wav_file(filename, out, out_idx, sample_rate);

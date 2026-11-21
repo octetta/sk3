@@ -1,5 +1,38 @@
+/*
+ * sk_dsp.h - Header-Only Modern Audio DSP & Physical Modeling Synthesis Library
+ * Version 1.3.19
+ *
+ * Repository: https://github.com/octetta/sk3
+ * Path: src/sk_dsp.h
+ *
+ * Copyright (c) 2026 Joseph Ellis Stewart / Octetta
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
 #ifndef SK_DSP_H
 #define SK_DSP_H
+
+#define SK_DSP_VERSION_MAJOR 1
+#define SK_DSP_VERSION_MINOR 3
+#define SK_DSP_VERSION_PATCH 19
+#define SK_DSP_VERSION_STRING "1.3.19"
 
 #include <math.h>
 #include <stdint.h>
@@ -1267,27 +1300,27 @@ static inline const sk_phoneme_def_t *sk_phoneme_lookup(const char *code) {
         { "OY", SK_PHO_VOICED, 160.0f, 1.0f, 0.0f, 0.0f, 0.0f, 520, 1600, 2400, 3500,  90, 100, 160, 250, 1.0f, 0.40f, 0.20f, 0.10f },
 
         /* FRICATIVES */
-        { "S",  SK_PHO_FRIC,   80.0f, 0.0f, 0.75f, 6200, 2200, 300, 1500, 2500, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.10f, 0.05f },
-        { "SH", SK_PHO_FRIC,   90.0f, 0.0f, 0.85f, 3600, 1800, 300, 1800, 2800, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.10f, 0.05f },
-        { "Z",  SK_PHO_VOICED|SK_PHO_FRIC, 80.0f, 0.6f, 0.55f, 6200, 2200, 300, 1500, 2500, 3500, 80, 100, 150, 250, 0.6f, 0.10f, 0.10f, 0.05f },
-        { "ZH", SK_PHO_VOICED|SK_PHO_FRIC, 90.0f, 0.6f, 0.60f, 3600, 1800, 300, 1800, 2800, 3500, 80, 100, 150, 250, 0.6f, 0.10f, 0.10f, 0.05f },
-        { "F",  SK_PHO_FRIC,   70.0f, 0.0f, 0.50f, 4500, 3000, 300, 1200, 2400, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.10f, 0.05f },
-        { "V",  SK_PHO_VOICED|SK_PHO_FRIC, 70.0f, 0.7f, 0.35f, 4500, 3000, 300, 1200, 2400, 3500, 80, 100, 150, 250, 0.7f, 0.10f, 0.10f, 0.05f },
-        { "TH", SK_PHO_FRIC,   70.0f, 0.0f, 0.40f, 5000, 2800, 300, 1400, 2400, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.10f, 0.05f },
-        { "DH", SK_PHO_VOICED|SK_PHO_FRIC, 60.0f, 0.65f, 0.40f, 4000, 2500, 300, 1400, 2400, 3500, 80, 100, 150, 250, 0.65f, 0.10f, 0.10f, 0.05f },
-        { "HH", SK_PHO_ASP,    60.0f, 0.0f, 0.60f, 2200, 2000, 500, 1500, 2500, 3500, 100, 100, 150, 250, 0.2f, 0.20f, 0.10f, 0.05f },
+        { "S",  SK_PHO_FRIC,   80.0f, 0.0f, 0.32f, 6200, 2200, 300, 1500, 2500, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.10f, 0.05f },
+        { "SH", SK_PHO_FRIC,   90.0f, 0.0f, 0.30f, 3600, 1800, 300, 1800, 2800, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.10f, 0.05f },
+        { "Z",  SK_PHO_VOICED|SK_PHO_FRIC, 80.0f, 0.6f, 0.22f, 6200, 2200, 300, 1500, 2500, 3500, 80, 100, 150, 250, 0.6f, 0.10f, 0.10f, 0.05f },
+        { "ZH", SK_PHO_VOICED|SK_PHO_FRIC, 90.0f, 0.6f, 0.22f, 3600, 1800, 300, 1800, 2800, 3500, 80, 100, 150, 250, 0.6f, 0.10f, 0.10f, 0.05f },
+        { "F",  SK_PHO_FRIC,   70.0f, 0.0f, 0.18f, 4500, 3000, 300, 1200, 2400, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.10f, 0.05f },
+        { "V",  SK_PHO_VOICED|SK_PHO_FRIC, 70.0f, 0.7f, 0.16f, 4500, 3000, 300, 1200, 2400, 3500, 80, 100, 150, 250, 0.7f, 0.10f, 0.10f, 0.05f },
+        { "TH", SK_PHO_FRIC,   70.0f, 0.0f, 0.15f, 5000, 2800, 300, 1400, 2400, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.10f, 0.05f },
+        { "DH", SK_PHO_VOICED|SK_PHO_FRIC, 60.0f, 0.65f, 0.15f, 4000, 2500, 300, 1400, 2400, 3500, 80, 100, 150, 250, 0.65f, 0.10f, 0.10f, 0.05f },
+        { "HH", SK_PHO_ASP,    60.0f, 0.0f, 0.20f, 2200, 2000, 500, 1500, 2500, 3500, 100, 100, 150, 250, 0.2f, 0.20f, 0.10f, 0.05f },
 
         /* AFFRICATES */
-        { "CH", SK_PHO_STOP|SK_PHO_FRIC, 80.0f, 0.0f, 0.85f, 3800, 1800, 300, 1800, 2800, 3500, 80, 100, 150, 250, 0.1f, 0.10f, 0.10f, 0.05f },
-        { "JH", SK_PHO_VOICED|SK_PHO_STOP|SK_PHO_FRIC, 80.0f, 0.6f, 0.65f, 3800, 1800, 300, 1800, 2800, 3500, 80, 100, 150, 250, 0.6f, 0.10f, 0.10f, 0.05f },
+        { "CH", SK_PHO_STOP|SK_PHO_FRIC, 80.0f, 0.0f, 0.32f, 3800, 1800, 300, 1800, 2800, 3500, 80, 100, 150, 250, 0.1f, 0.10f, 0.10f, 0.05f },
+        { "JH", SK_PHO_VOICED|SK_PHO_STOP|SK_PHO_FRIC, 80.0f, 0.6f, 0.22f, 3800, 1800, 300, 1800, 2800, 3500, 80, 100, 150, 250, 0.6f, 0.10f, 0.10f, 0.05f },
 
         /* STOPS / PLOSIVES (with closure & release burst, tuned with anatomical consonant loci) */
-        { "P",  SK_PHO_STOP,   60.0f, 0.0f, 0.70f, 1500,  800, 300,  800, 2200, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.05f, 0.02f },
-        { "B",  SK_PHO_VOICED|SK_PHO_STOP, 60.0f, 0.5f, 0.50f, 1500, 800, 250,  800, 2200, 3500,  80, 100, 150, 250, 0.5f, 0.10f, 0.05f, 0.02f },
-        { "T",  SK_PHO_STOP,   60.0f, 0.0f, 0.85f, 4800, 1600, 300, 1800, 2600, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.05f, 0.02f },
-        { "D",  SK_PHO_VOICED|SK_PHO_STOP, 60.0f, 0.6f, 0.60f, 4200, 1600, 250, 1800, 2600, 3500,  80, 100, 150, 250, 0.6f, 0.10f, 0.05f, 0.02f },
-        { "K",  SK_PHO_STOP,   70.0f, 0.0f, 0.80f, 2600, 1000, 300, 2400, 2700, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.05f, 0.02f },
-        { "G",  SK_PHO_VOICED|SK_PHO_STOP, 70.0f, 0.6f, 0.55f, 2400, 1000, 250, 2400, 2700, 3500,  80, 100, 150, 250, 0.6f, 0.10f, 0.05f, 0.02f },
+        { "P",  SK_PHO_STOP,   60.0f, 0.0f, 0.25f, 1500,  800, 300,  800, 2200, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.05f, 0.02f },
+        { "B",  SK_PHO_VOICED|SK_PHO_STOP, 60.0f, 0.5f, 0.20f, 1500, 800, 250,  800, 2200, 3500,  80, 100, 150, 250, 0.5f, 0.10f, 0.05f, 0.02f },
+        { "T",  SK_PHO_STOP,   60.0f, 0.0f, 0.30f, 4800, 1600, 300, 1800, 2600, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.05f, 0.02f },
+        { "D",  SK_PHO_VOICED|SK_PHO_STOP, 60.0f, 0.6f, 0.22f, 4200, 1600, 250, 1800, 2600, 3500,  80, 100, 150, 250, 0.6f, 0.10f, 0.05f, 0.02f },
+        { "K",  SK_PHO_STOP,   70.0f, 0.0f, 0.28f, 2600, 1000, 300, 2400, 2700, 3500,  80, 100, 150, 250, 0.1f, 0.10f, 0.05f, 0.02f },
+        { "G",  SK_PHO_VOICED|SK_PHO_STOP, 70.0f, 0.6f, 0.20f, 2400, 1000, 250, 2400, 2700, 3500,  80, 100, 150, 250, 0.6f, 0.10f, 0.05f, 0.02f },
 
         /* NASALS */
         { "M",  SK_PHO_VOICED|SK_PHO_NASAL, 90.0f, 0.85f, 0.0f, 0.0f, 0.0f, 250, 1100, 2200, 3500, 50, 100, 150, 250, 1.0f, 0.20f, 0.08f, 0.02f },
@@ -1682,20 +1715,20 @@ static inline int sk_phoneme_render_frames_voice(const sk_phoneme_frame_t *frame
             prev_glottal = glottal;
 
             /* Resonate glottal flow derivative through DC-rejecting formant bandpass bank */
-            float voiced_raw = sk_formant_bank_step(&fb, glottal_diff * 6.0f);
+            float voiced_raw = sk_formant_bank_step(&fb, glottal_diff * 26.0f);
 
             /* High-frequency air & brilliance bypass (removes telephone band-limiting) */
-            float air = glottal_diff * 0.35f;
-            float voiced = (voiced_raw * 1.5f + air) * v.vowel_level;
+            float air = glottal_diff * 1.0f;
+            float voiced = (voiced_raw * 1.4f + air) * v.vowel_level;
 
-            /* Shaped noise for consonants (naturally balanced, articulate) */
-            float shaped_noise = sk_biquad_step(&noise_filter, raw_noise) * current_ng * 0.45f * v.consonant_level;
+            /* Shaped noise for consonants (naturally balanced, articulate, sits gracefully under vowels) */
+            float shaped_noise = sk_biquad_step(&noise_filter, raw_noise) * current_ng * 0.28f * v.consonant_level;
 
             /* Mix articulate resonant vowels + air presence + consonants */
             float sample = voiced + shaped_noise;
 
             /* Soft-clip to prevent clipping */
-            out_audio[out_idx++] = sk_softclip_cubic(sample * 1.2f, 1.0f);
+            out_audio[out_idx++] = sk_softclip_cubic(sample, 1.0f);
         }
     }
 

@@ -107,8 +107,8 @@ int main(void) {
                         (s_tom * 0.6f);
 
             /* Master saturation bus */
-            float out_sample = sk_softclip_cubic(mix, 1.0f);
-            out[out_idx++] = (int16_t)(out_sample * 26000.0f);
+            float out_sample = sk_softclip_cubic(mix * 0.40f, 1.0f);
+            out[out_idx++] = (int16_t)(out_sample * 25000.0f);
         }
     }
 
@@ -120,8 +120,8 @@ int main(void) {
                     (sk_drum_clap_step(&clap) * 0.5f) +
                     (sk_drum_cowbell_step(&cowbell) * 0.4f) +
                     (sk_drum_tom_step(&tom) * 0.6f);
-        float out_sample = sk_softclip_cubic(mix, 1.0f);
-        out[out_idx++] = (int16_t)(out_sample * 26000.0f);
+        float out_sample = sk_softclip_cubic(mix * 0.40f, 1.0f);
+        out[out_idx++] = (int16_t)(out_sample * 25000.0f);
     }
 
     write_wav_16("drum_demo.wav", out, out_idx, sr);
