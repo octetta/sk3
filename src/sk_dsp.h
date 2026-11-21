@@ -1006,6 +1006,7 @@ typedef struct {
     float bandwidth;
     float gain;
     float a1, a2, b0;
+    float x1, x2;
     float y1, y2;
 } sk_formant_resonator_t;
 
@@ -1058,13 +1059,16 @@ static inline void sk_formant_resonator_set(sk_formant_resonator_t *res, float f
 
     res->a1 = -2.0f * r * cosf(omega);
     res->a2 = r * r;
-    res->b0 = 1.0f - r;
+    res->b0 = (1.0f - r) * 0.5f;
 }
 
 static inline float sk_formant_resonator_step(sk_formant_resonator_t *res, float in) {
     if (!res) return 0.0f;
-    /* y[n] = b0 * in - a1 * y[n-1] - a2 * y[n-2] */
-    float y = res->b0 * in - res->a1 * res->y1 - res->a2 * res->y2;
+    /* 2-pole 2-zero constant-peak bandpass: y[n] = b0*(x[n] - x[n-2]) - a1*y[n-1] - a2*y[n-2]
+     * Rejects DC/sub-bass thrum completely while normalizing peak formant resonance to 0 dB */
+    float y = res->b0 * (in - res->x2) - res->a1 * res->y1 - res->a2 * res->y2;
+    res->x2 = res->x1;
+    res->x1 = in;
     res->y2 = res->y1;
     res->y1 = y;
     return y * res->gain;
@@ -1510,7 +1514,7 @@ static inline int sk_phoneme_render_frames_voice(const sk_phoneme_frame_t *frame
     float current_pitch = frames[0].pitch_hz * v.pitch_scale;
 
     float phase = 0.0f;
-    float prev_lip = 0.0f;
+    float prev_glottal = 0.0f;
     int out_idx = 0;
 
     for (int fi = 0; fi < num_frames && out_idx < max_samples; fi++) {
@@ -1630,21 +1634,25 @@ static inline int sk_phoneme_render_frames_voice(const sk_phoneme_frame_t *frame
                 glottal += raw_noise * v.breathiness * current_vg;
             }
 
-            /* Resonate voiced excitation through vocal tract formants */
-            float voiced_raw = sk_formant_bank_step(&fb, glottal);
+            /* Differentiate glottal volume velocity: U'(t) physically excites acoustic resonances with ZERO DC */
+            float glottal_diff = (glottal - prev_glottal);
+            prev_glottal = glottal;
 
-            /* Lip radiation differentiator (+6 dB/octave) applied ONLY to voiced vocal tract */
-            float voiced_lip = (voiced_raw - 0.92f * prev_lip) * 3.8f * v.vowel_level;
-            prev_lip = voiced_raw;
+            /* Resonate glottal flow derivative through DC-rejecting formant bandpass bank */
+            float voiced_raw = sk_formant_bank_step(&fb, glottal_diff * 6.0f);
 
-            /* Shaped noise for consonants (naturally balanced, not differentiated) */
+            /* High-frequency air & brilliance bypass (removes telephone band-limiting) */
+            float air = glottal_diff * 0.35f;
+            float voiced = (voiced_raw * 1.5f + air) * v.vowel_level;
+
+            /* Shaped noise for consonants (naturally balanced, articulate) */
             float shaped_noise = sk_biquad_step(&noise_filter, raw_noise) * current_ng * 0.45f * v.consonant_level;
 
-            /* Mix articulate vowels + crisp consonants */
-            float sample = voiced_lip + shaped_noise;
+            /* Mix articulate resonant vowels + air presence + consonants */
+            float sample = voiced + shaped_noise;
 
             /* Soft-clip to prevent clipping */
-            out_audio[out_idx++] = sk_softclip_cubic(sample * 1.1f, 1.0f);
+            out_audio[out_idx++] = sk_softclip_cubic(sample * 1.2f, 1.0f);
         }
     }
 
