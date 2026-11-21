@@ -307,7 +307,7 @@ jobs:
             xvfb-run -s "-screen 0 1024x768x24" bash -c "
               openbox &
               sleep 1
-              wine \"$EXE_PATH\" &
+              SKRED_NO_AUDIO=1 SK3_GUI_EXPANDED=1 wine \"$EXE_PATH\" &
               sleep 5
               scrot release-assets/raw-windows.png || import -window root release-assets/raw-windows.png || true
               wineserver -k || true
