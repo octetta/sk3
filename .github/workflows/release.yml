@@ -221,6 +221,19 @@ jobs:
           mkdir -p release-assets
           cp "$source" "release-assets/$asset"
 
+      - name: Capture macOS GUI screenshot
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          APP_PATH="dist/macos-universal/skred-${VERSION}-maxed/sk3.app/Contents/MacOS/sk3-gui"
+          if [ -f "$APP_PATH" ]; then
+            "$APP_PATH" &
+            APP_PID=$!
+            sleep 3
+            screencapture -x release-assets/macos-gui-screenshot.png || true
+            kill $APP_PID 2>/dev/null || true
+          fi
+
       - uses: actions/upload-artifact@v4
         with:
           name: api-macos-universal

@@ -35,9 +35,9 @@
 #define IDC_BTN_MACRO_8    128
 #define IDC_BTN_MACRO_9    129
 
-#define DEFAULT_WIDTH  630
-#define DEFAULT_HEIGHT 580
-#define COLLAPSED_HEIGHT 125
+#define CLIENT_DEFAULT_W   640
+#define CLIENT_DEFAULT_H   520
+#define CLIENT_COLLAPSED_H 84
 
 #define MAX_HISTORY 128
 static char *history[MAX_HISTORY];
@@ -61,7 +61,7 @@ static HFONT g_hFontMono = NULL;
 static sk3_font_size_t g_curFontSize = SK3_FONT_SIZE_MEDIUM;
 static sk3_theme_t g_curTheme = SK3_THEME_DARK;
 static int g_isCollapsed = 1; /* Start collapsed by default */
-static int g_prevExpandedH = DEFAULT_HEIGHT;
+static int g_prevExpandedH = CLIENT_DEFAULT_H;
 
 typedef struct {
     COLORREF bg;
@@ -278,7 +278,7 @@ static void start_engine(HWND hwnd) {
     }
     skred_logger(1);
 
-    int active_udp = (r == 0 && udp_port > 0) ? udp_port : 0;
+    int active_udp = (r == 0 && udp_port > 0) ? skred_udp_info() : 0;
     int active_tcp = (hp > 0) ? hp : 0;
     
     char status[256];
@@ -312,33 +312,63 @@ static void start_engine(HWND hwnd) {
     }
 }
 
+static void calc_window_rect(HWND hwnd, int client_w, int client_h, RECT *out_rc) {
+    out_rc->left = 0;
+    out_rc->top = 0;
+    out_rc->right = client_w;
+    out_rc->bottom = client_h;
+    DWORD style = hwnd ? GetWindowLong(hwnd, GWL_STYLE) : (WS_OVERLAPPEDWINDOW & ~WS_MINIMIZEBOX);
+    DWORD exStyle = hwnd ? GetWindowLong(hwnd, GWL_EXSTYLE) : (WS_EX_APPWINDOW | WS_EX_ACCEPTFILES);
+    AdjustWindowRectEx(out_rc, style, FALSE, exStyle);
+}
+
+static void update_console_visibility(HWND hwnd) {
+    int cmd = g_isCollapsed ? SW_HIDE : SW_SHOW;
+    if (g_hCmdInput) ShowWindow(g_hCmdInput, cmd);
+    HWND h;
+    if ((h = GetDlgItem(hwnd, IDC_BTN_SEND))) ShowWindow(h, cmd);
+    for (int i = 0; i < 10; i++) {
+        if ((h = GetDlgItem(hwnd, IDC_BTN_MACRO_0 + i))) ShowWindow(h, cmd);
+    }
+    if ((h = GetDlgItem(hwnd, IDC_BTN_PANIC))) ShowWindow(h, cmd);
+    if ((h = GetDlgItem(hwnd, IDC_BTN_COPY_LOG))) ShowWindow(h, cmd);
+    if ((h = GetDlgItem(hwnd, IDC_BTN_CLEAR))) ShowWindow(h, cmd);
+    if (g_hLogOutput) ShowWindow(g_hLogOutput, cmd);
+    if (g_hBtnToggle) SetWindowTextA(g_hBtnToggle, g_isCollapsed ? "Show" : "Hide");
+}
+
 static void toggle_console(HWND hwnd) {
     g_isCollapsed = !g_isCollapsed;
-    RECT rc;
-    GetWindowRect(hwnd, &rc);
-    int cur_w = rc.right - rc.left;
+    update_console_visibility(hwnd);
+
+    RECT rcClient;
+    GetClientRect(hwnd, &rcClient);
+    int cur_client_w = rcClient.right - rcClient.left;
+    if (cur_client_w < CLIENT_DEFAULT_W) cur_client_w = CLIENT_DEFAULT_W;
 
     if (g_isCollapsed) {
-        g_prevExpandedH = rc.bottom - rc.top;
-        SetWindowPos(hwnd, NULL, 0, 0, cur_w, COLLAPSED_HEIGHT, SWP_NOMOVE | SWP_NOZORDER);
-        SetWindowTextA(g_hBtnToggle, "Show");
+        g_prevExpandedH = rcClient.bottom - rcClient.top;
+        RECT rcWin;
+        calc_window_rect(hwnd, cur_client_w, CLIENT_COLLAPSED_H, &rcWin);
+        SetWindowPos(hwnd, NULL, 0, 0, rcWin.right - rcWin.left, rcWin.bottom - rcWin.top, SWP_NOMOVE | SWP_NOZORDER);
     } else {
-        int target_h = (g_prevExpandedH > COLLAPSED_HEIGHT + 100) ? g_prevExpandedH : DEFAULT_HEIGHT;
-        SetWindowPos(hwnd, NULL, 0, 0, cur_w, target_h, SWP_NOMOVE | SWP_NOZORDER);
-        SetWindowTextA(g_hBtnToggle, "Hide");
+        int target_h = (g_prevExpandedH > CLIENT_COLLAPSED_H + 100) ? g_prevExpandedH : CLIENT_DEFAULT_H;
+        RECT rcWin;
+        calc_window_rect(hwnd, cur_client_w, target_h, &rcWin);
+        SetWindowPos(hwnd, NULL, 0, 0, rcWin.right - rcWin.left, rcWin.bottom - rcWin.top, SWP_NOMOVE | SWP_NOZORDER);
         SetFocus(g_hCmdInput);
     }
 }
 
 static void save_win_config(HWND hwnd) {
     if (!hwnd) return;
-    RECT rc;
-    GetWindowRect(hwnd, &rc);
+    RECT rcClient;
+    GetClientRect(hwnd, &rcClient);
     sk3_gui_config_t cfg;
     cfg.theme = (int)g_curTheme;
     cfg.font_size = (int)g_curFontSize;
-    cfg.window_width = rc.right - rc.left;
-    cfg.window_height = g_isCollapsed ? g_prevExpandedH : (rc.bottom - rc.top);
+    cfg.window_width = rcClient.right - rcClient.left;
+    cfg.window_height = g_isCollapsed ? g_prevExpandedH : (rcClient.bottom - rcClient.top);
     cfg.prev_expanded_h = g_prevExpandedH;
     cfg.console_collapsed = g_isCollapsed;
     sk3_gui_config_save(&cfg);
@@ -359,8 +389,18 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
             // Status label
             g_hStatusText = CreateWindowExA(0, "STATIC", "Starting audio engine...",
                 WS_CHILD | WS_VISIBLE | SS_LEFT,
-                20, 14, 580, 24, hwnd, (HMENU)IDC_STATUS_TEXT, NULL, NULL);
+                20, 14, 430, 24, hwnd, (HMENU)IDC_STATUS_TEXT, NULL, NULL);
             SendMessageA(g_hStatusText, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
+
+            g_hBtnTheme = CreateWindowExA(0, "BUTTON", sk3_theme_name(g_curTheme),
+                WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP,
+                470, 12, 85, 26, hwnd, (HMENU)IDC_BTN_THEME, NULL, NULL);
+            SendMessageA(g_hBtnTheme, WM_SETFONT, (WPARAM)g_hFontUI, TRUE);
+
+            g_hBtnFont = CreateWindowExA(0, "BUTTON", sk3_font_size_name(g_curFontSize),
+                WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP,
+                565, 12, 55, 26, hwnd, (HMENU)IDC_BTN_FONT, NULL, NULL);
+            SendMessageA(g_hBtnFont, WM_SETFONT, (WPARAM)g_hFontUI, TRUE);
 
             // Server Ports config
             HWND hUdpLbl = CreateWindowExA(0, "STATIC", "UDP:",
@@ -370,53 +410,43 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
 
             HWND hUdpEdit = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", "60440",
                 WS_CHILD | WS_VISIBLE | ES_NUMBER | WS_TABSTOP,
-                58, 46, 60, 24, hwnd, (HMENU)IDC_UDP_PORT, NULL, NULL);
+                58, 46, 58, 24, hwnd, (HMENU)IDC_UDP_PORT, NULL, NULL);
             SendMessageA(hUdpEdit, WM_SETFONT, (WPARAM)g_hFontUI, TRUE);
 
             HWND hTcpLbl = CreateWindowExA(0, "STATIC", "TCP:",
                 WS_CHILD | WS_VISIBLE,
-                126, 48, 35, 22, hwnd, NULL, NULL, NULL);
+                124, 48, 35, 22, hwnd, NULL, NULL, NULL);
             SendMessageA(hTcpLbl, WM_SETFONT, (WPARAM)g_hFontUI, TRUE);
 
             HWND hTcpEdit = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", "60440",
                 WS_CHILD | WS_VISIBLE | ES_NUMBER | WS_TABSTOP,
-                164, 46, 60, 24, hwnd, (HMENU)IDC_TCP_PORT, NULL, NULL);
+                162, 46, 58, 24, hwnd, (HMENU)IDC_TCP_PORT, NULL, NULL);
             SendMessageA(hTcpEdit, WM_SETFONT, (WPARAM)g_hFontUI, TRUE);
 
             HWND hBtnRestart = CreateWindowExA(0, "BUTTON", "Restart",
                 WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP,
-                232, 45, 68, 26, hwnd, (HMENU)IDC_BTN_RESTART, NULL, NULL);
+                228, 45, 68, 26, hwnd, (HMENU)IDC_BTN_RESTART, NULL, NULL);
             SendMessageA(hBtnRestart, WM_SETFONT, (WPARAM)g_hFontUI, TRUE);
 
             HWND hBtnExit = CreateWindowExA(0, "BUTTON", "Exit",
                 WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP,
-                304, 45, 55, 26, hwnd, (HMENU)IDC_BTN_EXIT, NULL, NULL);
+                302, 45, 55, 26, hwnd, (HMENU)IDC_BTN_EXIT, NULL, NULL);
             SendMessageA(hBtnExit, WM_SETFONT, (WPARAM)g_hFontUI, TRUE);
 
             g_hBtnToggle = CreateWindowExA(0, "BUTTON", g_isCollapsed ? "Show" : "Hide",
                 WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP,
-                363, 45, 100, 26, hwnd, (HMENU)IDC_BTN_TOGGLE, NULL, NULL);
+                363, 45, 60, 26, hwnd, (HMENU)IDC_BTN_TOGGLE, NULL, NULL);
             SendMessageA(g_hBtnToggle, WM_SETFONT, (WPARAM)g_hFontUI, TRUE);
-
-            g_hBtnTheme = CreateWindowExA(0, "BUTTON", sk3_theme_name(g_curTheme),
-                WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP,
-                467, 45, 95, 26, hwnd, (HMENU)IDC_BTN_THEME, NULL, NULL);
-            SendMessageA(g_hBtnTheme, WM_SETFONT, (WPARAM)g_hFontUI, TRUE);
-
-            g_hBtnFont = CreateWindowExA(0, "BUTTON", sk3_font_size_name(g_curFontSize),
-                WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP,
-                566, 45, 60, 26, hwnd, (HMENU)IDC_BTN_FONT, NULL, NULL);
-            SendMessageA(g_hBtnFont, WM_SETFONT, (WPARAM)g_hFontUI, TRUE);
 
             // Command Input Section (Monospaced! No label taking up space)
             g_hCmdInput = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", "",
                 WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-                20, 84, 480, 26, hwnd, (HMENU)IDC_CMD_INPUT, NULL, NULL);
+                20, 84, 535, 26, hwnd, (HMENU)IDC_CMD_INPUT, NULL, NULL);
             g_oldEditProc = (WNDPROC)SetWindowLongPtrA(g_hCmdInput, GWLP_WNDPROC, (LONG_PTR)CmdInputSubclassProc);
 
             HWND hBtnSend = CreateWindowExA(0, "BUTTON", "Send",
                 WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP,
-                508, 83, 80, 28, hwnd, (HMENU)IDC_BTN_SEND, NULL, NULL);
+                565, 83, 55, 28, hwnd, (HMENU)IDC_BTN_SEND, NULL, NULL);
             SendMessageA(hBtnSend, WM_SETFONT, (WPARAM)g_hFontUI, TRUE);
 
             // Action Buttons Row: Macro Buttons 0..9, Silence, Copy Log, Clear Log
@@ -425,37 +455,38 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
                 snprintf(mlabel, sizeof(mlabel), "%d", i);
                 HWND hBtnM = CreateWindowExA(0, "BUTTON", mlabel,
                     WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP,
-                    20 + i * 35, 118, 32, 26, hwnd, (HMENU)(INT_PTR)(IDC_BTN_MACRO_0 + i), NULL, NULL);
+                    20 + i * 34, 120, 30, 26, hwnd, (HMENU)(INT_PTR)(IDC_BTN_MACRO_0 + i), NULL, NULL);
                 SendMessageA(hBtnM, WM_SETFONT, (WPARAM)g_hFontUI, TRUE);
             }
 
             HWND hBtnPanic = CreateWindowExA(0, "BUTTON", "Silence",
                 WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP,
-                378, 118, 68, 26, hwnd, (HMENU)IDC_BTN_PANIC, NULL, NULL);
+                395, 120, 68, 26, hwnd, (HMENU)IDC_BTN_PANIC, NULL, NULL);
             SendMessageA(hBtnPanic, WM_SETFONT, (WPARAM)g_hFontUI, TRUE);
 
             HWND hBtnCopyLog = CreateWindowExA(0, "BUTTON", "Copy Log",
                 WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP,
-                450, 118, 68, 26, hwnd, (HMENU)IDC_BTN_COPY_LOG, NULL, NULL);
+                470, 120, 75, 26, hwnd, (HMENU)IDC_BTN_COPY_LOG, NULL, NULL);
             SendMessageA(hBtnCopyLog, WM_SETFONT, (WPARAM)g_hFontUI, TRUE);
 
             HWND hBtnClear = CreateWindowExA(0, "BUTTON", "Clear Log",
                 WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | WS_TABSTOP,
-                522, 118, 68, 26, hwnd, (HMENU)IDC_BTN_CLEAR, NULL, NULL);
+                555, 120, 65, 26, hwnd, (HMENU)IDC_BTN_CLEAR, NULL, NULL);
             SendMessageA(hBtnClear, WM_SETFONT, (WPARAM)g_hFontUI, TRUE);
 
             // Output Log area (Monospaced!)
             g_hLogOutput = CreateWindowExA(WS_EX_CLIENTEDGE, "EDIT", "",
                 WS_CHILD | WS_VISIBLE | ES_MULTILINE | ES_READONLY | ES_AUTOVSCROLL | WS_VSCROLL | WS_TABSTOP,
-                20, 152, 570, 370, hwnd, (HMENU)IDC_LOG_OUTPUT, NULL, NULL);
+                20, 154, 600, 340, hwnd, (HMENU)IDC_LOG_OUTPUT, NULL, NULL);
 
             update_mono_font();
+            update_console_visibility(hwnd);
 
             // Enable Drag and Drop
             DragAcceptFiles(hwnd, TRUE);
 
             start_engine(hwnd);
-            SetFocus(g_hCmdInput);
+            if (!g_isCollapsed) SetFocus(g_hCmdInput);
             return 0;
         }
 
@@ -464,31 +495,67 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
             int h = HIWORD(lParam);
             if (w <= 0 || h <= 0) break;
 
+            if (h > CLIENT_COLLAPSED_H + 60) {
+                if (g_isCollapsed) {
+                    g_isCollapsed = 0;
+                    update_console_visibility(hwnd);
+                }
+                g_prevExpandedH = h;
+            } else {
+                if (!g_isCollapsed) {
+                    g_isCollapsed = 1;
+                    update_console_visibility(hwnd);
+                }
+            }
+
+            if (g_hStatusText) {
+                SetWindowPos(g_hStatusText, NULL, 20, 14, w - 180, 24, SWP_NOZORDER);
+            }
+            if (g_hBtnTheme) {
+                SetWindowPos(g_hBtnTheme, NULL, w - 150, 12, 80, 26, SWP_NOZORDER);
+            }
+            if (g_hBtnFont) {
+                SetWindowPos(g_hBtnFont, NULL, w - 65, 12, 45, 26, SWP_NOZORDER);
+            }
+
             if (g_hCmdInput) {
-                SetWindowPos(g_hCmdInput, NULL, 20, 84, w - 120, 26, SWP_NOZORDER);
+                SetWindowPos(g_hCmdInput, NULL, 20, 84, w - 90, 26, SWP_NOZORDER);
             }
             HWND hSend = GetDlgItem(hwnd, IDC_BTN_SEND);
             if (hSend) {
-                SetWindowPos(hSend, NULL, w - 90, 83, 70, 28, SWP_NOZORDER);
+                SetWindowPos(hSend, NULL, w - 65, 83, 45, 28, SWP_NOZORDER);
             }
+
             HWND hClear = GetDlgItem(hwnd, IDC_BTN_CLEAR);
             if (hClear) {
-                SetWindowPos(hClear, NULL, w - 90, 118, 70, 26, SWP_NOZORDER);
+                SetWindowPos(hClear, NULL, w - 75, 120, 55, 26, SWP_NOZORDER);
             }
             HWND hCopy = GetDlgItem(hwnd, IDC_BTN_COPY_LOG);
             if (hCopy) {
-                SetWindowPos(hCopy, NULL, w - 165, 118, 70, 26, SWP_NOZORDER);
+                SetWindowPos(hCopy, NULL, w - 155, 120, 75, 26, SWP_NOZORDER);
             }
             HWND hPanic = GetDlgItem(hwnd, IDC_BTN_PANIC);
             if (hPanic) {
-                SetWindowPos(hPanic, NULL, w - 240, 118, 70, 26, SWP_NOZORDER);
+                SetWindowPos(hPanic, NULL, w - 230, 120, 70, 26, SWP_NOZORDER);
             }
             if (g_hLogOutput) {
                 int log_h = h - 164;
                 if (log_h < 40) log_h = 40;
-                SetWindowPos(g_hLogOutput, NULL, 20, 152, w - 40, log_h, SWP_NOZORDER);
+                SetWindowPos(g_hLogOutput, NULL, 20, 154, w - 40, log_h, SWP_NOZORDER);
             }
             InvalidateRect(hwnd, NULL, TRUE);
+            return 0;
+        }
+
+        case WM_GETMINMAXINFO: {
+            LPMINMAXINFO mmi = (LPMINMAXINFO)lParam;
+            RECT minRc;
+            calc_window_rect(hwnd, 480, g_isCollapsed ? CLIENT_COLLAPSED_H : 220, &minRc);
+            mmi->ptMinTrackSize.x = minRc.right - minRc.left;
+            mmi->ptMinTrackSize.y = minRc.bottom - minRc.top;
+            if (g_isCollapsed) {
+                mmi->ptMaxTrackSize.y = minRc.bottom - minRc.top;
+            }
             return 0;
         }
 
@@ -502,15 +569,27 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
             return 0;
         }
 
+        case WM_ERASEBKGND: {
+            HDC hdc = (HDC)wParam;
+            RECT rc;
+            GetClientRect(hwnd, &rc);
+            FillRect(hdc, &rc, g_pal.hBrushBg);
+            return 1;
+        }
+
         case WM_CTLCOLORSTATIC:
         case WM_CTLCOLOREDIT: {
             HDC hdc = (HDC)wParam;
             HWND hCtl = (HWND)lParam;
             if (hCtl == g_hStatusText) {
-                SetTextColor(hdc, g_pal.status_ok);
+                char s_txt[256];
+                GetWindowTextA(g_hStatusText, s_txt, sizeof(s_txt));
+                int is_err = (strstr(s_txt, "FAILED") != NULL || strstr(s_txt, "CONFLICT") != NULL);
+                SetTextColor(hdc, is_err ? g_pal.status_err : g_pal.status_ok);
                 SetBkColor(hdc, g_pal.bg);
                 return (LRESULT)g_pal.hBrushBg;
-            } else if (hCtl == g_hLogOutput || hCtl == g_hCmdInput) {
+            } else if (hCtl == g_hLogOutput || hCtl == g_hCmdInput ||
+                       hCtl == GetDlgItem(hwnd, IDC_UDP_PORT) || hCtl == GetDlgItem(hwnd, IDC_TCP_PORT)) {
                 SetTextColor(hdc, g_pal.text);
                 SetBkColor(hdc, g_pal.panel);
                 return (LRESULT)g_pal.hBrushPanel;
@@ -613,7 +692,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     wc.lpfnWndProc = MainWndProc;
     wc.hInstance = hInstance;
     wc.hCursor = LoadCursorA(NULL, IDC_ARROW);
-    wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
+    wc.hbrBackground = NULL;
     wc.lpszClassName = "Sk3GuiClass";
     wc.hIcon = LoadIconA(hInstance, MAKEINTRESOURCEA(1));
     wc.hIconSm = (HICON)LoadImageA(hInstance, MAKEINTRESOURCEA(1), IMAGE_ICON, 16, 16, LR_DEFAULTCOLOR);
@@ -623,8 +702,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         return 1;
     }
 
-    int width = DEFAULT_WIDTH;
-    int height = COLLAPSED_HEIGHT;
+    int client_w = CLIENT_DEFAULT_W;
+    int client_h = g_isCollapsed ? CLIENT_COLLAPSED_H : CLIENT_DEFAULT_H;
 
     // Load saved configuration from system appropriate config text file
     sk3_gui_config_t cfg;
@@ -634,14 +713,19 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         g_curFontSize = (sk3_font_size_t)cfg.font_size;
         g_isCollapsed = cfg.console_collapsed;
         g_prevExpandedH = cfg.prev_expanded_h;
-        width = cfg.window_width;
-        height = g_isCollapsed ? COLLAPSED_HEIGHT : cfg.window_height;
+        if (cfg.window_width >= CLIENT_DEFAULT_W) client_w = cfg.window_width;
+        if (cfg.window_height >= CLIENT_COLLAPSED_H) client_h = g_isCollapsed ? CLIENT_COLLAPSED_H : cfg.window_height;
     }
+
+    RECT winRc;
+    calc_window_rect(NULL, client_w, client_h, &winRc);
+    int win_w = winRc.right - winRc.left;
+    int win_h = winRc.bottom - winRc.top;
 
     int screenW = GetSystemMetrics(SM_CXSCREEN);
     int screenH = GetSystemMetrics(SM_CYSCREEN);
-    int x = (screenW - width) / 2;
-    int y = (screenH - height) / 2;
+    int x = (screenW - win_w) / 2;
+    int y = (screenH - win_h) / 2;
     if (x < 0) x = 0;
     if (y < 0) y = 0;
 
@@ -653,7 +737,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         "Sk3GuiClass",
         win_title,
         WS_OVERLAPPEDWINDOW & ~WS_MINIMIZEBOX,
-        x, y, width, height,
+        x, y, win_w, win_h,
         NULL, NULL, hInstance, NULL
     );
 

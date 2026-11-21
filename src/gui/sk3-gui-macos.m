@@ -128,7 +128,7 @@
     }
     skred_logger(1);
 
-    int activeUdp = (r == 0 && udpPort > 0) ? udpPort : 0;
+    int activeUdp = (r == 0 && udpPort > 0) ? skred_udp_info() : 0;
     int activeTcp = (hp > 0) ? hp : 0;
 
     char statusBuf[256];
@@ -415,7 +415,7 @@
     content.autoresizesSubviews = YES;
 
     // Status Label
-    self.statusLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(20, 542, 600, 24)];
+    self.statusLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(20, 542, 450, 24)];
     self.statusLabel.editable = NO;
     self.statusLabel.bezeled = NO;
     self.statusLabel.drawsBackground = NO;
@@ -423,6 +423,20 @@
     self.statusLabel.stringValue = @"Starting audio engine...";
     self.statusLabel.autoresizingMask = NSViewWidthSizable | NSViewMinYMargin;
     [content addSubview:self.statusLabel];
+
+    // Theme Button (Row 1, right-aligned)
+    self.themeBtn = [NSButton buttonWithTitle:[NSString stringWithUTF8String:sk3_theme_name(self.curTheme)] target:self action:@selector(cycleTheme:)];
+    self.themeBtn.frame = NSMakeRect(484, 540, 88, 28);
+    self.themeBtn.bezelStyle = NSBezelStyleRounded;
+    self.themeBtn.autoresizingMask = NSViewMinXMargin | NSViewMinYMargin;
+    [content addSubview:self.themeBtn];
+
+    // Font Button (Row 1, right-aligned)
+    self.fontBtn = [NSButton buttonWithTitle:[NSString stringWithUTF8String:sk3_font_size_name(self.curFontSize)] target:self action:@selector(cycleFontSize:)];
+    self.fontBtn.frame = NSMakeRect(576, 540, 50, 28);
+    self.fontBtn.bezelStyle = NSBezelStyleRounded;
+    self.fontBtn.autoresizingMask = NSViewMinXMargin | NSViewMinYMargin;
+    [content addSubview:self.fontBtn];
 
     // Ports Row: UDP
     NSTextField *udpLbl = [[NSTextField alloc] initWithFrame:NSMakeRect(20, 508, 40, 22)];
@@ -441,7 +455,7 @@
     [content addSubview:self.udpField];
 
     // TCP
-    NSTextField *tcpLbl = [[NSTextField alloc] initWithFrame:NSMakeRect(130, 508, 40, 22)];
+    NSTextField *tcpLbl = [[NSTextField alloc] initWithFrame:NSMakeRect(128, 508, 40, 22)];
     tcpLbl.editable = NO;
     tcpLbl.bezeled = NO;
     tcpLbl.drawsBackground = NO;
@@ -450,7 +464,7 @@
     tcpLbl.autoresizingMask = NSViewMinYMargin;
     [content addSubview:tcpLbl];
 
-    self.tcpField = [[NSTextField alloc] initWithFrame:NSMakeRect(170, 506, 60, 24)];
+    self.tcpField = [[NSTextField alloc] initWithFrame:NSMakeRect(168, 506, 60, 24)];
     self.tcpField.stringValue = @"60440";
     self.tcpField.font = [self currentMonoFont];
     self.tcpField.autoresizingMask = NSViewMinYMargin;
@@ -458,7 +472,7 @@
 
     // Restart Button
     self.restartBtn = [NSButton buttonWithTitle:@"Restart" target:self action:@selector(restartClicked:)];
-    self.restartBtn.frame = NSMakeRect(238, 504, 70, 28);
+    self.restartBtn.frame = NSMakeRect(236, 504, 70, 28);
     self.restartBtn.bezelStyle = NSBezelStyleRounded;
     self.restartBtn.autoresizingMask = NSViewMinYMargin;
     [content addSubview:self.restartBtn];
@@ -472,24 +486,10 @@
 
     // Console Toggle Button
     self.toggleBtn = [NSButton buttonWithTitle:self.isCollapsed ? @"Show" : @"Hide" target:self action:@selector(toggleConsole:)];
-    self.toggleBtn.frame = NSMakeRect(372, 504, 110, 28);
+    self.toggleBtn.frame = NSMakeRect(374, 504, 65, 28);
     self.toggleBtn.bezelStyle = NSBezelStyleRounded;
     self.toggleBtn.autoresizingMask = NSViewMinYMargin;
     [content addSubview:self.toggleBtn];
-
-    // Theme Button
-    self.themeBtn = [NSButton buttonWithTitle:[NSString stringWithUTF8String:sk3_theme_name(self.curTheme)] target:self action:@selector(cycleTheme:)];
-    self.themeBtn.frame = NSMakeRect(484, 504, 100, 28);
-    self.themeBtn.bezelStyle = NSBezelStyleRounded;
-    self.themeBtn.autoresizingMask = NSViewMinYMargin;
-    [content addSubview:self.themeBtn];
-
-    // Font Button
-    self.fontBtn = [NSButton buttonWithTitle:[NSString stringWithUTF8String:sk3_font_size_name(self.curFontSize)] target:self action:@selector(cycleFontSize:)];
-    self.fontBtn.frame = NSMakeRect(586, 504, 75, 28);
-    self.fontBtn.bezelStyle = NSBezelStyleRounded;
-    self.fontBtn.autoresizingMask = NSViewMinYMargin;
-    [content addSubview:self.fontBtn];
 
     // Command Input Field (Monospaced! No label above it taking up space)
     self.cmdInput = [[NSTextField alloc] initWithFrame:NSMakeRect(20, 442, 500, 28)];
@@ -589,10 +589,6 @@
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender {
     return YES;
-}
-
-- (void)applicationWillTerminate:(NSNotification *)notification {
-    skred_stop();
 }
 
 @end
