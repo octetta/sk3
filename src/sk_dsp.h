@@ -2155,6 +2155,422 @@ static inline float sk_drum_cowbell_step(sk_drum_cowbell_t *c) {
     return sk_softclip_cubic(out, 1.0f);
 }
 
+/* =========================================================================
+ * 13. Physical Wind & Brass Synthesizers (Aeroacoustic Jet & Lip-Reed)
+ * =========================================================================
+ *
+ * Physical modeling synthesis of wind and brass instruments:
+ *
+ * 1. AEROACOUSTIC FLUTE & BLOWN PIPE (sk_flute_t):
+ *    - Implements Perry Cook, Coltman, and McIntyre-Schumacher-Woodhouse (MSW)
+ *      jet-drive physics. A planar air jet is blown across an embouchure labium
+ *      edge, forming a non-linear velocity-dependent pressure split:
+ *
+ *          P_inj = tanh(P_breath - P_bore_refl)
+ *
+ *      coupled to an acoustic cylindrical bore delay line of length L = Fs / f0.
+ *    - Features: breath turbulence noise, overblowing (register jump to 2*f0),
+ *      reflection damping, and natural vibrato/tremolo.
+ *
+ * 2. BRASS & LIP-REED INSTRUMENT (sk_brass_t):
+ *    - Implements the Helmholtz / Fletcher & Rossing pressure-controlled lip-valve
+ *      coupled to a flared horn bell. The player's lips act as a 2-pole mass-spring
+ *      oscillator driven by differential pressure delta_P = P_mouth - P_bore_refl.
+ *    - Flared bell filter radiates high frequencies into the room while reflecting
+ *      inverted low frequencies back into the tube to sustain lip oscillation.
+ *    - Non-linear shock wave steepening (Burgers' equation) generates the authentic
+ *      raspy blare and brilliance of a trumpet/trombone at fortissimo dynamics.
+ * ========================================================================= */
+
+#define SK_WIND_MAX_DELAY 4096
+
+/* -------------------------------------------------------------------------
+ * 13.1. Flute / Blown Pipe Physical Model
+ * ------------------------------------------------------------------------- */
+typedef struct {
+    float bore_delay[SK_WIND_MAX_DELAY];
+    float jet_delay[SK_WIND_MAX_DELAY / 2];
+    int bore_size;
+    int jet_size;
+    int bore_write_pos;
+    int jet_write_pos;
+    float bore_len;             /* Bore delay in samples (Fs / f0) */
+    float jet_len;              /* Jet travel delay in samples (~0.4 * bore_len) */
+    float bore_filter_state;    /* Reflection lowpass memory */
+    float bore_damping;         /* Reflection loss [0.0, 1.0] */
+    float jet_feedback;         /* Bore-to-jet feedback ratio (~0.4) */
+    float breath_pressure;      /* Current blowing pressure */
+    float target_pressure;      /* Target blowing pressure [0.0, 1.0] */
+    float pressure_slew;        /* Pressure smoothing slew rate */
+    float noise_gain;           /* Breath turbulence level [0.0, 0.5] */
+    float vibrato_phase;
+    float vibrato_inc;          /* Vibrato LFO rate */
+    float vibrato_depth;        /* Vibrato pitch/pressure depth */
+    float dc_x, dc_y;           /* Output DC blocker */
+    float sample_rate;
+    sk_rng_t rng;
+} sk_flute_t;
+
+/* Initialize physical flute engine */
+static inline void sk_flute_init(sk_flute_t *fl, float sample_rate) {
+    if (!fl) return;
+    memset(fl, 0, sizeof(*fl));
+    fl->sample_rate = sample_rate > 1000.0f ? sample_rate : 48000.0f;
+    fl->bore_size = SK_WIND_MAX_DELAY;
+    fl->jet_size = SK_WIND_MAX_DELAY / 2;
+    fl->bore_damping = 0.35f;
+    fl->jet_feedback = 0.45f;
+    fl->noise_gain = 0.12f;
+    fl->pressure_slew = 0.003f;
+    fl->vibrato_inc = 5.5f / fl->sample_rate; /* 5.5 Hz natural flute vibrato */
+    fl->vibrato_depth = 0.03f;
+    sk_rng_init(&fl->rng, 777123ULL);
+}
+
+/* Tune flute to target frequency in Hz */
+static inline void sk_flute_set_freq(sk_flute_t *fl, float freq_hz) {
+    if (!fl) return;
+    freq_hz = sk_clampf(freq_hz, 40.0f, fl->sample_rate * 0.45f);
+    /* Bore length for open cylindrical pipe: D = Fs / f0 */
+    float delay = fl->sample_rate / freq_hz;
+    if (delay < 4.0f) delay = 4.0f;
+    if (delay > (float)(fl->bore_size - 4)) delay = (float)(fl->bore_size - 4);
+
+    fl->bore_len = delay;
+    /* Jet delay represents the time it takes the air jet to travel from lips to labium edge */
+    fl->jet_len = delay * 0.42f;
+    if (fl->jet_len > (float)(fl->jet_size - 4)) fl->jet_len = (float)(fl->jet_size - 4);
+}
+
+/* Set blowing pressure [0.0 = silence, 0.4 = soft flute, 0.75 = normal, >0.9 = overblow octave] */
+static inline void sk_flute_set_pressure(sk_flute_t *fl, float pressure) {
+    if (!fl) return;
+    fl->target_pressure = sk_clampf(pressure, 0.0f, 1.2f);
+}
+
+/* Step physical flute model by 1 sample */
+static inline float sk_flute_step(sk_flute_t *fl) {
+    if (!fl) return 0.0f;
+
+    /* Slew blowing pressure toward target */
+    fl->breath_pressure += fl->pressure_slew * (fl->target_pressure - fl->breath_pressure);
+    if (fl->breath_pressure < 1e-4f && fl->target_pressure < 1e-4f) return 0.0f;
+
+    /* Vibrato modulation on blowing pressure */
+    fl->vibrato_phase += fl->vibrato_inc;
+    if (fl->vibrato_phase >= 1.0f) fl->vibrato_phase -= 1.0f;
+    float vibrato = sinf(fl->vibrato_phase * 2.0f * (float)M_PI) * fl->vibrato_depth;
+
+    /* Breath turbulence noise */
+    float breath_noise = sk_rng_float(&fl->rng) * fl->noise_gain * fl->breath_pressure;
+    float total_breath = fl->breath_pressure * (1.0f + vibrato) + breath_noise;
+
+    /* Read reflected wave from bore delay line */
+    int b_read_idx = fl->bore_write_pos - (int)fl->bore_len;
+    if (b_read_idx < 0) b_read_idx += fl->bore_size;
+    float bore_out = fl->bore_delay[b_read_idx];
+
+    /* 1-pole reflection lowpass filter (high frequencies radiate out, lows reflect back) */
+    float bore_filt = (1.0f - fl->bore_damping) * bore_out + fl->bore_damping * fl->bore_filter_state;
+    fl->bore_filter_state = bore_filt;
+
+    /* Inverted phase reflection at open tube boundary */
+    float bore_refl = -bore_filt;
+
+    /* Jet travel delay line */
+    int j_read_idx = fl->jet_write_pos - (int)fl->jet_len;
+    if (j_read_idx < 0) j_read_idx += fl->jet_size;
+    float jet_out = fl->jet_delay[j_read_idx];
+
+    /* Differential pressure exciting the jet at the labium edge */
+    float jet_in = total_breath + bore_refl * fl->jet_feedback;
+    fl->jet_delay[fl->jet_write_pos++] = jet_in;
+    if (fl->jet_write_pos >= fl->jet_size) fl->jet_write_pos = 0;
+
+    /* Non-linear jet excitation on the labium edge: sigmoid polynomial f(x) = x - x^3 */
+    float x = jet_out;
+    float nonlin = x - (x * x * x) * 0.333f;
+    nonlin = sk_clampf(nonlin, -1.0f, 1.0f);
+
+    /* Bore injection: combines non-linear jet pulse + reflected acoustic wave */
+    float bore_in = nonlin + bore_refl * 0.96f;
+    fl->bore_delay[fl->bore_write_pos++] = bore_in;
+    if (fl->bore_write_pos >= fl->bore_size) fl->bore_write_pos = 0;
+
+    /* Radiated sound from open embouchure / foot */
+    float raw_out = bore_out * 0.8f + breath_noise * 0.2f;
+
+    /* DC blocker to prevent integration bias */
+    float out = raw_out - fl->dc_x + 0.995f * fl->dc_y;
+    fl->dc_x = raw_out;
+    fl->dc_y = out;
+
+    return sk_softclip_cubic(out * 1.5f, 1.0f);
+}
+
+/* -------------------------------------------------------------------------
+ * 13.2. Brass / Lip-Reed Instrument Model
+ * ------------------------------------------------------------------------- */
+typedef struct {
+    float bore_delay[SK_WIND_MAX_DELAY];
+    int bore_size;
+    int bore_write_pos;
+    float bore_len;             /* Cylindrical bore round-trip delay */
+    float lip_phase;
+    float lip_freq;             /* Resonant frequency of the player's lips */
+    float lip_filter_x1, lip_filter_x2;
+    float lip_filter_y1, lip_filter_y2;
+    float lip_b0, lip_a1, lip_a2;
+    float mouth_pressure;       /* Player mouth blowing pressure [0.0, 1.0] */
+    float target_pressure;
+    float pressure_slew;
+    float brassiness;           /* Non-linear wave steepening drive [0.0, 1.0] */
+    sk_biquad_t bell_filter;    /* Flared horn bell radiation filter */
+    float bore_damping;
+    float bore_filter_state;
+    float dc_x, dc_y;
+    float sample_rate;
+} sk_brass_t;
+
+/* Initialize physical brass instrument engine */
+static inline void sk_brass_init(sk_brass_t *br, float sample_rate) {
+    if (!br) return;
+    memset(br, 0, sizeof(*br));
+    br->sample_rate = sample_rate > 1000.0f ? sample_rate : 48000.0f;
+    br->bore_size = SK_WIND_MAX_DELAY;
+    br->bore_damping = 0.25f;
+    br->pressure_slew = 0.005f;
+    br->brassiness = 0.50f;
+
+    /* Flared horn bell radiator: highpass/shelf at 1200 Hz radiating brilliant highs */
+    sk_biquad_init(&br->bell_filter, SK_BIQUAD_HIGHPASS, 1200.0f, 0.707f, br->sample_rate);
+}
+
+/* Tune brass instrument to target pitch in Hz */
+static inline void sk_brass_set_freq(sk_brass_t *br, float freq_hz) {
+    if (!br) return;
+    freq_hz = sk_clampf(freq_hz, 40.0f, br->sample_rate * 0.45f);
+
+    /* Bore length for closed-open brass pipe: round-trip delay D = Fs / (2 * f0) */
+    float delay = (br->sample_rate * 0.5f) / freq_hz;
+    if (delay < 4.0f) delay = 4.0f;
+    if (delay > (float)(br->bore_size - 4)) delay = (float)(br->bore_size - 4);
+    br->bore_len = delay;
+
+    /* Tune the player's lip-reed resonance slightly above the bore fundamental */
+    br->lip_freq = freq_hz * 1.03f;
+
+    /* Configure 2-pole mass-spring resonator for lip mechanical impedance */
+    float q = 7.0f; /* Mechanical Q of player's lips */
+    float r = expf(-(float)M_PI * (br->lip_freq / q) / br->sample_rate);
+    float omega = 2.0f * (float)M_PI * br->lip_freq / br->sample_rate;
+    br->lip_a1 = -2.0f * r * cosf(omega);
+    br->lip_a2 = r * r;
+    br->lip_b0 = (1.0f - r) * 0.5f;
+}
+
+/* Set mouth blowing pressure [0.0 = rest, 0.4 = piano, 0.7 = forte, 1.0 = fortissimo blare] */
+static inline void sk_brass_set_pressure(sk_brass_t *br, float pressure) {
+    if (!br) return;
+    br->target_pressure = sk_clampf(pressure, 0.0f, 1.0f);
+}
+
+/* Step physical brass model by 1 sample */
+static inline float sk_brass_step(sk_brass_t *br) {
+    if (!br) return 0.0f;
+
+    /* Slew mouth blowing pressure */
+    br->mouth_pressure += br->pressure_slew * (br->target_pressure - br->mouth_pressure);
+    if (br->mouth_pressure < 1e-4f && br->target_pressure < 1e-4f) return 0.0f;
+
+    /* Read bore reflection from delay line */
+    int b_read_idx = br->bore_write_pos - (int)br->bore_len;
+    if (b_read_idx < 0) b_read_idx += br->bore_size;
+    float bore_out = br->bore_delay[b_read_idx];
+
+    /* Lowpass bore reflection (losses along walls and inverted reflection from open bell) */
+    float bore_filt = (1.0f - br->bore_damping) * bore_out + br->bore_damping * br->bore_filter_state;
+    br->bore_filter_state = bore_filt;
+    float bore_refl = -bore_filt;
+
+    /* Pressure differential driving player's lips: Delta P = P_mouth - P_bore */
+    float delta_p = br->mouth_pressure - bore_refl;
+
+    /* Step lip mass-spring harmonic oscillator */
+    float lip_disp = br->lip_b0 * (delta_p - br->lip_filter_x2) - br->lip_a1 * br->lip_filter_y1 - br->lip_a2 * br->lip_filter_y2;
+    br->lip_filter_x2 = br->lip_filter_x1;
+    br->lip_filter_x1 = delta_p;
+    br->lip_filter_y2 = br->lip_filter_y1;
+    br->lip_filter_y1 = lip_disp;
+
+    /* When lip opens (displacement > 0), air volume velocity flows into the bore */
+    float open_area = (lip_disp > 0.0f) ? lip_disp : 0.0f;
+    float flow = open_area * delta_p * 2.5f;
+
+    /* Non-linear wave steepening in brass bore (Burgers' equation shock-front formation) */
+    if (br->brassiness > 0.0f) {
+        float blare = flow * flow * flow * br->brassiness * 0.8f;
+        flow += blare;
+    }
+
+    /* Softclip flow and inject into bore */
+    float bore_in = sk_softclip_cubic(flow + bore_refl * 0.95f, 1.0f);
+    br->bore_delay[br->bore_write_pos++] = bore_in;
+    if (br->bore_write_pos >= br->bore_size) br->bore_write_pos = 0;
+
+    /* Acoustic radiation through flared horn bell */
+    float radiated = sk_biquad_step(&br->bell_filter, bore_out);
+
+    /* DC blocker */
+    float out = radiated - br->dc_x + 0.995f * br->dc_y;
+    br->dc_x = radiated;
+    br->dc_y = out;
+
+    return sk_softclip_cubic(out * 1.8f, 1.0f);
+}
+
+/* =========================================================================
+ * 14. PolyBLEP (Polynomial Bandlimited Step) Anti-Aliased Oscillators
+ * =========================================================================
+ *
+ * Implements low-order Polynomial Bandlimited Step (PolyBLEP) algorithms
+ * (Välimäki & Huovilainen 2007).
+ *
+ * Naive digital sawtooth and pulse waveforms alias harshly due to their
+ * infinite harmonic step discontinuities. PolyBLEP subtracts a 2nd-order
+ * polynomial residual across the 1 sample before and after the transition:
+ *
+ *     B(t) = + (2*t - t^2 - 1)   for  0 <= phase < dt   (t = phase / dt)
+ *     B(t) = + (t^2 + 2*t + 1)   for  1-dt < phase < 1  (t = (phase - 1) / dt)
+ *
+ * Features:
+ * - Zero memory footprint (no wavetables or mipmaps required).
+ * - Continuous, artifact-free Pulse Width Modulation (PWM).
+ * - Continuous audio-rate FM without interpolation jitter.
+ * ========================================================================= */
+
+/* Compute 2-sample PolyBLEP correction residual for phase in [0.0, 1.0) and phase increment dt */
+static inline float sk_polyblep(float phase, float dt) {
+    if (dt <= 0.0f) return 0.0f;
+    if (phase < dt) {
+        float t = phase / dt;
+        return t + t - t * t - 1.0f;
+    } else if (phase > 1.0f - dt) {
+        float t = (phase - 1.0f) / dt;
+        return t * t + t + t + 1.0f;
+    }
+    return 0.0f;
+}
+
+/* Bandlimited sawtooth wave with zero table lookups */
+static inline float sk_polyblep_saw(float phase, float dt) {
+    /* Naive rising sawtooth [-1.0, 1.0] */
+    float naive = 2.0f * phase - 1.0f;
+    /* Subtract PolyBLEP residual at phase = 0 jump discontinuity */
+    return naive - sk_polyblep(phase, dt);
+}
+
+/* Bandlimited pulse wave with continuous pulse-width modulation (PWM) */
+static inline float sk_polyblep_pulse(float phase, float dt, float pwm) {
+    pwm = sk_clampf(pwm, 0.01f, 0.99f);
+    /* Naive pulse */
+    float naive = (phase < pwm) ? 1.0f : -1.0f;
+
+    /* Rising edge transition at phase = 0 */
+    float blep1 = sk_polyblep(phase, dt);
+
+    /* Falling edge transition at phase = pwm */
+    float phase_pwm = phase - pwm;
+    if (phase_pwm < 0.0f) phase_pwm += 1.0f;
+    float blep2 = sk_polyblep(phase_pwm, dt);
+
+    /* Correct both edges and remove DC bias */
+    float out = naive + blep1 - blep2;
+    float dc_offset = 2.0f * pwm - 1.0f;
+    return out - dc_offset;
+}
+
+/* Bandlimited triangle wave (integrated PolyBLEP square) */
+static inline float sk_polyblep_triangle(float phase, float dt, float *integrator_state) {
+    float pulse = sk_polyblep_pulse(phase, dt, 0.5f);
+    /* Leaky one-pole integrator with DC rejection */
+    float state = integrator_state ? *integrator_state : 0.0f;
+    state = 0.998f * state + pulse * (4.0f * dt);
+    if (integrator_state) *integrator_state = state;
+    return state;
+}
+
+typedef enum {
+    SK_POLYBLEP_SAW = 0,
+    SK_POLYBLEP_PULSE = 1,
+    SK_POLYBLEP_TRIANGLE = 2,
+    SK_POLYBLEP_SINE = 3
+} sk_polyblep_wave_t;
+
+/* Turnkey PolyBLEP Anti-Aliased Oscillator */
+typedef struct {
+    float phase;
+    float phase_inc;
+    float freq;
+    float pwm;
+    sk_polyblep_wave_t wave;
+    float tri_state;
+    float sample_rate;
+} sk_polyblep_osc_t;
+
+/* Initialize PolyBLEP oscillator */
+static inline void sk_polyblep_osc_init(sk_polyblep_osc_t *osc, float sample_rate) {
+    if (!osc) return;
+    memset(osc, 0, sizeof(*osc));
+    osc->sample_rate = sample_rate > 1000.0f ? sample_rate : 48000.0f;
+    osc->pwm = 0.50f;
+    osc->wave = SK_POLYBLEP_SAW;
+}
+
+/* Set oscillator frequency in Hz */
+static inline void sk_polyblep_osc_set_freq(sk_polyblep_osc_t *osc, float freq_hz) {
+    if (!osc) return;
+    freq_hz = sk_clampf(freq_hz, 1.0f, osc->sample_rate * 0.48f);
+    osc->freq = freq_hz;
+    osc->phase_inc = freq_hz / osc->sample_rate;
+}
+
+/* Set oscillator pulse width [0.01, 0.99] */
+static inline void sk_polyblep_osc_set_pwm(sk_polyblep_osc_t *osc, float pwm) {
+    if (!osc) return;
+    osc->pwm = sk_clampf(pwm, 0.01f, 0.99f);
+}
+
+/* Step PolyBLEP oscillator by 1 sample */
+static inline float sk_polyblep_osc_step(sk_polyblep_osc_t *osc) {
+    if (!osc) return 0.0f;
+
+    float out = 0.0f;
+    float p = osc->phase;
+    float dt = osc->phase_inc;
+
+    switch (osc->wave) {
+        case SK_POLYBLEP_SAW:
+            out = sk_polyblep_saw(p, dt);
+            break;
+        case SK_POLYBLEP_PULSE:
+            out = sk_polyblep_pulse(p, dt, osc->pwm);
+            break;
+        case SK_POLYBLEP_TRIANGLE:
+            out = sk_polyblep_triangle(p, dt, &osc->tri_state);
+            break;
+        case SK_POLYBLEP_SINE:
+        default:
+            out = sinf(p * 2.0f * (float)M_PI);
+            break;
+    }
+
+    osc->phase += dt;
+    if (osc->phase >= 1.0f) osc->phase -= 1.0f;
+
+    return out;
+}
+
 #ifdef __cplusplus
 }
 #endif

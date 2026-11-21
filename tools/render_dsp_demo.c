@@ -466,15 +466,138 @@ static void render_percussion_demo(const char *filename, int sample_rate) {
     free(out);
 }
 
+static void render_wind_brass_demo(const char *filename, int sample_rate) {
+    printf("Rendering physical wind (flute) & brass models demo...\n");
+    float flute_notes[] = { 392.00f, 440.00f, 493.88f, 523.25f, 587.33f, 659.25f };
+    int num_flute = 6;
+    int flute_note_samples = (int)(0.55f * sample_rate);
+
+    float brass_notes[] = { 261.63f, 392.00f, 523.25f, 659.25f, 783.99f };
+    int num_brass = 5;
+    int brass_note_samples = (int)(0.60f * sample_rate);
+
+    int total_samples = (num_flute * flute_note_samples) + (sample_rate / 2) +
+                        (num_brass * brass_note_samples) + sample_rate;
+    int16_t *out = (int16_t *)calloc(total_samples, sizeof(int16_t));
+    int out_idx = 0;
+
+    sk_flute_t flute;
+    sk_flute_init(&flute, (float)sample_rate);
+
+    for (int n = 0; n < num_flute; n++) {
+        sk_flute_set_freq(&flute, flute_notes[n]);
+        sk_flute_set_pressure(&flute, 0.70f + 0.05f * n);
+        int play_samples = (int)(flute_note_samples * 0.85f);
+        int rest_samples = flute_note_samples - play_samples;
+        for (int i = 0; i < play_samples; i++) {
+            float s = sk_flute_step(&flute);
+            out[out_idx++] = (int16_t)(s * 25000.0f);
+        }
+        sk_flute_set_pressure(&flute, 0.0f);
+        for (int i = 0; i < rest_samples; i++) {
+            float s = sk_flute_step(&flute);
+            out[out_idx++] = (int16_t)(s * 25000.0f);
+        }
+    }
+
+    int pause_samples = sample_rate / 2;
+    for (int i = 0; i < pause_samples; i++) out[out_idx++] = 0;
+
+    sk_brass_t brass;
+    sk_brass_init(&brass, (float)sample_rate);
+    brass.brassiness = 0.65f;
+
+    for (int n = 0; n < num_brass; n++) {
+        sk_brass_set_freq(&brass, brass_notes[n]);
+        float pressure = 0.55f + 0.09f * (float)n;
+        sk_brass_set_pressure(&brass, pressure);
+        int play_samples = (int)(brass_note_samples * 0.82f);
+        int rest_samples = brass_note_samples - play_samples;
+        for (int i = 0; i < play_samples; i++) {
+            float s = sk_brass_step(&brass);
+            out[out_idx++] = (int16_t)(s * 26000.0f);
+        }
+        sk_brass_set_pressure(&brass, 0.0f);
+        for (int i = 0; i < rest_samples; i++) {
+            float s = sk_brass_step(&brass);
+            out[out_idx++] = (int16_t)(s * 26000.0f);
+        }
+    }
+
+    for (int i = 0; i < sample_rate / 2; i++) {
+        float s = sk_brass_step(&brass);
+        out[out_idx++] = (int16_t)(s * 26000.0f);
+    }
+
+    write_wav_file(filename, out, out_idx, sample_rate);
+    free(out);
+}
+
+static void render_polyblep_demo(const char *filename, int sample_rate) {
+    printf("Rendering PolyBLEP anti-aliased oscillators demo...\n");
+    int sweep_samples = sample_rate * 3;
+    int pwm_samples = sample_rate * 3;
+    int total_samples = sweep_samples * 2 + pwm_samples + sample_rate;
+
+    int16_t *out = (int16_t *)calloc(total_samples, sizeof(int16_t));
+    int out_idx = 0;
+
+    /* 1. Naive Saw Sweep */
+    float phase = 0.0f;
+    for (int i = 0; i < sweep_samples; i++) {
+        float frac = (float)i / (float)sweep_samples;
+        float freq = 440.0f * powf(5000.0f / 440.0f, frac);
+        float dt = freq / (float)sample_rate;
+        float s = 2.0f * phase - 1.0f;
+        phase += dt;
+        if (phase >= 1.0f) phase -= 1.0f;
+        out[out_idx++] = (int16_t)(sk_softclip_cubic(s * 0.85f, 1.0f) * 26000.0f);
+    }
+
+    for (int i = 0; i < sample_rate / 2; i++) out[out_idx++] = 0;
+
+    /* 2. PolyBLEP Saw Sweep */
+    sk_polyblep_osc_t osc;
+    sk_polyblep_osc_init(&osc, (float)sample_rate);
+    osc.wave = SK_POLYBLEP_SAW;
+
+    for (int i = 0; i < sweep_samples; i++) {
+        float frac = (float)i / (float)sweep_samples;
+        float freq = 440.0f * powf(5000.0f / 440.0f, frac);
+        sk_polyblep_osc_set_freq(&osc, freq);
+        float s = sk_polyblep_osc_step(&osc);
+        out[out_idx++] = (int16_t)(sk_softclip_cubic(s * 0.85f, 1.0f) * 26000.0f);
+    }
+
+    for (int i = 0; i < sample_rate / 2; i++) out[out_idx++] = 0;
+
+    /* 3. PolyBLEP PWM Sweep */
+    osc.wave = SK_POLYBLEP_PULSE;
+    sk_polyblep_osc_set_freq(&osc, 220.0f);
+
+    for (int i = 0; i < pwm_samples; i++) {
+        float frac = (float)i / (float)pwm_samples;
+        float pwm = 0.50f + 0.38f * sinf(frac * 4.0f * (float)M_PI);
+        sk_polyblep_osc_set_pwm(&osc, pwm);
+        float s = sk_polyblep_osc_step(&osc);
+        out[out_idx++] = (int16_t)(sk_softclip_cubic(s * 0.85f, 1.0f) * 26000.0f);
+    }
+
+    write_wav_file(filename, out, out_idx, sample_rate);
+    free(out);
+}
+
 int main(int argc, char **argv) {
     (void)argc; (void)argv;
     int sample_rate = 48000;
     render_pluck_demo("pluck_demo.wav", sample_rate);
     render_percussion_demo("percussion_demo.wav", sample_rate);
+    render_wind_brass_demo("wind_brass_demo.wav", sample_rate);
+    render_polyblep_demo("polyblep_demo.wav", sample_rate);
     render_vowel_demo("vowel_demo.wav", sample_rate);
     render_phoneme_demo("phoneme_demo.wav", sample_rate);
     render_speech_demo("speech_demo.wav", sample_rate);
     render_voices_demo("voices_demo.wav", sample_rate);
-    printf("DSP demo rendering complete!\n");
+    printf("All DSP demos rendered successfully!\n");
     return 0;
 }

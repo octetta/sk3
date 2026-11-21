@@ -407,6 +407,91 @@ static void test_percussion_engines(void) {
     TEST_ASSERT(cowbell.amp_env < 0.05f, "cowbell decayed");
 }
 
+static void test_wind_and_brass(void) {
+    /* 1. Flute physical model */
+    sk_flute_t flute;
+    sk_flute_init(&flute, 48000.0f);
+    sk_flute_set_freq(&flute, 440.0f);
+    sk_flute_set_pressure(&flute, 0.75f);
+
+    float fl_max = 0.0f;
+    for (int i = 0; i < 4800; i++) {
+        float s = sk_flute_step(&flute);
+        TEST_ASSERT(!isnan(s) && !isinf(s), "flute sample finite");
+        TEST_ASSERT(fabsf(s) <= 1.0f, "flute sample within bounds");
+        if (fabsf(s) > fl_max) fl_max = fabsf(s);
+    }
+    TEST_ASSERT(fl_max > 0.05f, "flute oscillates cleanly");
+
+    /* Flute stop blowing */
+    sk_flute_set_pressure(&flute, 0.0f);
+    for (int i = 0; i < 4800; i++) {
+        sk_flute_step(&flute);
+    }
+    TEST_ASSERT(flute.breath_pressure < 0.01f, "flute pressure decayed");
+
+    /* 2. Brass physical model */
+    sk_brass_t brass;
+    sk_brass_init(&brass, 48000.0f);
+    sk_brass_set_freq(&brass, 220.0f);
+    sk_brass_set_pressure(&brass, 0.80f);
+
+    float br_max = 0.0f;
+    for (int i = 0; i < 4800; i++) {
+        float s = sk_brass_step(&brass);
+        TEST_ASSERT(!isnan(s) && !isinf(s), "brass sample finite");
+        TEST_ASSERT(fabsf(s) <= 1.0f, "brass sample within bounds");
+        if (fabsf(s) > br_max) br_max = fabsf(s);
+    }
+    TEST_ASSERT(br_max > 0.05f, "brass oscillates cleanly");
+
+    /* Brass stop blowing */
+    sk_brass_set_pressure(&brass, 0.0f);
+    for (int i = 0; i < 4800; i++) {
+        sk_brass_step(&brass);
+    }
+    TEST_ASSERT(brass.mouth_pressure < 0.01f, "brass pressure decayed");
+}
+
+static void test_polyblep_oscillators(void) {
+    float dt = 440.0f / 48000.0f;
+
+    /* 1. PolyBLEP residual function checks */
+    TEST_ASSERT(sk_polyblep(0.5f, dt) == 0.0f, "polyblep zero in middle of cycle");
+    float b0 = sk_polyblep(0.0f, dt);
+    TEST_ASSERT(fabsf(b0 - (-1.0f)) < 1e-4f, "polyblep at boundary phase=0 is -1");
+
+    /* 2. PolyBLEP Turnkey Oscillator: Sawtooth */
+    sk_polyblep_osc_t osc;
+    sk_polyblep_osc_init(&osc, 48000.0f);
+    sk_polyblep_osc_set_freq(&osc, 440.0f);
+    osc.wave = SK_POLYBLEP_SAW;
+
+    float saw_min = 1.0f, saw_max = -1.0f;
+    for (int i = 0; i < 4800; i++) {
+        float s = sk_polyblep_osc_step(&osc);
+        TEST_ASSERT(!isnan(s) && !isinf(s), "saw sample finite");
+        if (s < saw_min) saw_min = s;
+        if (s > saw_max) saw_max = s;
+    }
+    TEST_ASSERT(saw_min < -0.8f && saw_max > 0.8f, "polyblep saw full dynamic range");
+
+    /* 3. PolyBLEP Pulse with PWM */
+    osc.wave = SK_POLYBLEP_PULSE;
+    sk_polyblep_osc_set_pwm(&osc, 0.25f);
+    for (int i = 0; i < 4800; i++) {
+        float s = sk_polyblep_osc_step(&osc);
+        TEST_ASSERT(!isnan(s) && !isinf(s), "pulse sample finite");
+    }
+
+    /* 4. PolyBLEP Triangle */
+    osc.wave = SK_POLYBLEP_TRIANGLE;
+    for (int i = 0; i < 4800; i++) {
+        float s = sk_polyblep_osc_step(&osc);
+        TEST_ASSERT(!isnan(s) && !isinf(s), "triangle sample finite");
+    }
+}
+
 int main(void) {
     printf("Running sk_dsp math test suite...\n");
     test_clamping_and_safety();
@@ -426,6 +511,8 @@ int main(void) {
     test_formants_and_glottal();
     test_phoneme_dsl();
     test_percussion_engines();
+    test_wind_and_brass();
+    test_polyblep_oscillators();
     printf("All %d sk_dsp checks passed successfully!\n", g_pass);
     return 0;
 }
