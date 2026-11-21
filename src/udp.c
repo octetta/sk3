@@ -134,7 +134,7 @@ static void *udp_main(void *arg) {
   atomic_store_int(&udp_startup_status, (sock < 0) ? -1 : 1);
   
   if (sock < 0) {
-    puts("# udp thread cannot run");
+    printf("# udp thread cannot run on port %d\n", udp_port);
     atomic_fetch_add_uint64(&udp_errors, 1);
     atomic_store_int(&udp_thread_active, 0);
     return NULL;

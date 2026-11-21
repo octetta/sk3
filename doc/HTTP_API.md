@@ -199,6 +199,35 @@ func main() {
 Invoke-RestMethod -Uri "http://localhost:60440/" -Method Post -Body "v0 w0 f440 a0 l1"
 ```
 
+### Netcat (`nc`) One-Shot
+
+```bash
+# Send single command and close connection
+printf "POST /-skode HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nContent-Length: 17\r\n\r\nv0 w0 f440 a0 l1\n" | nc localhost 60440
+
+# Query engine version
+printf "GET /-version HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" | nc localhost 60440
+```
+
+### `socat` One-Shot
+
+```bash
+# Send note trigger and print response
+printf "POST /-skode HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nContent-Length: 17\r\n\r\nv0 w0 f440 a0 l1\n" | socat - TCP:localhost:60440
+```
+
+### Tcl One-Shot
+
+```tcl
+#!/usr/bin/env tclsh
+# Using standard Tcl http package:
+package require http
+
+set tok [http::geturl "http://localhost:60440/-skode" -query "v0 w0 f440 a0 l1" -type "text/plain"]
+puts "Response: [string trim [http::data $tok]]"
+http::cleanup $tok
+```
+
 ---
 
 ## 5. Continuous & Streaming Examples (`Connection: keep-alive`)
@@ -288,7 +317,93 @@ async function runSession() {
 runSession();
 ```
 
-### C. Persistent Interactive Unix TCP Pipe (`/dev/tcp` or Netcat)
+### C. Tcl Persistent Keep-Alive Session (Pure Native Sockets)
+
+Tcl's native `socket` channel provides an ultra-lightweight client for continuous scripting without any external dependencies:
+
+```tcl
+#!/usr/bin/env tclsh
+
+# Open persistent TCP connection to sk3 HTTP server
+proc skode_open {host port} {
+    set s [socket $host $port]
+    fconfigure $s -translation binary -buffering line -blocking 1
+    return $s
+}
+
+# Send command over open socket and read HTTP response body
+proc skode_send {s cmd} {
+    set len [string length $cmd]
+    puts -nonewline $s "POST /-skode HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\nContent-Length: $len\r\n\r\n$cmd"
+    flush $s
+
+    # Parse HTTP response headers
+    set content_len 0
+    while {[gets $s line] >= 0} {
+        set line [string trimright $line "\r\n"]
+        if {$line eq ""} break
+        if {[string match -nocase "content-length:*" $line]} {
+            set content_len [string trim [lindex [split $line ":"] 1]]
+        }
+    }
+    # Read exact payload body
+    if {$content_len > 0} {
+        return [read $s $content_len]
+    }
+    return ""
+}
+
+# Example live session:
+set sock [skode_open localhost 60440]
+
+# 1. Define chord macro in this connection's context
+puts "Defined macro: [string trim [skode_send $sock {[c_major]:v0 n60 a-6 l1 v1 n64 a-6 l1 v2 n67 a-6 l1;}]]"
+
+# 2. Invoke chord macro on the same socket (macro is preserved!)
+puts "Triggered chord: [string trim [skode_send $sock {c_major}]]"
+
+# 3. Query voice state
+puts "Voice 0 status: [string trim [skode_send $sock {v0 ?}]]"
+
+# 4. Close socket (context is freed cleanly)
+close $sock
+```
+
+### D. `socat` Continuous Keep-Alive Pipeline
+
+Stream multiple commands over a single persistent TCP connection:
+
+```bash
+(
+  cmd1="[hit]:v0 w0 f440 a0 l1;"
+  cmd2="hit"
+  cmd3="v0 ?"
+  printf "POST /-skode HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\nContent-Length: %d\r\n\r\n%s" "${#cmd1}" "$cmd1"
+  sleep 0.1
+  printf "POST /-skode HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\nContent-Length: %d\r\n\r\n%s" "${#cmd2}" "$cmd2"
+  sleep 0.1
+  printf "POST /-skode HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nContent-Length: %d\r\n\r\n%s" "${#cmd3}" "$cmd3"
+) | socat - TCP:localhost:60440
+```
+
+### E. Netcat (`nc`) Continuous Keep-Alive Pipeline
+
+Identical pipelined streaming using standard Netcat:
+
+```bash
+(
+  cmd1="[hit]:v0 w0 f440 a0 l1;"
+  cmd2="hit"
+  cmd3="v0 ?"
+  printf "POST /-skode HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\nContent-Length: %d\r\n\r\n%s" "${#cmd1}" "$cmd1"
+  sleep 0.1
+  printf "POST /-skode HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\nContent-Length: %d\r\n\r\n%s" "${#cmd2}" "$cmd2"
+  sleep 0.1
+  printf "POST /-skode HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nContent-Length: %d\r\n\r\n%s" "${#cmd3}" "$cmd3"
+) | nc localhost 60440
+```
+
+### F. Persistent Interactive Unix TCP Pipe (`/dev/tcp`)
 
 ```bash
 # Open interactive bidirectional TCP stream on file descriptor 3
@@ -310,7 +425,7 @@ cat <&3
 exec 3<&-
 ```
 
-### D. Streaming a Complex Composition File
+### G. Streaming a Complex Composition File
 
 ```bash
 curl -X POST http://localhost:60440/-skode \
@@ -318,4 +433,27 @@ curl -X POST http://localhost:60440/-skode \
      --data-binary @track.sk
 ```
 
-Each line in `track.sk` is evaluated sequentially within the isolated connection context, maintaining register values and voice configurations with sample-accurate execution.
+---
+
+## 6. Browser Web App Communication Guide
+
+### Can a Web App in My Browser Talk to `sk3` on `localhost`?
+
+**Yes!** `sk3` is explicitly designed for direct browser-to-engine communication:
+
+1. **Full CORS Headers**: Every response emitted by `sk3` includes:
+   ```http
+   Access-Control-Allow-Origin: *
+   Access-Control-Allow-Methods: POST, OPTIONS, GET
+   Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With
+   ```
+2. **Private Network Access (PNA) Support**:
+   Modern Chromium browsers (Chrome, Edge, Brave, Opera) implement Google's [Private Network Access](https://developer.chrome.com/blog/private-network-access-preflight/) specification when a public website communicates with `localhost`. `sk3` automatically replies to preflight requests with:
+   ```http
+   Access-Control-Allow-Private-Network: true
+   ```
+   This allows remote web editors (e.g. `https://octetta.github.io` or live notebooks) to talk directly to your local `sk3` instance without being blocked by browser private network security checks.
+3. **Mixed Content Considerations**:
+   - If your web app is hosted on `http://localhost:...` or `http://127.0.0.1:...` (e.g. Vite, Webpack dev server, Python `http.server`), HTTP-to-HTTP communication works seamlessly with zero warnings.
+   - If your web app is loaded from `file:///...`, local loopback fetches to `http://localhost:60440` work seamlessly.
+   - If your web app is served over public `https://...`, standard modern browsers permit communication with `http://localhost` because `localhost` is treated as a potentially trustworthy loopback origin. If a strict browser blocks the HTTP mixed content, running your web UI over `http://` or using a local dev proxy bypasses any mixed-content restrictions.

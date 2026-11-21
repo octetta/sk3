@@ -218,7 +218,8 @@ static void client_execute_and_respond(sk_http_client_t *c, const char *body, in
         "Content-Type: text/plain; charset=utf-8\r\n"
         "Access-Control-Allow-Origin: *\r\n"
         "Access-Control-Allow-Methods: POST, OPTIONS, GET\r\n"
-        "Access-Control-Allow-Headers: Content-Type, Authorization\r\n"
+        "Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With\r\n"
+        "Access-Control-Allow-Private-Network: true\r\n"
         "Connection: %s\r\n"
         "Content-Length: %d\r\n"
         "\r\n"
@@ -240,7 +241,8 @@ static void client_respond_cors(sk_http_client_t *c) {
         "Server: sk3-http\r\n"
         "Access-Control-Allow-Origin: *\r\n"
         "Access-Control-Allow-Methods: POST, OPTIONS, GET\r\n"
-        "Access-Control-Allow-Headers: Content-Type, Authorization\r\n"
+        "Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With\r\n"
+        "Access-Control-Allow-Private-Network: true\r\n"
         "Access-Control-Max-Age: 86400\r\n"
         "Connection: %s\r\n"
         "Content-Length: 0\r\n"
@@ -576,6 +578,7 @@ int skred_http_start(int port) {
 
     server_sock = socket(AF_INET, SOCK_STREAM, 0);
     if (server_sock == INVALID_SOCKET) {
+        printf("# http thread cannot run on port %d\n", port);
         return -1;
     }
 
@@ -594,12 +597,14 @@ int skred_http_start(int port) {
     sin.sin_port = htons(port);
 
     if (bind(server_sock, (struct sockaddr *)&sin, sizeof(sin)) < 0) {
+        printf("# http thread cannot run on port %d\n", port);
         CLOSE_SOCKET(server_sock);
         server_sock = INVALID_SOCKET;
         return -1;
     }
 
     if (listen(server_sock, 32) < 0) {
+        printf("# http thread cannot run on port %d\n", port);
         CLOSE_SOCKET(server_sock);
         server_sock = INVALID_SOCKET;
         return -1;
