@@ -64,7 +64,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libasound2-dev ninja-build cmake
+          sudo apt-get install -y libasound2-dev libx11-dev libxft-dev ninja-build cmake
 
       - name: Build Linux API distribution
         run: make dist-api
@@ -77,6 +77,7 @@ jobs:
           test -f "$source"
           tar -tzf "$source" > archive-contents.txt
           grep -q "skred-${VERSION}-maxed/include/skred/api.h" archive-contents.txt
+          grep -q "skred-${VERSION}-maxed/bin/sk3-gui" archive-contents.txt
           mkdir -p release-assets
           cp "$source" "release-assets/"
 

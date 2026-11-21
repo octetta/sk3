@@ -166,7 +166,7 @@ if(SKRED_SCOPE)
     )
 endif()
 
-# GUI frontends for Windows and macOS
+# GUI frontends for Linux, Windows, and macOS
 if(WIN32)
     set(SK3_GUI_SRCS src/gui/sk3-gui-win32.c)
     find_program(WINDRES_BIN NAMES x86_64-w64-mingw32-windres windres)
@@ -181,12 +181,13 @@ if(WIN32)
         list(APPEND SK3_GUI_SRCS "${CMAKE_CURRENT_BINARY_DIR}/osko.res.o")
     endif()
     add_executable(sk3-gui WIN32 ${SK3_GUI_SRCS})
-    target_link_libraries(sk3-gui PRIVATE api gdi32 comctl32 ws2_32 ole32 winmm)
+    target_link_libraries(sk3-gui PRIVATE api gdi32 comctl32 shell32 ws2_32 ole32 winmm)
     target_include_directories(sk3-gui PRIVATE
         "${CMAKE_CURRENT_BINARY_DIR}"
         "${CMAKE_CURRENT_SOURCE_DIR}/src"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/gen"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/exp-vfs"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/gui"
     )
     if(CMAKE_C_COMPILER_ID MATCHES "Clang")
         target_link_options(sk3-gui PRIVATE "-Wl,--subsystem,windows")
@@ -200,9 +201,29 @@ elseif(APPLE)
         "${CMAKE_CURRENT_SOURCE_DIR}/src"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/gen"
         "${CMAKE_CURRENT_SOURCE_DIR}/src/exp-vfs"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/gui"
     )
     target_compile_options(sk3-gui PRIVATE -fobjc-arc)
     install(TARGETS sk3-gui RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+elseif(UNIX)
+    find_package(PkgConfig QUIET)
+    if(PKG_CONFIG_FOUND)
+        pkg_check_modules(X11_XFT QUIET x11 xft)
+    endif()
+    if(X11_XFT_FOUND)
+        add_executable(sk3-gui src/gui/sk3-gui-linux.c)
+        target_link_libraries(sk3-gui PRIVATE api ${X11_XFT_LIBRARIES} m pthread)
+        target_include_directories(sk3-gui PRIVATE
+            "${CMAKE_CURRENT_BINARY_DIR}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/gen"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/exp-vfs"
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/gui"
+            ${X11_XFT_INCLUDE_DIRS}
+        )
+        target_link_directories(sk3-gui PRIVATE ${X11_XFT_LIBRARY_DIRS})
+        install(TARGETS sk3-gui RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+    endif()
 endif()
 
 # Installation headers
