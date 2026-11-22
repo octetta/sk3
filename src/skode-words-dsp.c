@@ -2300,10 +2300,10 @@ int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int arg
           p.freq = parse_dsl_pitch(val, p.freq, &p.midi_note, &p.has_pitch);
         } else if (strcmp(key, "n") == 0 || strcmp(key, "note") == 0 || strcmp(key, "midi") == 0) {
           p.freq = parse_dsl_pitch(val, p.freq, &p.midi_note, &p.has_pitch);
-        } else if (strcmp(key, "d") == 0 || strcmp(key, "decay") == 0 || strcmp(key, "dur") == 0 ||
-                   strcmp(key, "duration") == 0 || strcmp(key, "len") == 0 || strcmp(key, "t60") == 0) {
+        } else if (strcmp(key, "d") == 0 || strcmp(key, "decay") == 0 || strcmp(key, "t60") == 0) {
           p.decay = (float)atof(val);
-          p.duration = p.decay;
+        } else if (strcmp(key, "dur") == 0 || strcmp(key, "duration") == 0 || strcmp(key, "len") == 0) {
+          p.duration = (float)atof(val);
         } else if (strcmp(key, "pdecay") == 0) {
           p.pdecay = (float)atof(val);
         } else if (strcmp(key, "end") == 0) {
@@ -2366,23 +2366,65 @@ int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int arg
     tok = strtok(NULL, " \t,;");
   }
 
-  /* Compute duration */
+  /* Compute duration with full natural decay to silence */
   float duration = p.duration;
   if (duration <= 0.0f) {
     switch (p.preset) {
-      case DSL_DRUM_KICK:     duration = p.decay * 1.5f + 0.05f; break;
-      case DSL_DRUM_SNARE:    duration = (p.decay > p.tail ? p.decay : p.tail) * 1.8f + 0.05f; break;
-      case DSL_DRUM_HAT:      duration = p.decay * 2.0f + 0.02f; break;
-      case DSL_DRUM_CLAP:     duration = (p.bursts * p.spread * 0.001f) + p.tail * 2.0f + 0.05f; break;
-      case DSL_DRUM_TOM:      duration = p.decay * 2.0f + 0.05f; break;
-      case DSL_DRUM_COWBELL:  duration = p.decay * 2.0f + 0.02f; break;
-      case DSL_DRUM_MEMBRANE: duration = 0.80f; break;
+      case DSL_DRUM_KICK: {
+        duration = p.decay * 6.5f + 0.15f;
+        break;
+      }
+      case DSL_DRUM_SNARE: {
+        float max_t = p.decay > p.tail ? p.decay : p.tail;
+        duration = max_t * 6.5f + 0.15f;
+        break;
+      }
+      case DSL_DRUM_HAT: {
+        duration = p.decay * 6.5f + 0.10f;
+        break;
+      }
+      case DSL_DRUM_CLAP: {
+        duration = (p.bursts * p.spread * 0.001f) + p.tail * 6.5f + 0.15f;
+        break;
+      }
+      case DSL_DRUM_TOM: {
+        duration = p.decay * 6.5f + 0.15f;
+        break;
+      }
+      case DSL_DRUM_COWBELL: {
+        duration = p.decay * 6.5f + 0.10f;
+        break;
+      }
+      case DSL_DRUM_MEMBRANE: {
+        duration = 2.20f;
+        break;
+      }
 
-      case DSL_BELL_CHURCH:   duration = 3.5f * p.decay; break;
-      case DSL_BELL_TUBULAR:  duration = 3.0f * p.decay; break;
-      case DSL_BELL_VIBE:     duration = 2.5f * p.decay; break;
-      case DSL_BELL_TIBETAN:  duration = 4.0f * p.decay; break;
-      case DSL_BELL_AGOGO:    duration = 0.8f * p.decay; break;
+      case DSL_BELL_CHURCH: {
+        float sc = p.decay > 0.05f ? p.decay : 1.0f;
+        duration = 5.5f * sc;
+        break;
+      }
+      case DSL_BELL_TUBULAR: {
+        float sc = p.decay > 0.05f ? p.decay : 1.0f;
+        duration = 4.5f * sc;
+        break;
+      }
+      case DSL_BELL_VIBE: {
+        float sc = p.decay > 0.05f ? p.decay : 1.0f;
+        duration = 4.0f * sc;
+        break;
+      }
+      case DSL_BELL_TIBETAN: {
+        float sc = p.decay > 0.05f ? p.decay : 1.0f;
+        duration = 7.0f * sc;
+        break;
+      }
+      case DSL_BELL_AGOGO: {
+        float sc = p.decay > 0.05f ? p.decay : 1.0f;
+        duration = 1.8f * sc;
+        break;
+      }
 
       case DSL_STRING_GUITAR:
       case DSL_STRING_BASS:
@@ -2390,14 +2432,22 @@ int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int arg
       case DSL_STRING_KOTO:
       case DSL_STRING_SITAR:
       case DSL_STRING_PIZZ:
-      case DSL_STRING_RAW:    duration = 2.0f; break;
+      case DSL_STRING_RAW: {
+        duration = 3.5f;
+        break;
+      }
 
       case DSL_WIND_BRASS:
-      case DSL_WIND_FLUTE:    duration = 1.2f; break;
-      default:                duration = 1.0f; break;
+      case DSL_WIND_FLUTE: {
+        duration = 1.5f;
+        break;
+      }
+      default:
+        duration = 1.5f;
+        break;
     }
   }
-  duration = sk_clampf(duration, 0.02f, 10.0f);
+  duration = sk_clampf(duration, 0.02f, 15.0f);
 
   float rate = (float)MAIN_SAMPLE_RATE;
   if (rate < 1000.0f) rate = 48000.0f;
@@ -2564,6 +2614,16 @@ int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int arg
     }
   }
 
+  /* Smooth 15ms cosine anti-click taper at the very end of the buffer */
+  int taper_samples = (int)(rate * 0.015f);
+  if (taper_samples > total_samples / 4) taper_samples = total_samples / 4;
+  for (int i = 0; i < taper_samples; i++) {
+    int idx = total_samples - taper_samples + i;
+    float phase = (float)i / (float)taper_samples;
+    float window = 0.5f * (1.0f + cosf((float)M_PI * phase));
+    buf[idx] *= window;
+  }
+
   /* Normalize audio to standard -0.1 dB level */
   normalize_preserve_zero(buf, total_samples);
 
@@ -2615,10 +2675,10 @@ int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int arg
   ands_string_from_external(ctx->parse, meta_str, (int)strlen(meta_str));
 
   if (has_loop) {
-    ctx->printf(ctx, "# render: %s [%d samples, %.2fs, loop: %d..%d]\n",
+    ctx->printf(ctx, "# phz: %s [%d samples, %.2fs, loop: %d..%d]\n",
                 p.preset_name, total_samples, (double)total_samples / rate, loop_start, loop_end);
   } else {
-    ctx->printf(ctx, "# render: %s [%d samples, %.2fs, one-shot]\n",
+    ctx->printf(ctx, "# phz: %s [%d samples, %.2fs, one-shot]\n",
                 p.preset_name, total_samples, (double)total_samples / rate);
   }
 
@@ -2632,7 +2692,7 @@ int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int arg
         if (skode_double_to_int(arg[1], &os)) one_shot = os;
       }
       data_load(ctx, wave_slot, one_shot, rate, 0.0f);
-      ctx->printf(ctx, "# render: installed to w%d\n", wave_slot);
+      ctx->printf(ctx, "# phz: installed to w%d\n", wave_slot);
     }
   }
 

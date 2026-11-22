@@ -1649,9 +1649,9 @@ Usage: WS wave
 |:---|:---|:---:|:---:|:---:|:---|
 | [`data_to_sample`](#data_to_sample) | `/d` | 5 | 0..4 | Immediate | load data array into default sample slot |
 | [`data_to_wave`](#data_to_wave) | `d>w` | 4 | 0..3 | Immediate | load active data array into default sample slot as one-shot |
+| [`physical_synth`](#physical_synth) | `phz!` | 3 | 0..2 | Immediate | render physical modeling instrument DSL to data array |
+| [`physical_synth_slash`](#physical_synth_slash) | `/phz` | 3 | 0..2 | Immediate | render physical modeling instrument DSL to data array |
 | [`sample_render`](#sample_render) | `/render` | 3 | 0..2 | Immediate | render physical modeling instrument DSL to data array |
-| [`sample_render_bang`](#sample_render_bang) | `render!` | 3 | 0..2 | Immediate | render physical modeling instrument DSL to data array |
-| [`sample_render_dsp`](#sample_render_dsp) | `/dsp` | 3 | 0..2 | Immediate | render physical modeling instrument DSL to data array |
 | [`tts_render`](#tts_render) | `tts!` | 4 | 0..3 | Immediate | render bracketed phonetic DSL string to data array |
 | [`voice_wave_display`](#voice_wave_display) | `VW` | 4 | 0..3 | Immediate | render ascii waveform for active voice |
 | [`wave_bandlimit`](#wave_bandlimit) | `WB` | 2 | 0..1 | Real-Time | bandlimit active voice wavetable |
@@ -1798,6 +1798,100 @@ Usage: slot rate one_shot d>w
 
 ---
 
+### `physical_synth`
+
+- **Alias**: `phz!`
+- **Group**: `wave`
+- **Clause Count**: 3
+
+#### Clause 1: `physical_synth()`
+
+- **Arity**: `0`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: render physical modeling instrument DSL to data array
+
+**Description & Details**:
+
+```text
+Renders physical modeling instrument DSL string into active data array with metadata. See doc/SAMPLE_SYNTH_DSL.md for full catalog, parameters, and examples.
+Usage: [instrument:preset ...] phz!
+```
+
+#### Clause 2: `physical_synth(finite)`
+
+- **Arity**: `1`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: render physical modeling instrument DSL to data and wave slot
+
+**Description & Details**:
+
+```text
+Renders physical modeling instrument DSL to data array and installs into wavetable slot with metadata.
+Usage: [instrument:preset ...] slot phz!
+```
+
+#### Clause 3: `physical_synth(finite, finite)`
+
+- **Arity**: `2`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: render physical modeling instrument DSL to data and wave slot with one_shot override
+
+**Description & Details**:
+
+```text
+Renders physical modeling instrument DSL to data array and wavetable slot with explicit one_shot mode.
+Usage: [instrument:preset ...] slot one_shot phz!
+```
+
+---
+
+### `physical_synth_slash`
+
+- **Alias**: `/phz`
+- **Group**: `wave`
+- **Clause Count**: 3
+
+#### Clause 1: `physical_synth_slash()`
+
+- **Arity**: `0`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: render physical modeling instrument DSL to data array
+
+**Description & Details**:
+
+```text
+Renders physical modeling instrument DSL string into active data array with metadata.
+Usage: [instrument:preset ...] /phz
+```
+
+#### Clause 2: `physical_synth_slash(finite)`
+
+- **Arity**: `1`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: render physical modeling instrument DSL to data and wave slot
+
+**Description & Details**:
+
+```text
+Renders physical modeling instrument DSL to data array and installs into wavetable slot with metadata.
+Usage: [instrument:preset ...] slot /phz
+```
+
+#### Clause 3: `physical_synth_slash(finite, finite)`
+
+- **Arity**: `2`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: render physical modeling instrument DSL to data and wave slot with one_shot override
+
+**Description & Details**:
+
+```text
+Renders physical modeling instrument DSL to data array and wavetable slot with explicit one_shot mode.
+Usage: [instrument:preset ...] slot one_shot /phz
+```
+
+---
+
 ### `sample_render`
 
 - **Alias**: `/render`
@@ -1813,7 +1907,7 @@ Usage: slot rate one_shot d>w
 **Description & Details**:
 
 ```text
-Renders physical modeling instrument DSL string into active data array with metadata. See doc/SAMPLE_SYNTH_DSL.md for full catalog, parameters, and examples.
+Renders physical modeling instrument DSL string into active data array with metadata.
 Usage: [instrument:preset ...] /render
 ```
 
@@ -1841,100 +1935,6 @@ Usage: [instrument:preset ...] slot /render
 ```text
 Renders physical modeling instrument DSL to data array and wavetable slot with explicit one_shot mode.
 Usage: [instrument:preset ...] slot one_shot /render
-```
-
----
-
-### `sample_render_bang`
-
-- **Alias**: `render!`
-- **Group**: `wave`
-- **Clause Count**: 3
-
-#### Clause 1: `sample_render_bang()`
-
-- **Arity**: `0`
-- **Execution Model**: `immediate (control plane)`
-- **Summary**: render physical modeling instrument DSL to data array
-
-**Description & Details**:
-
-```text
-Renders physical modeling instrument DSL string into active data array with metadata.
-Usage: [instrument:preset ...] render!
-```
-
-#### Clause 2: `sample_render_bang(finite)`
-
-- **Arity**: `1`
-- **Execution Model**: `immediate (control plane)`
-- **Summary**: render physical modeling instrument DSL to data and wave slot
-
-**Description & Details**:
-
-```text
-Renders physical modeling instrument DSL to data array and installs into wavetable slot with metadata.
-Usage: [instrument:preset ...] slot render!
-```
-
-#### Clause 3: `sample_render_bang(finite, finite)`
-
-- **Arity**: `2`
-- **Execution Model**: `immediate (control plane)`
-- **Summary**: render physical modeling instrument DSL to data and wave slot with one_shot override
-
-**Description & Details**:
-
-```text
-Renders physical modeling instrument DSL to data array and wavetable slot with explicit one_shot mode.
-Usage: [instrument:preset ...] slot one_shot render!
-```
-
----
-
-### `sample_render_dsp`
-
-- **Alias**: `/dsp`
-- **Group**: `wave`
-- **Clause Count**: 3
-
-#### Clause 1: `sample_render_dsp()`
-
-- **Arity**: `0`
-- **Execution Model**: `immediate (control plane)`
-- **Summary**: render physical modeling instrument DSL to data array
-
-**Description & Details**:
-
-```text
-Renders physical modeling instrument DSL string into active data array with metadata.
-Usage: [instrument:preset ...] /dsp
-```
-
-#### Clause 2: `sample_render_dsp(finite)`
-
-- **Arity**: `1`
-- **Execution Model**: `immediate (control plane)`
-- **Summary**: render physical modeling instrument DSL to data and wave slot
-
-**Description & Details**:
-
-```text
-Renders physical modeling instrument DSL to data array and installs into wavetable slot with metadata.
-Usage: [instrument:preset ...] slot /dsp
-```
-
-#### Clause 3: `sample_render_dsp(finite, finite)`
-
-- **Arity**: `2`
-- **Execution Model**: `immediate (control plane)`
-- **Summary**: render physical modeling instrument DSL to data and wave slot with one_shot override
-
-**Description & Details**:
-
-```text
-Renders physical modeling instrument DSL to data array and wavetable slot with explicit one_shot mode.
-Usage: [instrument:preset ...] slot one_shot /dsp
 ```
 
 ---

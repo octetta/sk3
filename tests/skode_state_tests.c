@@ -4160,26 +4160,30 @@ static void test_sample_render_physical_modeling_and_loop_metadata(void) {
   seq_init();
 
   /* 1. Percussion kick: direct render to data, one-shot metadata */
-  consume(test, &ctx, "[drum:kick d:0.4 p:160 end:45] /render");
+  consume(test, &ctx, "[drum:kick d:0.4 p:160 end:45] phz!");
   int kick_len = ands_data_len(ctx.parse);
   if (kick_len <= 0) {
-    fail(test, "[drum:kick] /render did not populate data array");
+    fail(test, "[drum:kick] phz! did not populate data array");
   }
   expect_substr(test, ands_string(ctx.parse), "mode:sample", "kick metadata mode:sample");
   expect_substr(test, ands_string(ctx.parse), "one_shot:1", "kick metadata one_shot:1");
 
-  /* 2. Percussion snare: render and direct install into w301 */
-  consume(test, &ctx, "[drum:snare snap:0.8 d:0.1 tail:0.25] 301 /render");
+  /* 2. Percussion snare: render and direct install into w301 using phz! */
+  consume(test, &ctx, "[drum:snare snap:0.85 d:0.06 tail:0.18 f:3200] 301 phz!");
   if (!sw.data[301] || sw.size[301] <= 0) {
-    fail(test, "[drum:snare] 301 /render did not install wavetable to w301");
+    fail(test, "[drum:snare] 301 phz! did not install wavetable to w301");
   }
   expect_int(test, sw.one_shot[301], 1, "snare wave slot one-shot mode");
+  /* Snare length should now be over 1.0 second (~1.32s) to capture the full natural wire rattle */
+  if (sw.size[301] < 48000) {
+    fail(test, "snare tail was cut off too short");
+  }
 
   /* 3. Horn brass: sustain loop calculation and metadata */
-  consume(test, &ctx, "[horn:brass n60 pr:0.8] /render");
+  consume(test, &ctx, "[horn:brass n60 pr:0.8] phz!");
   int brass_len = ands_data_len(ctx.parse);
   if (brass_len <= 0) {
-    fail(test, "[horn:brass] /render did not populate data array");
+    fail(test, "[horn:brass] phz! did not populate data array");
   }
   expect_substr(test, ands_string(ctx.parse), "mode:sample", "brass metadata mode:sample");
   expect_substr(test, ands_string(ctx.parse), "one_shot:0", "brass metadata one_shot:0 (sustained)");
@@ -4187,9 +4191,9 @@ static void test_sample_render_physical_modeling_and_loop_metadata(void) {
   expect_substr(test, ands_string(ctx.parse), "loop:", "brass metadata has loop points");
 
   /* 4. Horn brass: direct install to w302 with loop points applied to sw */
-  consume(test, &ctx, "[horn:brass n60 pr:0.8] 302 /render");
+  consume(test, &ctx, "[horn:brass n60 pr:0.8] 302 phz!");
   if (!sw.data[302] || sw.size[302] <= 0) {
-    fail(test, "[horn:brass] 302 /render did not install to w302");
+    fail(test, "[horn:brass] 302 phz! did not install to w302");
   }
   expect_int(test, sw.one_shot[302], 0, "brass w302 sustained mode (one_shot=0)");
   expect_int(test, sw.loop_enabled[302], 1, "brass w302 loop_enabled=1");
@@ -4198,32 +4202,35 @@ static void test_sample_render_physical_modeling_and_loop_metadata(void) {
   }
   expect_int(test, (int)sw.midi_note[302], 60, "brass w302 midi_note=60");
 
-  /* 5. Wind flute using alias render!: root 72, loop enabled */
-  consume(test, &ctx, "[wind:flute n72 air:0.15] 303 render!");
+  /* 5. Wind flute using phz!: root 72, loop enabled */
+  consume(test, &ctx, "[wind:flute n72 air:0.15] 303 phz!");
   if (!sw.data[303] || sw.size[303] <= 0) {
-    fail(test, "[wind:flute] 303 render! did not install to w303");
+    fail(test, "[wind:flute] 303 phz! did not install to w303");
   }
   expect_int(test, sw.loop_enabled[303], 1, "flute w303 loop_enabled=1");
   expect_int(test, (int)sw.midi_note[303], 72, "flute w303 midi_note=72");
 
-  /* 6. Bell church using alias /dsp: root 60, one_shot=1 */
-  consume(test, &ctx, "[bell:church n60 d:1.5] 304 /dsp");
+  /* 6. Bell church using /phz: root 60, one_shot=1, full 5.5s natural decay */
+  consume(test, &ctx, "[bell:church n60 d:1.0] 304 /phz");
   if (!sw.data[304] || sw.size[304] <= 0) {
-    fail(test, "[bell:church] 304 /dsp did not install to w304");
+    fail(test, "[bell:church] 304 /phz did not install to w304");
   }
   expect_int(test, sw.one_shot[304], 1, "church w304 one_shot=1");
   expect_int(test, (int)sw.midi_note[304], 60, "church w304 midi_note=60");
+  if (sw.size[304] < 48000 * 5) {
+    fail(test, "church bell sustain was cut off too short");
+  }
 
   /* 7. Tibetan singing bowl with loop:1 */
-  consume(test, &ctx, "[bell:bowl n55 loop:1] 306 /render");
+  consume(test, &ctx, "[bell:bowl n55 loop:1] 306 phz!");
   if (!sw.data[306] || sw.size[306] <= 0) {
-    fail(test, "[bell:bowl] 306 /render did not install to w306");
+    fail(test, "[bell:bowl] 306 phz! did not install to w306");
   }
   expect_int(test, sw.loop_enabled[306], 1, "bowl w306 loop_enabled=1");
   expect_int(test, (int)sw.midi_note[306], 55, "bowl w306 midi_note=55");
 
   /* 8. Plucked guitar rendered to data, then loaded via d>w */
-  consume(test, &ctx, "[string:guitar n60 p:0.25] /render");
+  consume(test, &ctx, "[string:guitar n60 p:0.25] phz!");
   consume(test, &ctx, "307 d>w");
   if (!sw.data[307] || sw.size[307] <= 0) {
     fail(test, "307 d>w did not load guitar from data");

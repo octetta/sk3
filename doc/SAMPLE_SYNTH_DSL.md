@@ -53,19 +53,21 @@ Real-time physical modeling algorithms—such as multi-delay waveguide lip-reed 
 
 ## 2. Invocation Opcodes & Syntax
 
-The DSL supports three equivalent opcode aliases:
-* `/render` (Primary slash command)
-* `render!` (Imperative bang alias)
-* `/dsp` (Concise DSP shortcut)
+The primary Skode command for physical modeling sample rendering is **`phz!`** (shorthand for *physical*).
+Backward-compatible aliases `/phz` and `/render` are also supported.
 
 ### Invocation Forms
 
 | Form | Syntax | Description |
 | :--- | :--- | :--- |
-| **Data Array Render** | `[dsl] /render` | Renders audio into active `data` array and sets formatted metadata string in `parse`. |
-| **Direct Wavetable Install** | `[dsl] slot /render` | Renders audio into `data` array and installs directly into wavetable `slot` with metadata. |
-| **One-Shot Mode Override** | `[dsl] slot one_shot /render` | Renders and installs with explicit `one_shot` flag override (`1` = one-shot, `0` = looped). |
-| **Pipeline Interop with `d>w`** | `[dsl] /render`<br>`slot d>w` | Renders into `data` array first, allowing intermediate editing or inspection before `d>w` installs it. |
+| **Data Array Render** | `[dsl] phz!` | Renders audio into active `data` array and sets formatted metadata string in `parse`. |
+| **Direct Wavetable Install** | `[dsl] slot phz!` | Renders audio into `data` array and installs directly into wavetable `slot` with metadata. |
+| **One-Shot Mode Override** | `[dsl] slot one_shot phz!` | Renders and installs with explicit `one_shot` flag override (`1` = one-shot, `0` = looped). |
+| **Pipeline Interop with `d>w`** | `[dsl] phz!`<br>`slot d>w` | Renders into `data` array first, allowing intermediate inspection or transforms before `d>w` installs it. |
+
+### Decay Rates vs. Explicit Buffer Duration
+* **`d:` / `decay:` / `t60:`**: Controls the physical decay time constant $\tau$ of the instrument. The engine automatically sizes the rendered buffer to $6.5 \times \tau + 0.15\text{s}$ (the standard acoustic $T_{60}$ boundary down to $-70\text{ dBFS}$), followed by a 15ms smooth raised-cosine taper to guarantee zero truncation click or clipping.
+* **`dur:` / `duration:` / `len:`**: Optional explicit buffer length constraint in seconds (e.g. `dur:0.25` or `dur:2.0`). Use this only when you deliberately want to constrain the sample buffer length.
 
 ---
 
@@ -103,10 +105,10 @@ For sustained instruments, the generator executes automated loop point extractio
 
 ```skode
 # Punchy 909 club kick
-[drum:kick p:165 end:45 d:0.42 c:0.45 drive:2.2] 100 /render
+[drum:kick p:165 end:45 d:0.42 c:0.45 drive:2.2] 100 phz!
 
 # Deep 808 sub bass boom
-[drum:kick p:120 end:38 d:0.95 pdecay:0.06 c:0.1 drive:1.1] 101 /render
+[drum:kick p:120 end:38 d:0.95 pdecay:0.06 c:0.1 drive:1.1] 101 phz!
 ```
 
 #### `snare` (TR-808/909 Resonant Snare Drum)
@@ -118,11 +120,11 @@ For sustained instruments, the generator executes automated loop point extractio
 * `f`, `freq`: Snare wire bandpass filter center in Hz (default: `2800.0`)
 
 ```skode
-# Tight snappy electro snare
-[drum:snare snap:0.85 d:0.06 tail:0.18 f:3200] 102 /render
+# Tight snappy electro snare (tail:0.18 renders full 1.32s natural wire decay)
+[drum:snare snap:0.85 d:0.06 tail:0.18 f:3200] 102 phz!
 
 # Heavy deep acoustic snare
-[drum:snare f1:160 f2:210 snap:0.45 d:0.12 tail:0.35] 103 /render
+[drum:snare f1:160 f2:210 snap:0.45 d:0.12 tail:0.35] 103 phz!
 ```
 
 #### `hat` (TR-808 6-Oscillator Inharmonic Cluster Hi-Hat)
@@ -131,10 +133,10 @@ For sustained instruments, the generator executes automated loop point extractio
 
 ```skode
 # Crisp closed hat
-[drum:hat open:0 d:0.045] 104 /render
+[drum:hat open:0 d:0.045] 104 phz!
 
 # Sizzling open hat
-[drum:hat open:1 d:0.55] 105 /render
+[drum:hat open:1 d:0.55] 105 phz!
 ```
 
 #### `clap` (TR-808 Multi-Burst Handclap)
@@ -145,10 +147,10 @@ For sustained instruments, the generator executes automated loop point extractio
 
 ```skode
 # Tight group clap
-[drum:clap bursts:3 spread:10 tail:0.20 f:1150] 106 /render
+[drum:clap bursts:3 spread:10 tail:0.20 f:1150] 106 phz!
 
 # Loose spacious stadium clap
-[drum:clap bursts:5 spread:18 tail:0.45 f:950] 107 /render
+[drum:clap bursts:5 spread:18 tail:0.45 f:950] 107 phz!
 ```
 
 #### `tom` (Resonant 808 Pitch-Dropping Tom)
@@ -159,9 +161,9 @@ For sustained instruments, the generator executes automated loop point extractio
 
 ```skode
 # Low floor tom, mid tom, high rack tom
-[drum:tom n38 d:0.35 drop:0.45] 108 /render
-[drum:tom n45 d:0.28 drop:0.40] 109 /render
-[drum:tom n52 d:0.22 drop:0.35] 110 /render
+[drum:tom n38 d:0.35 drop:0.45] 108 phz!
+[drum:tom n45 d:0.28 drop:0.40] 109 phz!
+[drum:tom n52 d:0.22 drop:0.35] 110 phz!
 ```
 
 #### `cowbell` (TR-808 Dual Square-Wave Cowbell)
@@ -172,7 +174,7 @@ For sustained instruments, the generator executes automated loop point extractio
 
 ```skode
 # Classic 808 cowbell
-[drum:cowbell d:0.18] 111 /render
+[drum:cowbell d:0.18] 111 phz!
 ```
 
 #### `membrane` / `kdrum` (Karplus-Strong 1983 Acoustic Drum)
@@ -184,10 +186,10 @@ For sustained instruments, the generator executes automated loop point extractio
 
 ```skode
 # Deep acoustic bass drum
-[drum:membrane n36 blend:0.5 damp:0.6 fb:0.985 b:0.4] 112 /render
+[drum:membrane n36 blend:0.5 damp:0.6 fb:0.985 b:0.4] 112 phz!
 
 # Resonant acoustic bongo / conga
-[drum:membrane n62 blend:0.55 damp:0.3 fb:0.992 b:0.75] 113 /render
+[drum:membrane n62 blend:0.55 damp:0.3 fb:0.992 b:0.75] 113 phz!
 ```
 
 ---
@@ -210,20 +212,20 @@ Modal metallic models solve Euler-Bernoulli beam and shell mechanics, producing 
 * `loop`: `0` for one-shot, `1` for sustain loop (default: `1` for `tibetan`, `0` for others)
 
 ```skode
-# Cathedral bronze bell
-[metal:church n57 d:2.0 m:0.6] 120 /render
+# Cathedral bronze bell (rings naturally for ~5.5s)
+[metal:church n57 d:1.0 m:0.6] 120 phz!
 
 # Orchestral tubular clock chime
-[bell:tubular n72 d:1.8 m:0.4] 121 /render
+[bell:tubular n72 d:1.0 m:0.4] 121 phz!
 
 # Concert vibraphone bar
-[metal:vibe n65 d:1.5 m:0.35] 122 /render
+[metal:vibe n65 d:1.0 m:0.35] 122 phz!
 
 # Meditative Tibetan singing bowl with continuous sustain loop
-[bell:bowl n48 d:3.0 loop:1] 123 /render
+[bell:bowl n48 d:1.0 loop:1] 123 phz!
 
 # High Latin agogo bell
-[metal:agogo n76 d:0.6 m:0.7] 124 /render
+[metal:agogo n76 d:1.0 m:0.7] 124 phz!
 ```
 
 ---
@@ -252,22 +254,22 @@ Karplus-Strong physical modeling with fractional allpass interpolation, comb-fil
 
 ```skode
 # Spanish acoustic nylon guitar
-[string:guitar n64 p:0.28 damp:0.40 fb:0.994 b:0.75] 130 /render
+[string:guitar n64 p:0.28 damp:0.40 fb:0.994 b:0.75] 130 phz!
 
 # Deep upright acoustic bass
-[pluck:bass n36 p:0.35 damp:0.55 fb:0.996 b:0.45] 131 /render
+[pluck:bass n36 p:0.35 damp:0.55 fb:0.996 b:0.45] 131 phz!
 
 # Concert harp plucked at center string
-[string:harp n72 p:0.50 damp:0.20 fb:0.998 b:0.85] 132 /render
+[string:harp n72 p:0.50 damp:0.20 fb:0.998 b:0.85] 132 phz!
 
 # Bright twangy Japanese koto
-[string:koto n67 p:0.10 damp:0.25 fb:0.993 b:0.80] 133 /render
+[string:koto n67 p:0.10 damp:0.25 fb:0.993 b:0.80] 133 phz!
 
 # Indian sitar
-[string:sitar n55 p:0.14 damp:0.60 fb:0.991 b:0.90] 134 /render
+[string:sitar n55 p:0.14 damp:0.60 fb:0.991 b:0.90] 134 phz!
 
 # Orchestral cello pizzicato
-[string:pizz n48 p:0.40 damp:0.75 fb:0.982 b:0.35] 135 /render
+[string:pizz n48 p:0.40 damp:0.75 fb:0.982 b:0.35] 135 phz!
 ```
 
 ---
@@ -282,18 +284,18 @@ Implements Perry Cook and Fletcher & Rossing mass-spring lip mechanics coupled t
 * `pr`, `press`: Mouth blowing pressure `0.2`–`1.0` (`0.4` = piano horn, `0.85` = fortissimo blare)
 * `br`, `brass`: Brassiness non-linear factor `0.0`–`1.0` (default: `0.50`)
 * `damp`: Bore reflection wall loss damping `0.05`–`0.60` (default: `0.25`)
-* `dur`, `d`: Render duration in seconds (default: `1.2`)
+* `dur`, `d`: Render duration in seconds (default: `1.5`)
 * `loop`: `1` (default; automatically computes seamless sustain loop)
 
 ```skode
 # Brilliant Bb trumpet lead with fortissimo blare
-[horn:brass n58 pr:0.88 br:0.75 d:1.5] 140 /render
+[horn:brass n58 pr:0.88 br:0.75] 140 phz!
 
 # Warm French horn / tenor trombone
-[horn:brass n46 pr:0.65 br:0.35 damp:0.30 d:1.5] 141 /render
+[horn:brass n46 pr:0.65 br:0.35 damp:0.30] 141 phz!
 
 # Heavy orchestral tuba
-[horn:brass n34 pr:0.80 br:0.60 damp:0.35 d:1.8] 142 /render
+[horn:brass n34 pr:0.80 br:0.60 damp:0.35] 142 phz!
 ```
 
 #### `flute` (Aeroacoustic Jet Pipe, Recorder, Flute)
@@ -304,18 +306,18 @@ Implements Coltman and MSW jet-drive physics with labium knife-edge pressure spl
 * `vib`: Natural vibrato depth `0.0`–`0.1` (default: `0.03`)
 * `vibr`: Vibrato frequency in Hz (default: `5.5`)
 * `damp`: Bore wall reflection loss `0.05`–`0.80` (default: `0.35`)
-* `dur`, `d`: Render duration in seconds (default: `1.2`)
+* `dur`, `d`: Render duration in seconds (default: `1.5`)
 * `loop`: `1` (default; automatically computes seamless sustain loop)
 
 ```skode
 # Expressive concert flute with natural vibrato
-[wind:flute n72 pr:0.72 air:0.10 vib:0.04 d:1.5] 143 /render
+[wind:flute n72 pr:0.72 air:0.10 vib:0.04] 143 phz!
 
 # Breathy Japanese shakuhachi / wooden pipe
-[wind:flute n60 pr:0.68 air:0.25 vib:0.06 damp:0.45 d:1.5] 144 /render
+[wind:flute n60 pr:0.68 air:0.25 vib:0.06 damp:0.45] 144 phz!
 
 # Overblown octave flute register
-[wind:flute n60 pr:0.98 air:0.14 vib:0.03 d:1.2] 145 /render
+[wind:flute n60 pr:0.98 air:0.14 vib:0.03] 145 phz!
 ```
 
 ---
@@ -326,14 +328,14 @@ Implements Coltman and MSW jet-drive physics with labium knife-edge pressure spl
 Create a full drum kit procedurally across wavetable slots 100–106 and sequence a 4-on-the-floor beat:
 
 ```skode
-# 1. Render all drum kit instruments
-[drum:kick p:160 end:45 d:0.42 drive:1.8] 100 /render
-[drum:snare snap:0.85 d:0.08 tail:0.22] 101 /render
-[drum:hat open:0 d:0.04] 102 /render
-[drum:hat open:1 d:0.45] 103 /render
-[drum:clap bursts:3 spread:11 tail:0.22] 104 /render
-[drum:tom n42 d:0.32 drop:0.45] 105 /render
-[drum:cowbell d:0.16] 106 /render
+# 1. Render all drum kit instruments with full natural tails
+[drum:kick p:160 end:45 d:0.42 drive:1.8] 100 phz!
+[drum:snare snap:0.85 d:0.08 tail:0.22] 101 phz!
+[drum:hat open:0 d:0.04] 102 phz!
+[drum:hat open:1 d:0.45] 103 phz!
+[drum:clap bursts:3 spread:11 tail:0.22] 104 phz!
+[drum:tom n42 d:0.32 drop:0.45] 105 phz!
+[drum:cowbell d:0.16] 106 phz!
 
 # 2. Assign voices and trigger drum sequence
 v0 100 w 60 n o   # Kick on voice 0
@@ -349,8 +351,8 @@ Render a brass trumpet and wooden flute with seamless sustain looping. When a no
 
 ```skode
 # 1. Render sustained brass and flute
-[horn:brass n58 pr:0.85 br:0.70 d:1.5] 110 /render
-[wind:flute n72 pr:0.72 air:0.15 d:1.5] 111 /render
+[horn:brass n58 pr:0.85 br:0.70] 110 phz!
+[wind:flute n72 pr:0.72 air:0.15] 111 phz!
 
 # 2. Configure voice 0 for brass lead with slow envelope
 v0 110 w
@@ -371,7 +373,7 @@ Combine a sustained Tibetan singing bowl with pitch transposition across octaves
 
 ```skode
 # Render singing bowl with sustain loop enabled
-[bell:bowl n48 d:3.5 loop:1] 120 /render
+[bell:bowl n48 d:1.0 loop:1] 120 phz!
 
 # Polyphonic drone chord (C3 + G3 + C4)
 v0 120 w 48 n o
@@ -382,11 +384,11 @@ v2 120 w 60 n o
 ---
 
 ### Example 4: Pipeline Data Editing with `d>w`
-Because `/render` populates the active `data` buffer and formats metadata into `parse`, users can apply mathematical operations before installing to a wavetable:
+Because `phz!` populates the active `data` buffer and formats metadata into `parse`, users can apply mathematical operations before installing to a wavetable:
 
 ```skode
 # 1. Render raw acoustic nylon guitar into data buffer
-[string:guitar n60 p:0.25 damp:0.4 fb:0.995] /render
+[string:guitar n60 p:0.25 damp:0.4 fb:0.995] phz!
 
 # 2. Inspect data array length or apply custom transformation
 ?d
