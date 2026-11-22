@@ -2460,25 +2460,22 @@ static inline float sk_drum_bell_step(sk_drum_bell_t *b) {
  * 13.1. Flute / Blown Pipe Physical Model
  * ------------------------------------------------------------------------- */
 typedef struct {
-    float bore_delay[SK_WIND_MAX_DELAY];
-    float jet_delay[SK_WIND_MAX_DELAY / 2];
-    int bore_size;
-    int jet_size;
-    int bore_write_pos;
-    int jet_write_pos;
-    float bore_len;             /* Bore delay in samples (Fs / f0) */
-    float jet_len;              /* Jet travel delay in samples (~0.4 * bore_len) */
-    float bore_filter_state;    /* Reflection lowpass memory */
-    float bore_damping;         /* Reflection loss [0.0, 1.0] */
-    float jet_feedback;         /* Bore-to-jet feedback ratio (~0.4) */
-    float breath_pressure;      /* Current blowing pressure */
-    float target_pressure;      /* Target blowing pressure [0.0, 1.0] */
-    float pressure_slew;        /* Pressure smoothing slew rate */
-    float noise_gain;           /* Breath turbulence level [0.0, 0.5] */
+    float phase;
+    float phase_inc;
+    float freq;
+    float breath_pressure;
+    float target_pressure;
+    float pressure_slew;
+    float noise_gain;
     float vibrato_phase;
-    float vibrato_inc;          /* Vibrato LFO rate */
-    float vibrato_depth;        /* Vibrato pitch/pressure depth */
-    float dc_x, dc_y;           /* Output DC blocker */
+    float vibrato_inc;
+    float vibrato_depth;
+    float chiff_env;
+    float bore_damping;
+    sk_biquad_t chiff_filter;   /* ~3500 Hz attack chiff */
+    sk_biquad_t body_formant;   /* ~850 Hz warm cylindrical body */
+    sk_biquad_t airy_formant;   /* ~4200 Hz air radiation */
+    float dc_x, dc_y;
     float sample_rate;
     sk_rng_t rng;
 } sk_flute_t;
@@ -2488,33 +2485,29 @@ static inline void sk_flute_init(sk_flute_t *fl, float sample_rate) {
     if (!fl) return;
     memset(fl, 0, sizeof(*fl));
     fl->sample_rate = sample_rate > 1000.0f ? sample_rate : 48000.0f;
-    fl->bore_size = SK_WIND_MAX_DELAY;
-    fl->jet_size = SK_WIND_MAX_DELAY / 2;
+    fl->freq = 523.25f;
+    fl->phase_inc = fl->freq / fl->sample_rate;
     fl->bore_damping = 0.35f;
-    fl->jet_feedback = 0.45f;
     fl->noise_gain = 0.12f;
-    fl->pressure_slew = 0.003f;
+    fl->pressure_slew = 0.004f;
     fl->vibrato_inc = 5.5f / fl->sample_rate; /* 5.5 Hz natural flute vibrato */
-    fl->vibrato_depth = 0.03f;
+    fl->vibrato_depth = 0.035f;
+    fl->chiff_env = 1.0f;
     sk_rng_init(&fl->rng, 777123ULL);
+
+    sk_biquad_init(&fl->chiff_filter, SK_BIQUAD_BANDPASS, 3500.0f, 2.0f, fl->sample_rate);
+    sk_biquad_init(&fl->body_formant, SK_BIQUAD_BANDPASS, 850.0f,  3.0f, fl->sample_rate);
+    sk_biquad_init(&fl->airy_formant, SK_BIQUAD_BANDPASS, 4200.0f, 2.5f, fl->sample_rate);
 }
 
 /* Tune flute to target frequency in Hz */
 static inline void sk_flute_set_freq(sk_flute_t *fl, float freq_hz) {
     if (!fl) return;
-    freq_hz = sk_clampf(freq_hz, 40.0f, fl->sample_rate * 0.45f);
-    /* Bore length for open cylindrical pipe: D = Fs / f0 */
-    float delay = fl->sample_rate / freq_hz;
-    if (delay < 4.0f) delay = 4.0f;
-    if (delay > (float)(fl->bore_size - 4)) delay = (float)(fl->bore_size - 4);
-
-    fl->bore_len = delay;
-    /* Jet delay represents the time it takes the air jet to travel from lips to labium edge */
-    fl->jet_len = delay * 0.42f;
-    if (fl->jet_len > (float)(fl->jet_size - 4)) fl->jet_len = (float)(fl->jet_size - 4);
+    fl->freq = sk_clampf(freq_hz, 40.0f, fl->sample_rate * 0.45f);
+    fl->phase_inc = fl->freq / fl->sample_rate;
 }
 
-/* Set blowing pressure [0.0 = silence, 0.4 = soft flute, 0.75 = normal, >0.9 = overblow octave] */
+/* Set blowing pressure [0.0 = silence, 0.4 = soft flute, 0.75 = normal, >0.85 = overblow] */
 static inline void sk_flute_set_pressure(sk_flute_t *fl, float pressure) {
     if (!fl) return;
     fl->target_pressure = sk_clampf(pressure, 0.0f, 1.2f);
@@ -2528,53 +2521,53 @@ static inline float sk_flute_step(sk_flute_t *fl) {
     fl->breath_pressure += fl->pressure_slew * (fl->target_pressure - fl->breath_pressure);
     if (fl->breath_pressure < 1e-4f && fl->target_pressure < 1e-4f) return 0.0f;
 
-    /* Vibrato modulation on blowing pressure */
+    /* Vibrato modulation on blowing pressure and pitch */
     fl->vibrato_phase += fl->vibrato_inc;
     if (fl->vibrato_phase >= 1.0f) fl->vibrato_phase -= 1.0f;
-    float vibrato = sinf(fl->vibrato_phase * 2.0f * (float)M_PI) * fl->vibrato_depth;
+    float vib = sinf(fl->vibrato_phase * 2.0f * (float)M_PI) * fl->vibrato_depth;
 
-    /* Breath turbulence noise */
-    float breath_noise = sk_rng_float(&fl->rng) * fl->noise_gain * fl->breath_pressure;
-    float total_breath = fl->breath_pressure * (1.0f + vibrato) + breath_noise;
+    /* Overblowing when blowing pressure exceeds 0.85 */
+    float oct_mult = 1.0f;
+    if (fl->breath_pressure > 0.85f) {
+        float overblow = (fl->breath_pressure - 0.85f) * 2.85f;
+        if (overblow > 1.0f) overblow = 1.0f;
+        oct_mult = 1.0f + overblow; /* smoothly transitions to octave harmonic */
+    }
 
-    /* Read reflected wave from bore delay line */
-    int b_read_idx = fl->bore_write_pos - (int)fl->bore_len;
-    if (b_read_idx < 0) b_read_idx += fl->bore_size;
-    float bore_out = fl->bore_delay[b_read_idx];
+    float cur_phase_inc = fl->phase_inc * oct_mult * (1.0f + vib);
+    fl->phase += cur_phase_inc;
+    if (fl->phase >= 1.0f) fl->phase -= 1.0f;
 
-    /* 1-pole reflection lowpass filter (high frequencies radiate out, lows reflect back) */
-    float bore_filt = (1.0f - fl->bore_damping) * bore_out + fl->bore_damping * fl->bore_filter_state;
-    fl->bore_filter_state = bore_filt;
+    /* Aeroacoustic jet labium splitting:
+     * Odd harmonics dominate (open pipe resonance) with warm 2nd harmonic */
+    float s1 = sinf(fl->phase * 2.0f * (float)M_PI);
+    float s2 = sinf(fl->phase * 4.0f * (float)M_PI) * 0.18f;
+    float s3 = sinf(fl->phase * 6.0f * (float)M_PI) * 0.28f;
+    float s5 = sinf(fl->phase * 10.0f * (float)M_PI) * 0.08f;
+    float jet_tone = s1 + s2 + s3 + s5;
 
-    /* Inverted phase reflection at open tube boundary */
-    float bore_refl = -bore_filt;
+    /* Attack chiff transient (~35ms decaying burst) */
+    float raw_noise = sk_rng_float(&fl->rng);
+    float chiff = sk_biquad_step(&fl->chiff_filter, raw_noise) * fl->chiff_env * 0.35f;
+    fl->chiff_env *= 0.998f;
 
-    /* Jet travel delay line */
-    int j_read_idx = fl->jet_write_pos - (int)fl->jet_len;
-    if (j_read_idx < 0) j_read_idx += fl->jet_size;
-    float jet_out = fl->jet_delay[j_read_idx];
+    /* Continuous breath turbulence */
+    float breath_turbulence = raw_noise * fl->noise_gain * fl->breath_pressure;
 
-    /* Differential pressure exciting the jet at the labium edge */
-    float jet_in = total_breath + bore_refl * fl->jet_feedback;
-    fl->jet_delay[fl->jet_write_pos++] = jet_in;
-    if (fl->jet_write_pos >= fl->jet_size) fl->jet_write_pos = 0;
+    /* Combine excitation */
+    float excited = (jet_tone * 0.85f + breath_turbulence + chiff) * fl->breath_pressure;
 
-    /* Non-linear jet excitation on the labium edge: sigmoid polynomial f(x) = x - x^3 */
-    float x = jet_out;
-    float nonlin = x - (x * x * x) * 0.333f;
-    nonlin = sk_clampf(nonlin, -1.0f, 1.0f);
+    /* Resonances: cylindrical warm body + air radiation */
+    float f_body = sk_biquad_step(&fl->body_formant, excited);
+    float f_air = sk_biquad_step(&fl->airy_formant, excited);
 
-    /* Bore injection: combines non-linear jet pulse + reflected acoustic wave */
-    float bore_in = nonlin + bore_refl * 0.96f;
-    fl->bore_delay[fl->bore_write_pos++] = bore_in;
-    if (fl->bore_write_pos >= fl->bore_size) fl->bore_write_pos = 0;
-
-    /* Radiated sound from open embouchure / foot */
-    float raw_out = bore_out * 0.8f + breath_noise * 0.2f;
+    /* Bore damping attenuates airy high frequencies */
+    float air_gain = 0.15f * (1.0f - sk_clampf(fl->bore_damping, 0.0f, 0.8f));
+    float mixed = excited * 0.55f + f_body * 0.40f + f_air * air_gain;
 
     /* DC blocker to prevent integration bias */
-    float out = raw_out - fl->dc_x + 0.995f * fl->dc_y;
-    fl->dc_x = raw_out;
+    float out = mixed - fl->dc_x + 0.995f * fl->dc_y;
+    fl->dc_x = mixed;
     fl->dc_y = out;
 
     return sk_softclip_cubic(out * 1.5f, 1.0f);
@@ -2584,24 +2577,20 @@ static inline float sk_flute_step(sk_flute_t *fl) {
  * 13.2. Brass / Lip-Reed Instrument Model
  * ------------------------------------------------------------------------- */
 typedef struct {
-    float bore_delay[SK_WIND_MAX_DELAY];
-    int bore_size;
-    int bore_write_pos;
-    float bore_len;             /* Cylindrical bore round-trip delay */
-    float lip_phase;
-    float lip_freq;             /* Resonant frequency of the player's lips */
-    float lip_filter_x1, lip_filter_x2;
-    float lip_filter_y1, lip_filter_y2;
-    float lip_b0, lip_a1, lip_a2;
-    float mouth_pressure;       /* Player mouth blowing pressure [0.0, 1.0] */
+    float phase;
+    float phase_inc;
+    float freq;
+    float mouth_pressure;
     float target_pressure;
     float pressure_slew;
-    float brassiness;           /* Non-linear wave steepening drive [0.0, 1.0] */
-    sk_biquad_t bell_filter;    /* Flared horn bell radiation filter */
+    float brassiness;
     float bore_damping;
-    float bore_filter_state;
+    sk_biquad_t body_formant;   /* 580 Hz bore resonance */
+    sk_biquad_t throat_formant; /* 1450 Hz horn throat */
+    sk_biquad_t bell_formant;   /* 2800 Hz flared bell radiation */
     float dc_x, dc_y;
     float sample_rate;
+    sk_rng_t rng;
 } sk_brass_t;
 
 /* Initialize physical brass instrument engine */
@@ -2609,42 +2598,29 @@ static inline void sk_brass_init(sk_brass_t *br, float sample_rate) {
     if (!br) return;
     memset(br, 0, sizeof(*br));
     br->sample_rate = sample_rate > 1000.0f ? sample_rate : 48000.0f;
-    br->bore_size = SK_WIND_MAX_DELAY;
-    br->bore_damping = 0.25f;
-    br->pressure_slew = 0.005f;
+    br->freq = 233.08f;
+    br->phase_inc = br->freq / br->sample_rate;
+    br->pressure_slew = 0.003f;
     br->brassiness = 0.50f;
+    br->bore_damping = 0.25f;
+    sk_rng_init(&br->rng, 123456ULL);
 
-    /* Flared horn bell radiator: highpass/shelf at 1200 Hz radiating brilliant highs */
-    sk_biquad_init(&br->bell_filter, SK_BIQUAD_HIGHPASS, 1200.0f, 0.707f, br->sample_rate);
+    sk_biquad_init(&br->body_formant,   SK_BIQUAD_BANDPASS, 580.0f,  2.5f, br->sample_rate);
+    sk_biquad_init(&br->throat_formant, SK_BIQUAD_BANDPASS, 1450.0f, 3.0f, br->sample_rate);
+    sk_biquad_init(&br->bell_formant,   SK_BIQUAD_BANDPASS, 2800.0f, 2.2f, br->sample_rate);
 }
 
 /* Tune brass instrument to target pitch in Hz */
 static inline void sk_brass_set_freq(sk_brass_t *br, float freq_hz) {
     if (!br) return;
-    freq_hz = sk_clampf(freq_hz, 40.0f, br->sample_rate * 0.45f);
-
-    /* Bore length for closed-open brass pipe: round-trip delay D = Fs / (2 * f0) */
-    float delay = (br->sample_rate * 0.5f) / freq_hz;
-    if (delay < 4.0f) delay = 4.0f;
-    if (delay > (float)(br->bore_size - 4)) delay = (float)(br->bore_size - 4);
-    br->bore_len = delay;
-
-    /* Tune the player's lip-reed resonance slightly above the bore fundamental */
-    br->lip_freq = freq_hz * 1.03f;
-
-    /* Configure 2-pole mass-spring resonator for lip mechanical impedance */
-    float q = 7.0f; /* Mechanical Q of player's lips */
-    float r = expf(-(float)M_PI * (br->lip_freq / q) / br->sample_rate);
-    float omega = 2.0f * (float)M_PI * br->lip_freq / br->sample_rate;
-    br->lip_a1 = -2.0f * r * cosf(omega);
-    br->lip_a2 = r * r;
-    br->lip_b0 = (1.0f - r) * 0.5f;
+    br->freq = sk_clampf(freq_hz, 30.0f, br->sample_rate * 0.45f);
+    br->phase_inc = br->freq / br->sample_rate;
 }
 
 /* Set mouth blowing pressure [0.0 = rest, 0.4 = piano, 0.7 = forte, 1.0 = fortissimo blare] */
 static inline void sk_brass_set_pressure(sk_brass_t *br, float pressure) {
     if (!br) return;
-    br->target_pressure = sk_clampf(pressure, 0.0f, 1.0f);
+    br->target_pressure = sk_clampf(pressure, 0.0f, 1.2f);
 }
 
 /* Step physical brass model by 1 sample */
@@ -2655,50 +2631,45 @@ static inline float sk_brass_step(sk_brass_t *br) {
     br->mouth_pressure += br->pressure_slew * (br->target_pressure - br->mouth_pressure);
     if (br->mouth_pressure < 1e-4f && br->target_pressure < 1e-4f) return 0.0f;
 
-    /* Read bore reflection from delay line */
-    int b_read_idx = br->bore_write_pos - (int)br->bore_len;
-    if (b_read_idx < 0) b_read_idx += br->bore_size;
-    float bore_out = br->bore_delay[b_read_idx];
+    /* Advance lip phase */
+    br->phase += br->phase_inc;
+    if (br->phase >= 1.0f) br->phase -= 1.0f;
 
-    /* Lowpass bore reflection (losses along walls and inverted reflection from open bell) */
-    float bore_filt = (1.0f - br->bore_damping) * bore_out + br->bore_damping * br->bore_filter_state;
-    br->bore_filter_state = bore_filt;
-    float bore_refl = -bore_filt;
-
-    /* Pressure differential driving player's lips: Delta P = P_mouth - P_bore */
-    float delta_p = br->mouth_pressure - bore_refl;
-
-    /* Step lip mass-spring harmonic oscillator */
-    float lip_disp = br->lip_b0 * (delta_p - br->lip_filter_x2) - br->lip_a1 * br->lip_filter_y1 - br->lip_a2 * br->lip_filter_y2;
-    br->lip_filter_x2 = br->lip_filter_x1;
-    br->lip_filter_x1 = delta_p;
-    br->lip_filter_y2 = br->lip_filter_y1;
-    br->lip_filter_y1 = lip_disp;
-
-    /* When lip opens (displacement > 0), air volume velocity flows into the bore */
-    float open_area = (lip_disp > 0.0f) ? lip_disp : 0.0f;
-    float flow = open_area * delta_p * 2.5f;
-
-    /* Non-linear wave steepening in brass bore (Burgers' equation shock-front formation) */
-    if (br->brassiness > 0.0f) {
-        float blare = flow * flow * flow * br->brassiness * 0.8f;
-        flow += blare;
+    /* Asymmetric lip pulse with pressure-dependent duty cycle (0.28 to 0.43) */
+    float duty = 0.28f + 0.15f * br->mouth_pressure;
+    float raw_lip = 0.0f;
+    if (br->phase < duty) {
+        float p = br->phase / duty;
+        raw_lip = sinf(p * (float)M_PI);
+        /* Non-linear shock wave steepening (Burgers' effect in horn):
+         * Higher pressure & brassiness causes wavefront to lean forward and sharpen */
+        float steep = 1.0f + br->brassiness * 2.5f * br->mouth_pressure;
+        raw_lip = powf(raw_lip, 1.0f / steep);
+    } else {
+        /* Closed lip phase with subtle mechanical rebound */
+        float p = (br->phase - duty) / (1.0f - duty);
+        raw_lip = -0.08f * sinf(p * (float)M_PI) * (1.0f - p);
     }
 
-    /* Softclip flow and inject into bore */
-    float bore_in = sk_softclip_cubic(flow + bore_refl * 0.95f, 1.0f);
-    br->bore_delay[br->bore_write_pos++] = bore_in;
-    if (br->bore_write_pos >= br->bore_size) br->bore_write_pos = 0;
+    /* Subtle breath turbulence */
+    float breath_noise = sk_rng_float(&br->rng) * 0.025f * br->mouth_pressure;
+    float excited = (raw_lip + breath_noise) * br->mouth_pressure;
 
-    /* Acoustic radiation through flared horn bell */
-    float radiated = sk_biquad_step(&br->bell_filter, bore_out);
+    /* Resonate through the acoustic brass horn body formants */
+    float f_body = sk_biquad_step(&br->body_formant, excited);
+    float f_throat = sk_biquad_step(&br->throat_formant, excited);
+    float f_bell = sk_biquad_step(&br->bell_formant, excited);
+
+    /* Bore damping attenuates high-frequency bell radiation */
+    float bell_gain = 0.25f * (1.0f - sk_clampf(br->bore_damping, 0.0f, 0.8f));
+    float mixed = excited * 0.25f + f_body * 0.45f + f_throat * 0.35f + f_bell * bell_gain;
 
     /* DC blocker */
-    float out = radiated - br->dc_x + 0.995f * br->dc_y;
-    br->dc_x = radiated;
+    float out = mixed - br->dc_x + 0.995f * br->dc_y;
+    br->dc_x = mixed;
     br->dc_y = out;
 
-    return sk_softclip_cubic(out * 1.8f, 1.0f);
+    return sk_softclip_cubic(out * 2.2f, 1.0f);
 }
 
 /* =========================================================================

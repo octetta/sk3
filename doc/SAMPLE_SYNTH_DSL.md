@@ -87,7 +87,7 @@ For sustained instruments, the generator executes automated loop point extractio
    $$k = \text{round}\left(T_{\text{loop}} \times f_0\right)$$
 4. **Derivative & Slope Matching**: Scans a window of $\pm 0.6 \times \text{period}$ around the nominal end point to locate a positive-going zero crossing that minimizes slope difference:
    $$\Delta_{\text{diff}} = \left| s'[j] - s'[\text{loop\_start}] \right| + \left| s[j] - s[\text{loop\_start}] \right|$$
-5. **Phase-Coherent Loop Setup**: Assigns `loop_start` and `loop_end`. When played on a voice (`v0 slot w note n o`), holding the note loops indefinitely without clicks, popping, or comb filtering.
+5. **Phase-Coherent Loop Setup**: Assigns `loop_start` and `loop_end`. When assigned to a voice (`v0 w101 a0 n69 l1`), triggering the note loops indefinitely within the sustain area without clicks, popping, or comb filtering. When the note is released (`l0`), the engine exits the loop and plays through the natural acoustic release tail to completion.
 
 ---
 
@@ -325,7 +325,7 @@ Implements Coltman and MSW jet-drive physics with labium knife-edge pressure spl
 ## 5. Wealth of Production Examples
 
 ### Example 1: Procedural 808/909 Drum Kit Setup
-Create a full drum kit procedurally across wavetable slots 100–106 and sequence a 4-on-the-floor beat:
+Create a full drum kit procedurally across wavetable slots 100–106 and assign voices using canonical Skode commands:
 
 ```skode
 # 1. Render all drum kit instruments with full natural tails
@@ -337,33 +337,38 @@ Create a full drum kit procedurally across wavetable slots 100–106 and sequenc
 [drum:tom n42 d:0.32 drop:0.45] 105 phz!
 [drum:cowbell d:0.16] 106 phz!
 
-# 2. Assign voices and trigger drum sequence
-v0 100 w 60 n o   # Kick on voice 0
-v1 101 w 60 n o   # Snare on voice 1
-v2 102 w 60 n o   # Closed hat on voice 2
-v3 103 w 60 n o   # Open hat on voice 3
+# 2. Assign voices (assign wave, set 0dB gain, set native sample pitch n69, trigger with l1)
+v0 w100 a0 n69 l1   # Kick on voice 0
+v1 w101 a0 n69 l1   # Snare on voice 1
+v2 w102 a0 n69 l1   # Closed hat on voice 2
+v3 w103 a0 n69 l1   # Open hat on voice 3
 ```
 
 ---
 
-### Example 2: Sustained Horn & Flute Lead with Infinite Hold
-Render a brass trumpet and wooden flute with seamless sustain looping. When a note is played with gate on (`o`), the voice sustains seamlessly inside the zero-crossing sustain loop until gate off (`_`):
+### Example 2: Sustained Horn & Flute Lead with Natural Acoustic Release
+Render a brass trumpet and wooden flute with seamless sustain looping. When triggered (`l1`), the voice sustains indefinitely within the zero-crossing loop area. When released (`l0`), the engine automatically exits the loop and plays through the natural acoustic release tail to completion—no artificial ADSR envelope is needed because the acoustic decay is built into the physical sample itself:
 
 ```skode
-# 1. Render sustained brass and flute
+# 1. Render sustained brass and flute with automated sustain loop metadata
 [horn:brass n58 pr:0.85 br:0.70] 110 phz!
 [wind:flute n72 pr:0.72 air:0.15] 111 phz!
 
-# 2. Configure voice 0 for brass lead with slow envelope
-v0 110 w
-v0 a0.05 d0.2 s0.9 r0.3  # ADSR envelope
-v0 58 n o                # Play root Bb3 (sustains within loop)
-~2.0                     # Hold note for 2 seconds
-v0 _                     # Release note (smooth natural envelope fade)
+# 2. Play sustained brass lead on voice 0
+v0 w110 a0 n58 l1   # Trigger Bb3 lead; sustains seamlessly inside loop
+~2.0                # Hold for 2 seconds
+v0 l0               # Gate off: engine exits loop and plays natural acoustic release tail
 
 # 3. Play expressive flute melodic line on voice 1
-v1 111 w
-v1 72 n o ~0.5 75 n ~0.5 77 n ~0.75 72 n ~1.0 _
+v1 w111 a0 n72 l1   # Trigger root C5
+~0.5
+v1 n75              # Legato slur to Eb5 (stays sustained inside loop)
+~0.5
+v1 n77              # Legato slur to F5
+~0.75
+v1 n72              # Return to C5
+~0.5
+v1 l0               # Release note; plays natural acoustic breath tail
 ```
 
 ---
@@ -376,9 +381,15 @@ Combine a sustained Tibetan singing bowl with pitch transposition across octaves
 [bell:bowl n48 d:1.0 loop:1] 120 phz!
 
 # Polyphonic drone chord (C3 + G3 + C4)
-v0 120 w 48 n o
-v1 120 w 55 n o
-v2 120 w 60 n o
+v0 w120 a-3 n48 l1
+v1 w120 a-6 n55 l1
+v2 w120 a-6 n60 l1
+
+# Release voices after sustained meditation
+~4.0
+v0 l0
+v1 l0
+v2 l0
 ```
 
 ---
@@ -395,6 +406,9 @@ Because `phz!` populates the active `data` buffer and formats metadata into `par
 
 # 3. Install into wavetable slot 130 (metadata carries over automatically)
 130 d>w
+
+# 4. Play acoustic guitar note on voice 0
+v0 w130 a0 n60 l1
 ```
 
 ---

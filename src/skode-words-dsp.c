@@ -2059,7 +2059,8 @@ static int find_sustain_loop(const float *audio, int len, float freq, float samp
   int k = (int)(target_sec * freq + 0.5f);
   if (k < 3) k = 3;
 
-  int max_end = len - (int)(sample_rate * 0.04f); /* leave at least 40ms tail */
+  int max_end = len - (int)(sample_rate * 0.20f); /* leave release tail */
+  if (max_end < search_start + (int)(period * 4.0f)) max_end = len - (int)(sample_rate * 0.04f);
   int nominal_end = start_idx + (int)(k * period + 0.5f);
   while (nominal_end >= max_end && k > 1) {
     k--;
@@ -2591,8 +2592,8 @@ int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int arg
       if (p.vibrato_rate > 0.1f) fl.vibrato_inc = p.vibrato_rate / rate;
       sk_flute_set_pressure(&fl, p.pressure > 0.0f ? p.pressure : 0.70f);
 
-      int release_start = total_samples - (int)(rate * 0.05f);
-      if (release_start < 0) release_start = 0;
+      int release_start = total_samples - (int)(rate * 0.18f);
+      if (release_start < (int)(rate * 0.4f)) release_start = (int)(rate * 0.4f);
       for (int i = 0; i < total_samples; i++) {
         if (i == release_start) sk_flute_set_pressure(&fl, 0.0f);
         buf[i] = sk_flute_step(&fl);
@@ -2605,8 +2606,8 @@ int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int arg
       if (p.brassiness >= 0.0f) br.brassiness = sk_clampf(p.brassiness, 0.0f, 1.0f);
       sk_brass_set_pressure(&br, p.pressure > 0.0f ? p.pressure : 0.75f);
 
-      int release_start = total_samples - (int)(rate * 0.05f);
-      if (release_start < 0) release_start = 0;
+      int release_start = total_samples - (int)(rate * 0.18f);
+      if (release_start < (int)(rate * 0.4f)) release_start = (int)(rate * 0.4f);
       for (int i = 0; i < total_samples; i++) {
         if (i == release_start) sk_brass_set_pressure(&br, 0.0f);
         buf[i] = sk_brass_step(&br);
