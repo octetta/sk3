@@ -1052,7 +1052,10 @@ static int word_exec_VC(const skode_word_t *self, skode_t *ctx, ands_t *s, doubl
     if (skode_double_to_int(arg[0], &cue_idx)) {
       if (cue_idx >= 0 && cue_idx < sw.num_cues[wave]) {
         sk_cue_t *c = &sw.cues[wave][cue_idx];
-        voice_wave_range_set(voice, (int)c->start, (int)c->end);
+        int start = (int)c->start;
+        int end = (int)c->end;
+        if (end <= start) end = sw.size[wave];
+        voice_wave_range_set(voice, start, end);
         if (c->type == SK_CUE_LOOP_SUSTAIN || c->type == SK_CUE_LOOP_RELEASE) {
           voice_loop_points_set(voice, (int)c->start, (int)c->end);
         }
@@ -1066,7 +1069,10 @@ static int word_exec_VC(const skode_word_t *self, skode_t *ctx, ands_t *s, doubl
     for (int i = 0; i < sw.num_cues[wave]; i++) {
       if (strcmp(sw.cues[wave][i].label, label) == 0) {
         sk_cue_t *c = &sw.cues[wave][i];
-        voice_wave_range_set(voice, (int)c->start, (int)c->end);
+        int start = (int)c->start;
+        int end = (int)c->end;
+        if (end <= start) end = sw.size[wave];
+        voice_wave_range_set(voice, start, end);
         if (c->type == SK_CUE_LOOP_SUSTAIN || c->type == SK_CUE_LOOP_RELEASE) {
           voice_loop_points_set(voice, (int)c->start, (int)c->end);
         }

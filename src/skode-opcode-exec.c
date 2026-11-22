@@ -665,7 +665,10 @@ int skode_execute_voice_opcode(const opcode_event_t *opcode, int voice) {
         if (skode_wave_valid(wave) && sw.cues && sw.num_cues &&
             cue_idx >= 0 && cue_idx < sw.num_cues[wave] && sw.cues[wave]) {
           sk_cue_t *c = &sw.cues[wave][cue_idx];
-          voice_wave_range_set(voice, (int)c->start, (int)c->end);
+          int start = (int)c->start;
+          int end = (int)c->end;
+          if (end <= start) end = sw.size[wave];
+          voice_wave_range_set(voice, start, end);
           if (c->type == SK_CUE_LOOP_SUSTAIN || c->type == SK_CUE_LOOP_RELEASE) {
             voice_loop_points_set(voice, (int)c->start, (int)c->end);
           }
