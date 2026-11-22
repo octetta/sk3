@@ -321,7 +321,9 @@ static int word_exec_k_gtw(const skode_word_t *self, skode_t *ctx, ands_t *s, do
           data_load(ctx, wave_slot, one_shot, rate, offset);
           if (skode_wave_valid(wave_slot)) {
             if (sw.eval_ms) sw.eval_ms[wave_slot] = ctx->ks_last_eval_ms;
-            if (ctx->ks && sw.harmonics) {
+            const char *meta = ands_string(ctx->parse);
+            int is_sample = (meta && strstr(meta, "mode:sample") != NULL);
+            if (!is_sample && ctx->ks && sw.harmonics) {
               K k_a = k_get(ctx->ks, 'A');
               if (k_a && k_a->n > 0) {
                 if (sw.harmonics[wave_slot]) free(sw.harmonics[wave_slot]);
@@ -331,6 +333,10 @@ static int word_exec_k_gtw(const skode_word_t *self, skode_t *ctx, ands_t *s, do
                   if (sw.num_harmonics) sw.num_harmonics[wave_slot] = k_a->n;
                 }
               }
+            } else if (is_sample && sw.harmonics && sw.harmonics[wave_slot]) {
+              free(sw.harmonics[wave_slot]);
+              sw.harmonics[wave_slot] = NULL;
+              if (sw.num_harmonics) sw.num_harmonics[wave_slot] = 0;
             }
             if (ctx->ks_last_source) {
               if (sw.source && sw.source_is_heap && sw.source_is_heap[wave_slot] && sw.source[wave_slot]) {

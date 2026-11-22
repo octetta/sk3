@@ -323,7 +323,37 @@ static void synth_eval_and_register_ks_wave(int w, const char *name, const char 
         sw.loop_end[w] = 0;
       }
 
-      if (!one_shot && !is_drum) {
+      K k_meta = k_get_var_str(ctx, "META");
+      if (!k_meta) k_meta = k_get_var_str(ctx, "M");
+      int is_sample = 0;
+      int is_osc = 0;
+      if (k_meta && k_is_string(k_meta)) {
+        sk_meta_info_t meta;
+        sk_parse_metadata((const char *)k_meta->f, &meta);
+        if (meta.has_rate && meta.rate > 0) sw.rate[w] = meta.rate;
+        if (meta.has_loop) {
+          sw.loop_enabled[w] = 1;
+          sw.loop_start[w] = meta.loop_start;
+          sw.loop_end[w] = meta.loop_end >= size ? size : meta.loop_end;
+        }
+        if (meta.has_one_shot) sw.one_shot[w] = meta.one_shot;
+        if (meta.has_root_note) sw.midi_note[w] = meta.root_note;
+        if (meta.mode == SK_WAVE_MODE_SAMPLE) is_sample = 1;
+        else if (meta.mode == SK_WAVE_MODE_OSC) is_osc = 1;
+
+        if (meta.num_cues > 0 && sw.cues && sw.num_cues) {
+          if (sw.cues[w]) free(sw.cues[w]);
+          sw.cues[w] = (sk_cue_t *)malloc(meta.num_cues * sizeof(sk_cue_t));
+          if (sw.cues[w]) {
+            memcpy(sw.cues[w], meta.cues, meta.num_cues * sizeof(sk_cue_t));
+            sw.num_cues[w] = meta.num_cues;
+          }
+        }
+      }
+
+      if (is_osc) {
+        wave_generate_mipmaps(w);
+      } else if (!is_sample && !sw.one_shot[w] && !is_drum) {
         K k_a = k_get(ctx, 'A');
         if (k_a && k_a->n > 0) {
           if (sw.harmonics) {
@@ -615,6 +645,11 @@ void wave_free_one(int i) {
     sw.size[i] = 0;
     sw.refcount[i] = 0;
   }
+  if (sw.cues && sw.cues[i]) {
+    free(sw.cues[i]);
+    sw.cues[i] = NULL;
+  }
+  if (sw.num_cues) sw.num_cues[i] = 0;
 }
 
 void wave_free(void) {

@@ -27,4 +27,5 @@ Z: w (T*e(T*(0-6%N)))
 W: w (X*B*.3)+(Y*D*.5)+Z*F
 
 O: 1
+META: \"mode:sample one_shot:1\"
 W

@@ -53,12 +53,31 @@ int skode_ks_eval(skode_t *ctx, char *cmd, int len) {
   }
   skode_ks_result_clear(ctx);
   ctx->ks_result = next;
+
+  if (next != NULL && ctx->parse) {
+    K m = k_get_var_str(ks, "META");
+    if (!m) m = k_get_var_str(ks, "M");
+    if (m && k_is_string(m)) {
+      const char *s = (const char *)m->f;
+      if (s) {
+        ands_string_from_external(ctx->parse, (char *)s, (int)strlen(s));
+      }
+    }
+  }
+
   return next != NULL;
 }
 
 int skode_ks_result_to_data(skode_t *ctx) {
   if (!ctx || !ctx->ks_result || k_is_func((K)ctx->ks_result)) return 0;
   K result = (K)ctx->ks_result;
+  if (k_is_string(result)) {
+    const char *s = (const char *)result->f;
+    if (s && ctx->parse) {
+      ands_string_from_external(ctx->parse, (char *)s, (int)strlen(s));
+    }
+    return 1;
+  }
   size_t len = (size_t)result->n;
   if (len) {
     int dlen = ands_data_cap(ctx->parse);

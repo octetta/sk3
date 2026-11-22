@@ -13,4 +13,5 @@ R: r T
 W: w (E*S)+(V*R*.15)
 
 O: 1
+META: \"mode:sample one_shot:1\"
 W

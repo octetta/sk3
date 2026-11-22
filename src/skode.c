@@ -1745,6 +1745,12 @@ float record_frame_mono(int frame) {
     summary: voice-loop-points start end; no args resets from wave
     @enddoc */
 
+    /* @doc(command.VC)
+    name: VC
+    category: wave
+    summary: voice-cue cue-index or [label]; no args resets to full range
+    @enddoc */
+
     /* @doc(command.VW)
     name: VW
     category: wave

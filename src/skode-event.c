@@ -36,9 +36,9 @@ const char *skode_opcode_name(uint16_t opcode) {
     "PATTERN_STATE_ALL", "PATTERN_REWIND",
     "STREAM_COPY", "STREAM_MODE", "STREAM_POS", "RATCHET",
     "DELAY_DAMPING", "DELAY_FREEZE", "DELAY_PINGPONG", "DELAY_TIME",
-    "DELAY_SYNC", "DELAY_GRIT", "TEMPO", "INST_NOTE",
+    "DELAY_SYNC", "DELAY_GRIT", "TEMPO", "INST_NOTE", "VOICE_CUE_SET",
   };
-  _Static_assert(sizeof(names) / sizeof(names[0]) == SKODE_OP_INST_NOTE + 1,
+  _Static_assert(sizeof(names) / sizeof(names[0]) == SKODE_OP_VOICE_CUE_SET + 1,
     "skode_opcode_name array size must match opcode enum count");
   if (opcode < sizeof(names) / sizeof(names[0])) return names[opcode];
   return skode_discrete_opcode_name(opcode);

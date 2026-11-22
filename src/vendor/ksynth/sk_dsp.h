@@ -39,6 +39,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include "sk_meta.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -1364,13 +1365,16 @@ static inline const sk_phoneme_def_t *sk_phoneme_lookup(const char *code) {
     return NULL;
 }
 
-/* Compile a phonetic DSL string (e.g. "[S:50 K:40 R:70 EH1:120@130>105~ D:60]") into flat frame array.
-   Optional err_token captures the first unrecognized phoneme token for diagnostics. */
-static inline int sk_phoneme_compile_dsl_ex(const char *dsl, sk_phoneme_frame_t *out_frames, int max_frames,
-                                            float default_pitch, char *err_token, size_t err_token_sz) {
+/* Compile a phonetic DSL string (e.g. "[|hello| HH:50 AH:60 |world| W:70 ER:90]") into flat frame array.
+   Optional err_token captures the first unrecognized phoneme token for diagnostics.
+   Optional out_cues captures word/phrase markers demarcated with |label|. */
+static inline int sk_phoneme_compile_dsl_markers(const char *dsl, sk_phoneme_frame_t *out_frames, int max_frames,
+                                                float default_pitch, char *err_token, size_t err_token_sz,
+                                                sk_cue_t *out_cues, int max_cues, int *out_num_cues) {
     if (!dsl || !out_frames || max_frames <= 0) return 0;
     if (default_pitch < 40.0f) default_pitch = 120.0f;
     if (err_token && err_token_sz > 0) err_token[0] = '\0';
+    if (out_num_cues) *out_num_cues = 0;
 
     int frame_count = 0;
     const char *p = dsl;
@@ -1382,11 +1386,31 @@ static inline int sk_phoneme_compile_dsl_ex(const char *dsl, sk_phoneme_frame_t 
         }
         if (!*p) break;
 
+        /* Marker tokens: |word| or |phrase| */
+        if (*p == '|') {
+            p++;
+            const char *m_start = p;
+            while (*p && *p != '|' && *p != ']' && *p != '\n' && *p != '\r') p++;
+            int m_len = (int)(p - m_start);
+            if (*p == '|') p++; /* skip closing '|' */
+            if (m_len > 0 && out_cues && out_num_cues && *out_num_cues < max_cues) {
+                sk_cue_t *c = &out_cues[*out_num_cues];
+                memset(c, 0, sizeof(*c));
+                c->type = SK_CUE_WORD;
+                int clen = m_len < (int)sizeof(c->label) - 1 ? m_len : (int)sizeof(c->label) - 1;
+                memcpy(c->label, m_start, clen);
+                c->label[clen] = '\0';
+                c->start = (uint32_t)frame_count; /* temporary frame index */
+                (*out_num_cues)++;
+            }
+            continue;
+        }
+
         /* Read phoneme code */
         char code[8];
         int c_idx = 0;
         int stress = -1; /* -1 = none, 0 = unstressed, 1 = primary, 2 = secondary */
-        while (*p && *p != ':' && *p != '@' && *p != '~' && *p != '*' && *p != ' ' && *p != '\t' && *p != ',' && *p != ']' && c_idx < 7) {
+        while (*p && *p != ':' && *p != '@' && *p != '~' && *p != '*' && *p != ' ' && *p != '\t' && *p != ',' && *p != ']' && *p != '|' && c_idx < 7) {
             code[c_idx++] = *p++;
         }
         code[c_idx] = '\0';
@@ -1432,7 +1456,7 @@ static inline int sk_phoneme_compile_dsl_ex(const char *dsl, sk_phoneme_frame_t 
         }
 
         /* Parse optional modifiers in any order (:dur, @pitch, @start>end, ~rate, *amp) */
-        while (*p && *p != ' ' && *p != '\t' && *p != '\n' && *p != '\r' && *p != ',' && *p != ']') {
+        while (*p && *p != ' ' && *p != '\t' && *p != '\n' && *p != '\r' && *p != ',' && *p != ']' && *p != '|') {
             if (*p == ':') {
                 p++;
                 char *end;
@@ -1507,6 +1531,37 @@ static inline int sk_phoneme_compile_dsl_ex(const char *dsl, sk_phoneme_frame_t 
     }
 
     return frame_count;
+}
+
+/* Backward-compatible wrapper */
+static inline int sk_phoneme_compile_dsl_ex(const char *dsl, sk_phoneme_frame_t *out_frames, int max_frames,
+                                            float default_pitch, char *err_token, size_t err_token_sz) {
+    return sk_phoneme_compile_dsl_markers(dsl, out_frames, max_frames, default_pitch, err_token, err_token_sz, NULL, 0, NULL);
+}
+
+/* Convert frame-relative cues to sample offsets and slice ranges */
+static inline void sk_phoneme_cues_to_samples(sk_cue_t *cues, int num_cues,
+                                              const sk_phoneme_frame_t *frames, int num_frames,
+                                              float sample_rate, uint32_t total_samples) {
+    if (!cues || num_cues <= 0 || !frames || num_frames <= 0 || sample_rate <= 0.0f) return;
+    for (int i = 0; i < num_cues; i++) {
+        int f_idx = (int)cues[i].start;
+        if (f_idx > num_frames) f_idx = num_frames;
+        double ms = 0.0;
+        for (int f = 0; f < f_idx; f++) {
+            ms += frames[f].duration_ms;
+        }
+        uint32_t start_samp = (uint32_t)(ms * 0.001 * sample_rate);
+        if (start_samp > total_samples) start_samp = total_samples;
+        cues[i].start = start_samp;
+    }
+    for (int i = 0; i < num_cues; i++) {
+        if (i + 1 < num_cues) {
+            cues[i].end = cues[i + 1].start > cues[i].start ? cues[i + 1].start - 1 : cues[i].start;
+        } else {
+            cues[i].end = total_samples > 0 ? total_samples - 1 : 0;
+        }
+    }
 }
 
 static inline int sk_phoneme_compile_dsl(const char *dsl, sk_phoneme_frame_t *out_frames, int max_frames, float default_pitch) {

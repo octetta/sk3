@@ -43,6 +43,7 @@ $$\text{[CODE[stress][:duration_ms][@pitch_hz[>glide_hz]][\sim vibrato_rate][*am
 | **Pitch Inflection Glide** | `@start>end` | `@145>105` | Linear pitch glide across token (cadence drop, question rise, tones) |
 | **Vibrato** | `~` or `~rate` | `~`, `~6.0` | 2.5% vocal pitch wobble at specified frequency (default: 5.5 Hz) |
 | **Amplitude** | `*amp` | `*1.4`, `*0.6` | Relative gain multiplier |
+| **Word Marker** | `\|label\|` | `\|hello\|`, `\|word\|` | Demarcates word/phrase boundaries, exporting cue points into wave metadata |
 | **Pause / Silence** | `_` | `_:60` | Inter-word silence / rest in milliseconds |
 
 ---
@@ -197,3 +198,25 @@ To convert English sentences into ARPAbet phoneme sequences:
    python -c "from g2p_en import G2p; print(' '.join(G2p()('Hello world')))"
    # Output: HH AH0 L OW1   W ER1 L D
    ```
+
+---
+
+## 7. Word Demarcation Markers & Wave Cues
+
+Embed `|word|` marker tokens in phoneme strings to automatically track sample timestamps and boundaries:
+
+```text
+[|hello| HH:50 AH0:60 L:70 OW1:90 |world| W:60 ER1:90 L:50 D:60] 300 tts!
+```
+
+When synthesized:
+1. `tts!` measures phoneme durations to calculate exact sample offset boundaries.
+2. The wave slot stores cue slices with start and end sample offsets:
+   - `sw.cues[300][0]`: `label="hello"`, `start=0`, `end=11465`
+   - `sw.cues[300][1]`: `label="world"`, `start=11466`, `end=22932`
+3. The string buffer (`ands_string`) is populated with universal metadata:
+   ```text
+   mode:sample rate:44100 one_shot:1 cue:0..11465,hello cue:11466..22932,world
+   ```
+4. Displaying the wave slot (`300 w?`) displays all cues and regions.
+

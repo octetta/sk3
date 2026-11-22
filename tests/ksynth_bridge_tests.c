@@ -10,6 +10,7 @@
 #include "skode.h"
 #include "synth.h"
 #include "synth-state.h"
+#include "seq.h"
 #endif
 
 static int failures;
@@ -63,6 +64,51 @@ static void test_owned_eval_result(void) {
       fail(test, "invalid expression did not report invalid arguments");
     }
   }
+  ks_destroy(ctx);
+}
+
+static void test_ksynth_string_interpolation_and_metadata(void) {
+  const char *test = "ksynth string interpolation and metadata";
+  ks_ctx *ctx = ks_create(1024 * 1024, 1000000, 48000.0);
+  if (!ctx) {
+    fail(test, "ks_create failed");
+    return;
+  }
+
+  /* 1. Literal string evaluation */
+  K s = ks_eval(ctx, "\"hello world\"", strlen("\"hello world\""));
+  if (!s || !k_is_string(s)) {
+    fail(test, "string literal did not produce string object");
+  } else if (strcmp(k_str(s), "hello world") != 0) {
+    fail(test, "string literal content mismatch");
+  }
+  k_free(ctx, s);
+
+  /* 2. $A interpolation */
+  bind_scalar(ctx, 'S', 48000.0);
+  K a = ks_eval(ctx, "A: 12000; B: 45000; M: \"loop:$A,$B\"", strlen("A: 12000; B: 45000; M: \"loop:$A,$B\""));
+  K m = k_get_var_str(ctx, "M");
+  if (!m || !k_is_string(m)) {
+    fail(test, "variable M did not store string");
+  } else if (strcmp(k_str(m), "loop:12000,45000") != 0) {
+    char msg[128];
+    snprintf(msg, sizeof(msg), "expected 'loop:12000,45000', got '%s'", k_str(m));
+    fail(test, msg);
+  }
+  k_free(ctx, a);
+
+  /* 3. META variable with $S (sample rate) and $$ escape */
+  K meta_eval = ks_eval(ctx, "META: \"rate:$S cost:$$5\"", strlen("META: \"rate:$S cost:$$5\""));
+  K meta = k_get_var_str(ctx, "META");
+  if (!meta || !k_is_string(meta)) {
+    fail(test, "variable META did not store string");
+  } else if (strcmp(k_str(meta), "rate:48000 cost:$5") != 0) {
+    char msg[128];
+    snprintf(msg, sizeof(msg), "expected 'rate:48000 cost:$5', got '%s'", k_str(meta));
+    fail(test, msg);
+  }
+  k_free(ctx, meta_eval);
+
   ks_destroy(ctx);
 }
 
@@ -506,10 +552,186 @@ static void test_runtime_dwg_wavetable_initialization(void) {
   wave_free();
   synth_free();
 }
+
+static void test_metadata_wave_installation_osc_and_sample(void) {
+  const char *test = "metadata wave installation osc and sample";
+  skode_t ctx = SKODE_EMPTY();
+  synth_init(8);
+  wave_table_init(0);
+  voice_init();
+  skode_init(&ctx);
+
+  /* Sample with metadata: mode:sample, rate:22050, loop:10,50, one_shot:1 */
+  consume(test, &ctx, "[A: 1 2 3 4; META: \"mode:sample rate:22050 loop:10,50 one_shot:1\"; 100#!1] ks kw>");
+  consume(test, &ctx, "k>w305");
+  if (!sw.data[305] || sw.size[305] != 100) {
+    fail(test, "wave 305 size mismatch");
+  }
+  if (!sw.one_shot[305]) {
+    fail(test, "wave 305 expected one_shot=1");
+  }
+  if (fabsf(sw.rate[305] - 22050.0f) > 0.01f) {
+    fail(test, "wave 305 expected rate 22050");
+  }
+  if (!sw.loop_enabled[305] || sw.loop_start[305] != 10 || sw.loop_end[305] != 50) {
+    fail(test, "wave 305 loop points mismatch");
+  }
+  if (sw.harmonics[305] != NULL) {
+    fail(test, "wave 305 harmonics should not be hijacked under mode:sample");
+  }
+
+  /* Single-cycle osc with metadata: mode:osc */
+  consume(test, &ctx, "[P: ~256; META: \"mode:osc\"; s P] ks kw>");
+  consume(test, &ctx, "k>w306");
+  if (!sw.data[306] || sw.size[306] != 256) {
+    fail(test, "wave 306 size mismatch");
+  }
+  if (sw.one_shot[306] != 0) {
+    fail(test, "wave 306 expected cycle (one_shot=0)");
+  }
+  if (!sw.mip_levels || sw.mip_levels[306] != 8) {
+    fail(test, "wave 306 expected 8-level MIP tables for mode:osc");
+  }
+
+  skode_free(&ctx);
+  wave_free();
+  synth_free();
+}
+
+static void test_tts_word_markers_and_cues(void) {
+  const char *test = "tts word markers and cues";
+  skode_t ctx = SKODE_EMPTY();
+  synth_init(8);
+  wave_table_init(0);
+  voice_init();
+  skode_init(&ctx);
+
+  consume(test, &ctx, "[|hello| HH AH0 L OW1 |world| W ER1 L D] 307 tts!");
+  if (!sw.data[307] || sw.size[307] <= 0) {
+    fail(test, "tts failed to render audio to wave 307");
+  }
+  if (!sw.num_cues || sw.num_cues[307] != 2) {
+    char msg[128];
+    snprintf(msg, sizeof(msg), "expected 2 cues on wave 307, got %d", sw.num_cues ? sw.num_cues[307] : -1);
+    fail(test, msg);
+  } else {
+    if (strcmp(sw.cues[307][0].label, "hello") != 0) {
+      fail(test, "cue 0 label expected 'hello'");
+    }
+    if (strcmp(sw.cues[307][1].label, "world") != 0) {
+      fail(test, "cue 1 label expected 'world'");
+    }
+    if (sw.cues[307][0].start != 0) {
+      fail(test, "cue 0 expected start at sample 0");
+    }
+    if (sw.cues[307][1].start <= sw.cues[307][0].start) {
+      fail(test, "cue 1 start should be after cue 0 start");
+    }
+    if (sw.cues[307][1].end != (uint32_t)sw.size[307] - 1) {
+      fail(test, "cue 1 end should extend to end of rendered audio");
+    }
+  }
+
+  /* Verify ands_string contains metadata */
+  const char *s = ands_string(ctx.parse);
+  if (!s || !strstr(s, "mode:sample") || !strstr(s, "cue:0..")) {
+    fail(test, "ands_string does not contain formatted cue metadata");
+  }
+
+  skode_free(&ctx);
+  wave_free();
+  synth_free();
+}
+
+static void test_voice_cue_opcode(void) {
+  const char *test = "voice cue opcode (VC)";
+  skode_t ctx = SKODE_EMPTY();
+  synth_init(8);
+  wave_table_init(0);
+  voice_init();
+  skode_init(&ctx);
+
+  /* Render wave 307 with two cues */
+  consume(test, &ctx, "[|hello| HH AH0 L OW1 |world| W ER1 L D] 307 tts!");
+  if (!sw.num_cues || sw.num_cues[307] != 2) {
+    fail(test, "prerequisite: wave 307 cues missing");
+    skode_free(&ctx);
+    wave_free();
+    synth_free();
+    return;
+  }
+
+  uint32_t c0_start = sw.cues[307][0].start;
+  uint32_t c0_end = sw.cues[307][0].end;
+  uint32_t c1_start = sw.cues[307][1].start;
+  uint32_t c1_end = sw.cues[307][1].end;
+
+  /* Select wave 307 on voice 0 */
+  consume(test, &ctx, "307 w");
+
+  /* Test 0 VC */
+  consume(test, &ctx, "0 VC");
+  if (sv.wave_range_start[0] != (int)c0_start || sv.wave_range_end[0] != (int)c0_end) {
+    char msg[128];
+    snprintf(msg, sizeof(msg), "0 VC: expected %u..%u, got %d..%d",
+             c0_start, c0_end, sv.wave_range_start[0], sv.wave_range_end[0]);
+    fail(test, msg);
+  }
+
+  /* Test 1 VC */
+  consume(test, &ctx, "1 VC");
+  if (sv.wave_range_start[0] != (int)c1_start || sv.wave_range_end[0] != (int)c1_end) {
+    char msg[128];
+    snprintf(msg, sizeof(msg), "1 VC: expected %u..%u, got %d..%d",
+             c1_start, c1_end, sv.wave_range_start[0], sv.wave_range_end[0]);
+    fail(test, msg);
+  }
+
+  /* Test [hello] VC */
+  consume(test, &ctx, "[hello] VC");
+  if (sv.wave_range_start[0] != (int)c0_start || sv.wave_range_end[0] != (int)c0_end) {
+    char msg[128];
+    snprintf(msg, sizeof(msg), "[hello] VC: expected %u..%u, got %d..%d",
+             c0_start, c0_end, sv.wave_range_start[0], sv.wave_range_end[0]);
+    fail(test, msg);
+  }
+
+  /* Test VC reset */
+  consume(test, &ctx, "VC");
+  if (sv.wave_range_start[0] != 0 || sv.wave_range_end[0] != sw.size[307]) {
+    char msg[128];
+    snprintf(msg, sizeof(msg), "VC reset: expected 0..%d, got %d..%d",
+             sw.size[307], sv.wave_range_start[0], sv.wave_range_end[0]);
+    fail(test, msg);
+  }
+
+  /* Test compilation of VC into realtime bytecode */
+  event_program_t prog;
+  memset(&prog, 0, sizeof(prog));
+  if (skode_compile_program("1 VC", &prog) != SKODE_COMPILE_OK) {
+    fail(test, "failed to compile '1 VC' to program");
+  } else if (prog.count != 1 || prog.op[0].opcode.code != SKODE_OP_VOICE_CUE_SET) {
+    fail(test, "program did not compile to SKODE_OP_VOICE_CUE_SET");
+  } else {
+    /* Test realtime execution of bytecode */
+    skode_execute_voice_opcode(&prog.op[0].opcode, 0);
+    if (sv.wave_range_start[0] != (int)c1_start || sv.wave_range_end[0] != (int)c1_end) {
+      char msg[128];
+      snprintf(msg, sizeof(msg), "realtime execute '1 VC': expected %u..%u, got %d..%d",
+               c1_start, c1_end, sv.wave_range_start[0], sv.wave_range_end[0]);
+      fail(test, msg);
+    }
+  }
+
+  skode_free(&ctx);
+  wave_free();
+  synth_free();
+}
 #endif
 
 int main(void) {
   test_owned_eval_result();
+  test_ksynth_string_interpolation_and_metadata();
   test_generic_vector_binding();
 #ifdef SKRED_TEST_KSYNTH
   test_skode_context_isolation();
@@ -518,6 +740,9 @@ int main(void) {
   test_runtime_dwg_wavetable_initialization();
   test_runtime_esq1_wavetable_initialization();
   test_runtime_drum_wavetable_initialization();
+  test_metadata_wave_installation_osc_and_sample();
+  test_tts_word_markers_and_cues();
+  test_voice_cue_opcode();
 #endif
 
   if (failures) {

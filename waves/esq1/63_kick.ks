@@ -5,6 +5,7 @@ S: 44100.0
 L: 0
 E: 4095
 O: 1
+META: "mode:sample one_shot:1"
 
 N: 4096
 X: (!N) % (N * 1.0)

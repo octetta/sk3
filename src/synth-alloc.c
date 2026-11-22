@@ -366,6 +366,8 @@ void synth_alloc_waves(int wave_table_max) {
     WALLOC(eval_ms,      float);
     WALLOC(source,       const char *);
     WALLOC(source_is_heap, int);
+    WALLOC(cues,         sk_cue_t *);
+    WALLOC(num_cues,     int);
 }
 
 void synth_free_waves(void) {
@@ -410,6 +412,13 @@ void synth_free_waves(void) {
     WFREE(direction);    WFREE(is_heap);      WFREE(refcount);
     WFREE(readonly);     WFREE(name);
     WFREE(eval_ms);      WFREE(source);       WFREE(source_is_heap);
+    if (sw.cues) {
+        for (int i = 0; i < synth_config.wave_table_max; i++) {
+            if (sw.cues[i]) free(sw.cues[i]);
+        }
+    }
+    WFREE(cues);
+    WFREE(num_cues);
 }
 
 #include "../src/gen/synth_alloc_gen.c"

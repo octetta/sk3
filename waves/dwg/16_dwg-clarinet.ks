@@ -5,4 +5,6 @@ H: !32
 H: H+1
 M: a(s(H*1.5707963))
 A: (1%H)*M
+META: \"mode:osc\"
+
 W: w P $ A

@@ -272,6 +272,14 @@ K k_get(ks_ctx *ctx, char name) {
         memcpy(x->f, v->f, len);
         return x;
     }
+    if (k_is_string(v)) {
+        int len = strlen((char*)v->f) + 1;
+        int ndoubles = (len + sizeof(double) - 1) / sizeof(double);
+        K x = k_new(ctx, ndoubles);
+        x->n = KS_TYPE_STRING;
+        memcpy(x->f, v->f, len);
+        return x;
+    }
     K x = k_new(ctx, v->n);
     memcpy(x->f, v->f, v->n * sizeof(double));
     return x;
@@ -288,7 +296,17 @@ K k_func(ks_ctx *ctx, char *body) {
     return x;
 }
 
-typedef enum { TOK_EOF, TOK_SYM, TOK_ID, TOK_NUM, TOK_FUNC } TokenType;
+K k_string(ks_ctx *ctx, const char *s) {
+    if (!s) s = "";
+    int len = strlen(s) + 1;
+    int ndoubles = (len + sizeof(double) - 1) / sizeof(double);
+    K x = k_new(ctx, ndoubles);
+    x->n = KS_TYPE_STRING;
+    memcpy(x->f, s, len);
+    return x;
+}
+
+typedef enum { TOK_EOF, TOK_SYM, TOK_ID, TOK_NUM, TOK_FUNC, TOK_STR } TokenType;
 typedef struct {
     TokenType type;
     char c_val;
@@ -1001,6 +1019,31 @@ int ks_lex(ks_ctx *ctx, const char *code, Token *tokens, int max_tokens) {
             }
         }
 
+        if (*p == '"') {
+            p++;
+            const char *start = p;
+            while (*p && *p != '"') {
+                if (*p == '\\' && p[1]) p += 2;
+                else p++;
+            }
+            int raw_len = (int)(p - start);
+            char raw[1024];
+            if (raw_len >= (int)sizeof(raw)) raw_len = (int)sizeof(raw) - 1;
+            memcpy(raw, start, raw_len);
+            raw[raw_len] = '\0';
+            if (*p == '"') p++;
+
+            int ndoubles = (raw_len + 1 + (int)sizeof(double) - 1) / (int)sizeof(double);
+            K x = k_new(ctx, ndoubles);
+            x->n = KS_TYPE_STRING;
+            memcpy(x->f, raw, raw_len + 1);
+
+            tokens[count].type = TOK_STR;
+            tokens[count].k_val = x;
+            count++;
+            continue;
+        }
+
         if ((*p >= '0' && *p <= '9') || (*p == '.' && p[1] >= '0' && p[1] <= '9')) {
             double buf[1024]; int n = 0;
             char *ptr = (char*)p;
@@ -1072,6 +1115,58 @@ int ks_lex(ks_ctx *ctx, const char *code, Token *tokens, int max_tokens) {
     return count;
 }
 
+static K k_eval_string_template(ks_ctx *ctx, const char *raw) {
+    int raw_len = (int)strlen(raw);
+    char out[2048];
+    int out_len = 0;
+    for (int i = 0; i < raw_len; ) {
+        if (raw[i] == '$') {
+            if (raw[i+1] == '$') {
+                if (out_len < (int)sizeof(out) - 1) out[out_len++] = '$';
+                i += 2;
+                continue;
+            }
+            i++; // skip '$'
+            char varname[32];
+            int vl = 0;
+            while (i < raw_len && ((raw[i] >= 'A' && raw[i] <= 'Z') || (raw[i] >= 'a' && raw[i] <= 'z') || raw[i] == '_')) {
+                if (vl < (int)sizeof(varname) - 1) varname[vl++] = raw[i];
+                i++;
+            }
+            varname[vl] = '\0';
+            K v = k_get_var_str(ctx, varname);
+            if (v && v->n > 0) {
+                double val = v->f[0];
+                char numbuf[64];
+                if (val == floor(val)) {
+                    snprintf(numbuf, sizeof(numbuf), "%.0f", val);
+                } else {
+                    snprintf(numbuf, sizeof(numbuf), "%g", val);
+                }
+                int nlen = (int)strlen(numbuf);
+                if (out_len + nlen < (int)sizeof(out) - 1) {
+                    memcpy(out + out_len, numbuf, nlen);
+                    out_len += nlen;
+                }
+            } else if (v && k_is_string(v)) {
+                const char *sval = (const char *)v->f;
+                int slen = (int)strlen(sval);
+                if (out_len + slen < (int)sizeof(out) - 1) {
+                    memcpy(out + out_len, sval, slen);
+                    out_len += slen;
+                }
+            }
+        } else if (raw[i] == '\\' && raw[i+1]) {
+            if (out_len < (int)sizeof(out) - 1) out[out_len++] = raw[i+1];
+            i += 2;
+        } else {
+            if (out_len < (int)sizeof(out) - 1) out[out_len++] = raw[i++];
+        }
+    }
+    out[out_len] = '\0';
+    return k_string(ctx, out);
+}
+
 K atom_tok(ks_ctx *ctx, Token **t) {
     Token *tk = *t;
     if (tk->type == TOK_EOF || (tk->type == TOK_SYM && (tk->c_val == ')' || tk->c_val == ';'))) return NULL;
@@ -1079,6 +1174,13 @@ K atom_tok(ks_ctx *ctx, Token **t) {
     if (tk->type == TOK_SYM && tk->c_val == '(') {
         (*t)++; K x = e_tok(ctx, t);
         if ((*t)->type == TOK_SYM && (*t)->c_val == ')') (*t)++;
+        return x;
+    }
+
+    if (tk->type == TOK_STR) {
+        const char *raw = (const char *)tk->k_val->f;
+        K x = k_eval_string_template(ctx, raw);
+        (*t)++;
         return x;
     }
 
@@ -1104,6 +1206,13 @@ K atom_tok(ks_ctx *ctx, Token **t) {
                 if (!perm) longjmp(ctx->recover, 1);
                 perm->n = -1;
                 memcpy(perm->f, x->f, len);
+            } else if (k_is_string(x)) {
+                int len = strlen((char*)x->f) + 1;
+                int ndoubles = (len + sizeof(double) - 1) / sizeof(double);
+                perm = k_new_perm(ctx, ndoubles);
+                if (!perm) longjmp(ctx->recover, 1);
+                perm->n = KS_TYPE_STRING;
+                memcpy(perm->f, x->f, len);
             } else {
                 perm = k_new_perm(ctx, x->n);
                 if (!perm) longjmp(ctx->recover, 1);
@@ -1125,6 +1234,14 @@ K atom_tok(ks_ctx *ctx, Token **t) {
     // Is it a variable lookup?
     K first = k_get_var_str(ctx, word);
     if (first) {
+        if (k_is_string(first)) {
+            int len = strlen((char*)first->f) + 1;
+            int ndoubles = (len + sizeof(double) - 1) / sizeof(double);
+            K clone = k_new(ctx, ndoubles);
+            clone->n = KS_TYPE_STRING;
+            memcpy(clone->f, first->f, len);
+            return clone;
+        }
         // Build array if followed by other single-value variables
         if (first->n != 1) {
             if (k_is_func(first)) {
@@ -1333,6 +1450,15 @@ static K k_clone_owned(ks_ctx *ctx, K source) {
         memcpy(copy->f, source->f, (size_t)len);
         return copy;
     }
+    if (k_is_string(source)) {
+        int len = (int)strlen((char *)source->f) + 1;
+        int ndoubles = (len + (int)sizeof(double) - 1) / (int)sizeof(double);
+        K copy = k_new_perm(ctx, ndoubles);
+        if (!copy) return NULL;
+        copy->n = KS_TYPE_STRING;
+        memcpy(copy->f, source->f, (size_t)len);
+        return copy;
+    }
 
     K copy = k_new_perm(ctx, source->n);
     if (!copy) return NULL;
@@ -1383,6 +1509,7 @@ void p(ks_ctx *ctx, K x) {
     (void)ctx;
     if (!x) { printf("(null)\n"); return; }
     if (k_is_func(x)) { printf("{%s}\n", k_func_body(x)); return; }
+    if (k_is_string(x)) { printf("\"%s\"\n", k_str(x)); return; }
     if (x->n == 0) { printf("()\n"); return; }
     if (x->n == 1) { printf("%.6g\n", x->f[0]); return; }
     /* Print up to 8 elements; indicate truncation if longer */

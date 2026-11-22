@@ -488,6 +488,17 @@ int wavetable_show(skode_t *ctx, int n) {
     }
     ctx->puts(ctx, "");
     ctx->printf(ctx, "# loop %d..%d |%d| %gms\n", loop_start, loop_end, loop_len, wave_samples_to_ms(loop_len, rate));
+    if (sw.num_cues && sw.num_cues[n] > 0 && sw.cues && sw.cues[n]) {
+      ctx->printf(ctx, "# cues (%d):", sw.num_cues[n]);
+      for (int c = 0; c < sw.num_cues[n]; c++) {
+        if (sw.cues[n][c].start != sw.cues[n][c].end && sw.cues[n][c].end > 0) {
+          ctx->printf(ctx, " %s@%u..%u", sw.cues[n][c].label, sw.cues[n][c].start, sw.cues[n][c].end);
+        } else {
+          ctx->printf(ctx, " %s@%u", sw.cues[n][c].label, sw.cues[n][c].start);
+        }
+      }
+      ctx->puts(ctx, "");
+    }
     ctx->printf(ctx,
       "# min %+0.3f max %+0.3f peak %0.3f rms %0.3f dc %+0.4f zc %d",
       stats.min, stats.max, stats.peak, stats.rms, stats.dc, stats.zero_crossings);

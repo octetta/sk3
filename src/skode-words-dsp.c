@@ -1036,6 +1036,53 @@ static int word_exec_VL(const skode_word_t *self, skode_t *ctx, ands_t *s, doubl
       return 0;
 }
 
+static int word_exec_VC(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  uint32_t atom = ands_atom_num(s);
+  int voice = ctx->voice;
+  (void)self; (void)atom;
+  int wave = sv.wave_table_index[voice];
+
+  if (!skode_wave_valid(wave) || !sw.cues || !sw.num_cues || !sw.cues[wave]) {
+    if (argc == 0) voice_wave_range_reset(voice);
+    return 0;
+  }
+
+  if (argc >= 1) {
+    int cue_idx;
+    if (skode_double_to_int(arg[0], &cue_idx)) {
+      if (cue_idx >= 0 && cue_idx < sw.num_cues[wave]) {
+        sk_cue_t *c = &sw.cues[wave][cue_idx];
+        voice_wave_range_set(voice, (int)c->start, (int)c->end);
+        if (c->type == SK_CUE_LOOP_SUSTAIN || c->type == SK_CUE_LOOP_RELEASE) {
+          voice_loop_points_set(voice, (int)c->start, (int)c->end);
+        }
+      } else {
+        ctx->printf(ctx, "# cue index %d out of range (0..%d)\n", cue_idx, sw.num_cues[wave] - 1);
+      }
+    }
+  } else if (ands_string_fresh(ctx->parse) && strlen(ands_string(ctx->parse)) > 0) {
+    const char *label = ands_string(ctx->parse);
+    int found = 0;
+    for (int i = 0; i < sw.num_cues[wave]; i++) {
+      if (strcmp(sw.cues[wave][i].label, label) == 0) {
+        sk_cue_t *c = &sw.cues[wave][i];
+        voice_wave_range_set(voice, (int)c->start, (int)c->end);
+        if (c->type == SK_CUE_LOOP_SUSTAIN || c->type == SK_CUE_LOOP_RELEASE) {
+          voice_loop_points_set(voice, (int)c->start, (int)c->end);
+        }
+        found = 1;
+        break;
+      }
+    }
+    if (!found) {
+      ctx->printf(ctx, "# cue label '%s' not found on wave %d\n", label, wave);
+    }
+  } else {
+    voice_wave_range_reset(voice);
+  }
+  return 0;
+}
+
 static int word_exec_VW(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
   uint32_t atom = ands_atom_num(s);
   int voice = ctx->voice;
@@ -1642,6 +1689,9 @@ int skode_exec_VL(skode_t *ctx, ands_t *s, const double *arg, int argc) {
 int skode_exec_VS(skode_t *ctx, ands_t *s, const double *arg, int argc) {
   return word_exec_VS(NULL, ctx, s, (double*)arg, argc);
 }
+int skode_exec_VC(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  return word_exec_VC(NULL, ctx, s, (double*)arg, argc);
+}
 int skode_exec_VW(skode_t *ctx, ands_t *s, const double *arg, int argc) {
   return word_exec_VW(NULL, ctx, s, (double*)arg, argc);
 }
@@ -1745,8 +1795,12 @@ int skode_exec_tts(skode_t *ctx, ands_t *s, const double *arg, int argc) {
 
   /* Compile phonetic DSL string into acoustic parameter frames */
   sk_phoneme_frame_t frames[SK_PHONEME_MAX_TOKENS];
+  sk_cue_t cues[SK_MAX_CUES];
+  int num_cues = 0;
   char bad_token[32] = {0};
-  int num_frames = sk_phoneme_compile_dsl_ex(phrase, frames, SK_PHONEME_MAX_TOKENS, base_pitch, bad_token, sizeof(bad_token));
+  int num_frames = sk_phoneme_compile_dsl_markers(phrase, frames, SK_PHONEME_MAX_TOKENS, base_pitch,
+                                                  bad_token, sizeof(bad_token),
+                                                  cues, SK_MAX_CUES, &num_cues);
   if (bad_token[0] != '\0') {
     ctx->printf(ctx, "# tts: warning: unrecognized phoneme token '%s' (fallback to silence)\n", bad_token);
   }
@@ -1815,6 +1869,23 @@ int skode_exec_tts(skode_t *ctx, ands_t *s, const double *arg, int argc) {
   }
   ands_data_len_set(ctx->parse, rendered);
   free(audio_buf);
+
+  /* Convert cues to sample offsets and format universal metadata string */
+  sk_phoneme_cues_to_samples(cues, num_cues, frames, num_frames, rate, (uint32_t)rendered);
+  sk_meta_info_t meta;
+  sk_meta_init(&meta);
+  meta.mode = SK_WAVE_MODE_SAMPLE;
+  meta.rate = rate;
+  meta.has_rate = 1;
+  meta.one_shot = 1;
+  meta.has_one_shot = 1;
+  meta.num_cues = num_cues;
+  for (int i = 0; i < num_cues; i++) {
+    meta.cues[i] = cues[i];
+  }
+  char meta_str[512];
+  sk_format_metadata(&meta, meta_str, sizeof(meta_str));
+  ands_string_from_external(ctx->parse, meta_str, (int)strlen(meta_str));
 
   ctx->printf(ctx, "# tts: rendered %d samples (%.2fs) to data\n", rendered, (double)rendered / rate);
 

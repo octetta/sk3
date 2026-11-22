@@ -14,4 +14,5 @@ C: 0.08 f R
 W: w E*S+Q*C*.1
 
 O: 1
+META: \"mode:sample one_shot:1\"
 W

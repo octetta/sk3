@@ -19,6 +19,8 @@ static const dwg_patch_source_t DWG_PATCH_SOURCES[] = {
         "H: !32\n"
         "H: H+1\n"
         "A: 1%H\n"
+        "META: \\\"mode:osc\\\"\n"
+        "\n"
         "W: w P $ A\n"
     },
     {
@@ -30,6 +32,8 @@ static const dwg_patch_source_t DWG_PATCH_SOURCES[] = {
         "H: H+1\n"
         "M: a(s(H*1.5707963))\n"
         "A: (1%H)*M\n"
+        "META: \\\"mode:osc\\\"\n"
+        "\n"
         "W: w P $ A\n"
     },
     {
@@ -38,6 +42,8 @@ static const dwg_patch_source_t DWG_PATCH_SOURCES[] = {
         "/ h2 > h1. Peaks at h8 and h10. Measured directly from ROM.\n"
         "P: ~4096\n"
         "A: 0.800 1.000 0.158 0.282 0.179 0.158 0.126 0.354 0.100 0.447 0.089 0.282 0.089 0.282 0.200 0.158 0.141 0.126 0.050 0.016 0.014 0.057 0.070 0.057 0.018 0.016 0.016 0.015 0.014 0.013 0.014 0.016\n"
+        "META: \\\"mode:osc\\\"\n"
+        "\n"
         "W: w P $ A\n"
     },
     {
@@ -46,6 +52,8 @@ static const dwg_patch_source_t DWG_PATCH_SOURCES[] = {
         "/ Fast rolloff after h5. Ghost partials at h13 and h15.\n"
         "P: ~4096\n"
         "A: 1.000 0.680 0.420 0.260 0.140 0.065 0.020 0 0 0 0 0 0.090 0 0.090 0\n"
+        "META: \\\"mode:osc\\\"\n"
+        "\n"
         "W: w P $ A\n"
     },
     {
@@ -54,6 +62,8 @@ static const dwg_patch_source_t DWG_PATCH_SOURCES[] = {
         "/ h1-h4 then gap, h8 present, spike at h13.\n"
         "P: ~4096\n"
         "A: 1.000 0.500 0.250 0.250 0 0 0 0.100 0 0 0 0 0.380\n"
+        "META: \\\"mode:osc\\\"\n"
+        "\n"
         "W: w P $ A\n"
     },
     {
@@ -62,6 +72,8 @@ static const dwg_patch_source_t DWG_PATCH_SOURCES[] = {
         "/ Very complex. h3 and h7 nearly equal to h1. Alternating phase pattern.\n"
         "P: ~4096\n"
         "A: 1.000 0.694 0.925 0.776 0.171 0.651 0.923 0.667 0.667 0.177 0.611 0.653 0.677 0.412 0.106 0.050 0.135 0.058 0.149 0.009 0.167 0.236 0.191 0.143\n"
+        "META: \\\"mode:osc\\\"\n"
+        "\n"
         "W: w P $ A\n"
     },
     {
@@ -70,6 +82,8 @@ static const dwg_patch_source_t DWG_PATCH_SOURCES[] = {
         "/ Drawbar: h1,2,3,4,6,8,10,12,16 equal. All others zero.\n"
         "P: ~4096\n"
         "A: 1 1 1 1 0 1 0 1 0 1 0 1 0 0 0 1\n"
+        "META: \\\"mode:osc\\\"\n"
+        "\n"
         "W: w P $ A\n"
     },
     {
@@ -78,6 +92,8 @@ static const dwg_patch_source_t DWG_PATCH_SOURCES[] = {
         "/ All harmonics. h2 and h3 nearly as strong as h1.\n"
         "P: ~4096\n"
         "A: 1.000 0.859 0.864 0.630 0.561 0.499 0.446 0.422 0.400 0.375 0.354 0.336 0.317 0.316 0.300 0.281 0.266 0.190 0.233 0.191 0.156 0.173 0.121 0.116 0.104 0.105 0.077 0.076 0.085 0.041 0.056 0.048\n"
+        "META: \\\"mode:osc\\\"\n"
+        "\n"
         "W: w P $ A\n"
     },
     {
@@ -86,6 +102,8 @@ static const dwg_patch_source_t DWG_PATCH_SOURCES[] = {
         "/ h1 dominant, fast decay after h5.\n"
         "P: ~4096\n"
         "A: 1.000 0.398 0.240 0.205 0.156 0.087 0.080 0.045 0.051 0.018 0.032 0.033 0.019 0.035 0.021 0.018\n"
+        "META: \\\"mode:osc\\\"\n"
+        "\n"
         "W: w P $ A\n"
     },
     {
@@ -94,6 +112,8 @@ static const dwg_patch_source_t DWG_PATCH_SOURCES[] = {
         "/ h1,h2 strong, dip at h4, formant clusters at h14 and h22-h23.\n"
         "P: ~4096\n"
         "A: 1.000 0.500 0.241 0.050 0.089 0.040 0.029 0.086 0.080 0.089 0.038 0.043 0.108 0.246 0.199 0.040 0.228 0.081 0.005 0.118 0.144 0.191 0.214 0.167 0.086 0.042 0.034 0.067 0.111 0.103 0.080 0.003\n"
+        "META: \\\"mode:osc\\\"\n"
+        "\n"
         "W: w P $ A\n"
     },
     {
@@ -102,6 +122,8 @@ static const dwg_patch_source_t DWG_PATCH_SOURCES[] = {
         "/ Similar to violin with slightly lower formant clusters.\n"
         "P: ~4096\n"
         "A: 1.000 0.500 0.241 0.079 0.112 0.070 0.050 0.100 0.080 0.100 0.050 0.063 0.108 0.112 0.100 0.025 0.100 0.030 0.005 0.040 0.045 0.056 0.063 0.050 0.039 0.026 0.017 0.031 0.045 0.039 0.032 0.003\n"
+        "META: \\\"mode:osc\\\"\n"
+        "\n"
         "W: w P $ A\n"
     },
     {
@@ -110,6 +132,8 @@ static const dwg_patch_source_t DWG_PATCH_SOURCES[] = {
         "/ Very complex. h3 nearly as strong as h1. h6 and h7 very strong.\n"
         "P: ~4096\n"
         "A: 1.000 0.580 0.849 0.508 0.163 0.685 0.554 0.533 0.479 0.173 0.203 0.052 0.132 0.214 0.204 0.154 0.062 0.162 0.090 0.058 0.168 0.120 0.085 0.092\n"
+        "META: \\\"mode:osc\\\"\n"
+        "\n"
         "W: w P $ A\n"
     },
     {
@@ -118,6 +142,8 @@ static const dwg_patch_source_t DWG_PATCH_SOURCES[] = {
         "/ h1-h3 very strong (1.0, 0.8, 0.68), steep cliff after h4.\n"
         "P: ~4096\n"
         "A: 1.000 0.800 0.679 0.200 0.046 0.112 0.094 0.058 0.061\n"
+        "META: \\\"mode:osc\\\"\n"
+        "\n"
         "W: w P $ A\n"
     },
     {
@@ -126,6 +152,8 @@ static const dwg_patch_source_t DWG_PATCH_SOURCES[] = {
         "/ h1=h2 equal. Bump at h9=h10=0.45. Similar spectral pattern to apiano.\n"
         "P: ~4096\n"
         "A: 0.999 1.000 0.158 0.281 0.178 0.158 0.178 0.355 0.447 0.447 0.126 0.282 0.126 0.282\n"
+        "META: \\\"mode:osc\\\"\n"
+        "\n"
         "W: w P $ A\n"
     },
     {
@@ -134,6 +162,8 @@ static const dwg_patch_source_t DWG_PATCH_SOURCES[] = {
         "/ Sparse: h1 then every 4th (h5,9,13,17,21,25,29). h17 peak.\n"
         "P: ~4096\n"
         "A: 1.000 0.050 0.032 0 0.641 0 0 0 0.510 0 0 0 0.320 0 0 0 0.750 0 0 0 0.200 0 0 0 0.150 0 0 0 0.090\n"
+        "META: \\\"mode:osc\\\"\n"
+        "\n"
         "W: w P $ A\n"
     },
     {
@@ -141,6 +171,8 @@ static const dwg_patch_source_t DWG_PATCH_SOURCES[] = {
         "/ DW-8000 Wave 16: whistle\n"
         "/ Pure sine. h1 only.\n"
         "P: ~4096\n"
+        "META: \\\"mode:osc\\\"\n"
+        "\n"
         "W: s P\n"
     },
     { 0, 0, 0 }

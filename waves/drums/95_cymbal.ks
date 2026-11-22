@@ -27,4 +27,5 @@ G: e(T*(0-10.0%N))
 M: E*(D*0.4 + H*0.6) + G*(Y*0.3)
 
 O: 1
+META: \"mode:sample one_shot:1\"
 M

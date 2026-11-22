@@ -14,4 +14,5 @@ H: R-L
 W: w E*(S*.6+H*.5)
 
 O: 1
+META: \"mode:sample one_shot:1\"
 W

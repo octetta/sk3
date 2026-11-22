@@ -9,17 +9,17 @@ Generated automatically by `tools/mkopcodes` from modular opcode definitions in 
 
 ## Architecture & System Overview
 
-- **Total Command Words**: 306
-- **Total Dispatch Clauses**: 621
+- **Total Command Words**: 307
+- **Total Dispatch Clauses**: 623
 - **Real-Time Audio Opcode Handlers**: 156 (audio-thread safe, zero allocation, zero string lookup)
-- **Immediate / Control Plane Clauses**: 465 (REPL / parser / file system / diagnostics)
+- **Immediate / Control Plane Clauses**: 467 (REPL / parser / file system / diagnostics)
 
 ### Functional Command Groups
 
 | Group | Identifier | Words | Description |
 |:---|:---|:---:|:---|
 | voice | `voice` | 25 | Core voice selection, levels, panning, and voice diagnostics |
-| osc | `osc` | 19 | Oscillators, waveforms, frequency, tuning, detune, loops |
+| osc | `osc` | 20 | Oscillators, waveforms, frequency, tuning, detune, loops |
 | wave | `wave` | 14 | Wavetable slots, visualizers, WAV import and export |
 | filter | `filter` | 8 | Filter cutoff frequency, resonance, modes, wavefolding |
 | env | `env` | 15 | Envelopes, ADSR parameters, curve shaping, segment times |
@@ -274,7 +274,7 @@ Triggers voice gate on.
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `277` (`skode_clause_inst_note_c572`)
+- **Discrete Opcode ID**: `277` (`skode_clause_inst_note_c574`)
 - **Summary**: trigger instrument note
 
 **Description & Details**:
@@ -288,7 +288,7 @@ Usage: i note
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `278` (`skode_clause_inst_note_c573`)
+- **Discrete Opcode ID**: `278` (`skode_clause_inst_note_c575`)
 - **Summary**: trigger instrument note with velocity
 
 **Description & Details**:
@@ -302,7 +302,7 @@ Usage: i note velocity
 
 - **Arity**: `3`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `279` (`skode_clause_inst_note_c574`)
+- **Discrete Opcode ID**: `279` (`skode_clause_inst_note_c576`)
 - **Summary**: trigger instrument note with velocity and cents
 
 **Description & Details**:
@@ -920,6 +920,7 @@ Sets label text for active voice.
 | [`phase_dist`](#phase_dist) | `c` | 3 | 0..2 | Real-Time | reset phase distortion |
 | [`phase_mod`](#phase_mod) | `C` | 2 | 1..2 | Real-Time | phase modulation source or disable |
 | [`query_wave_spectrogram`](#query_wave_spectrogram) | `?ws` | 1 | 1 | Immediate | display wavetable spectrogram (?ws alias) |
+| [`voice_cue`](#voice_cue) | `VC` | 2 | 0..1 | Immediate | reset voice playback range to default |
 | [`wave`](#wave) | `w` | 3 | 1..3 | Real-Time | set voice oscillator wavetable index |
 | [`wave_dir`](#wave_dir) | `b` | 2 | 0..1 | Real-Time | toggle waveform playback direction |
 | [`wave_loop`](#wave_loop) | `B` | 2 | 0..1 | Real-Time | toggle waveform loop mode |
@@ -1326,6 +1327,40 @@ Usage: C source depth
 ```text
 Displays ASCII spectrogram visualization for wavetable index (?ws alias).
 Usage: ?ws wave
+```
+
+---
+
+### `voice_cue`
+
+- **Alias**: `VC`
+- **Group**: `osc`
+- **Clause Count**: 2
+
+#### Clause 1: `voice_cue()`
+
+- **Arity**: `0`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: reset voice playback range to default
+
+**Description & Details**:
+
+```text
+Resets voice playback range to full waveform.
+Usage: VC (or voice_cue)
+```
+
+#### Clause 2: `voice_cue(finite)`
+
+- **Arity**: `1`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: set voice playback range to cue index
+
+**Description & Details**:
+
+```text
+Sets voice playback range to the specified cue index on active wave.
+Usage: cue_idx VC (or voice_cue cue_idx)
 ```
 
 ---
@@ -4942,7 +4977,7 @@ Usage: -j step
 
 - **Arity**: `3`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `260` (`skode_clause_pattern_loop_c421`)
+- **Discrete Opcode ID**: `260` (`skode_clause_pattern_loop_c423`)
 - **Summary**: pattern step loop counter and branch
 
 **Description & Details**:
@@ -5083,7 +5118,7 @@ Usage: zq mode (or pattern_queue mode)
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `261` (`skode_clause_pattern_ratchet_c422`)
+- **Discrete Opcode ID**: `261` (`skode_clause_pattern_ratchet_c424`)
 - **Summary**: set step ratchet multiplier
 
 **Description & Details**:
@@ -5290,7 +5325,7 @@ Usage: z??
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `259` (`skode_clause_pattern_state_set_c420`)
+- **Discrete Opcode ID**: `259` (`skode_clause_pattern_state_set_c422`)
 - **Summary**: set pattern state by explicit index
 
 **Description & Details**:
@@ -6209,7 +6244,7 @@ Usage: DO?
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `262` (`skode_clause_stream_copy_c430`)
+- **Discrete Opcode ID**: `262` (`skode_clause_stream_copy_c432`)
 - **Summary**: copy stream contents
 
 **Description & Details**:
@@ -6231,7 +6266,7 @@ Usage: /SC dst src
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `263` (`skode_clause_stream_mode_c431`)
+- **Discrete Opcode ID**: `263` (`skode_clause_stream_mode_c433`)
 - **Summary**: set stream playback mode
 
 **Description & Details**:
@@ -6253,7 +6288,7 @@ Usage: /SM stream_idx mode
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `264` (`skode_clause_stream_pos_c432`)
+- **Discrete Opcode ID**: `264` (`skode_clause_stream_pos_c434`)
 - **Summary**: set stream read position
 
 **Description & Details**:

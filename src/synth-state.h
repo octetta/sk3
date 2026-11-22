@@ -38,6 +38,7 @@
 #include "synth-config.h"
 #include "synth-types.h"   /* mmf_t, envelope_t, wave_name_t */
 #include "portable_atomic.h"
+#include "sk_meta.h"
 
 #include <time.h>          /* struct timespec (voice_mark_a/b) */
 
@@ -244,6 +245,8 @@ typedef struct {
     float       * restrict eval_ms;
     const char ** restrict source;
     int         * restrict source_is_heap;
+    sk_cue_t   ** restrict cues;
+    int         * restrict num_cues;
 
 } synth_waves_t;
 

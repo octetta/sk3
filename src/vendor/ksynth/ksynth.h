@@ -39,7 +39,17 @@ typedef enum {
     KS_ERR_INTERNAL      /* Unexpected internal error */
 } ks_status;
 
+#define KS_TYPE_FUNC   (-1)
+#define KS_TYPE_STRING (-2)
+
 typedef struct ks_val { int r, n; double f[]; } *K;
+
+static inline int k_is_string(K x) {
+    return x && x->n == KS_TYPE_STRING;
+}
+static inline const char* k_str(K x) {
+    return k_is_string(x) ? (const char*)x->f : NULL;
+}
 
 typedef struct ks_dict_entry {
     char *name;
@@ -89,6 +99,9 @@ K k_func(ks_ctx *ctx, char *body);
 K k_call(ks_ctx *ctx, K fn, K *call_args, int nargs);
 int k_is_func(K x);
 char* k_func_body(K x);
+
+/* String support */
+K k_string(ks_ctx *ctx, const char *s);
 
 /* C API Integration */
 K k_view(ks_ctx *ctx, int n, double *ptr);

@@ -19,4 +19,5 @@ K: r T
 W: w (S*.7)+(U*.4)+(V*K*.2)
 
 O: 1
+META: \"mode:sample one_shot:1\"
 W

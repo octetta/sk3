@@ -100,6 +100,7 @@ enum {
   SKODE_OP_DELAY_GRIT,
   SKODE_OP_TEMPO,
   SKODE_OP_INST_NOTE,
+  SKODE_OP_VOICE_CUE_SET,
 };
 
 typedef uint16_t skode_opcode_t;

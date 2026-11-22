@@ -6,6 +6,7 @@ L: 0
 E: 4095
 O: 0
 
+META: \"mode:osc loop:$L,$E\"
 N: 4096
 X: (!N) % (N * 1.0)
 P: X * (p 2)

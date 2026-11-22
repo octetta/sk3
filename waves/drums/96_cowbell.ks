@@ -32,4 +32,5 @@ Y: e(T*(0-8.0%N))
 M: (X*0.6 + Y*0.4) * C
 
 O: 1
+META: \"mode:sample one_shot:1\"
 M

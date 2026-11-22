@@ -143,6 +143,7 @@ int skode_opcode_supported(skode_opcode_t opcode) {
     case SKODE_OP_RING_MOD: return 1;
     case SKODE_OP_WAVE_RANGE_SET:
     case SKODE_OP_WAVE_LOOP_SET:
+    case SKODE_OP_VOICE_CUE_SET:
     case SKODE_OP_POLY_NOTE:
     case SKODE_OP_POLY_RELEASE:
     case SKODE_OP_POLY_BEND:
@@ -657,6 +658,25 @@ int skode_execute_voice_opcode(const opcode_event_t *opcode, int voice) {
         return 0;
       }
       return -1;
+    case SKODE_OP_VOICE_CUE_SET: {
+      int wave = sv.wave_table_index[voice];
+      if (opcode->argc >= 1) {
+        int cue_idx = (int)opcode->arg[0];
+        if (skode_wave_valid(wave) && sw.cues && sw.num_cues &&
+            cue_idx >= 0 && cue_idx < sw.num_cues[wave] && sw.cues[wave]) {
+          sk_cue_t *c = &sw.cues[wave][cue_idx];
+          voice_wave_range_set(voice, (int)c->start, (int)c->end);
+          if (c->type == SK_CUE_LOOP_SUSTAIN || c->type == SK_CUE_LOOP_RELEASE) {
+            voice_loop_points_set(voice, (int)c->start, (int)c->end);
+          }
+          return 0;
+        }
+      } else if (opcode->argc == 0) {
+        voice_wave_range_reset(voice);
+        return 0;
+      }
+      return -1;
+    }
     case SKODE_OP_TEMPO:
       if (opcode->argc >= 1) {
         float bpm = (float)opcode->arg[0];

@@ -567,6 +567,16 @@ int skode_compile_word(ands_t *parser, uint32_t atom, double *arg, int argc,
       *out_compile_result = (rc == 0) ? SKODE_COMPILE_OK : SKODE_COMPILE_TOO_LARGE;
     return 1;
   }
+  if (strcmp(name, "VC") == 0) {
+    if (argc < 0 || argc > 1) {
+      if (out_compile_result) *out_compile_result = SKODE_COMPILE_INVALID;
+      return 1;
+    }
+    int rc = skode_program_push(program, SKODE_OP_VOICE_CUE_SET, parser, arg, argc, 0, 0);
+    if (out_compile_result)
+      *out_compile_result = (rc == 0) ? SKODE_COMPILE_OK : SKODE_COMPILE_TOO_LARGE;
+    return 1;
+  }
   if (strcmp(name, "pn") == 0) {
     if (argc < 4 || argc > 5) {
       if (out_compile_result) *out_compile_result = SKODE_COMPILE_INVALID;

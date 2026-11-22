@@ -29,6 +29,7 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
         "W: w (E*S)+(Q*C*.1)\n"
         "\n"
         "O: 1\n"
+        "META: \\\"mode:sample one_shot:1\\\"\n"
         "W\n"
     },
     {
@@ -54,6 +55,7 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
         "W: w (S*.7)+(U*.4)+(V*K*.2)\n"
         "\n"
         "O: 1\n"
+        "META: \\\"mode:sample one_shot:1\\\"\n"
         "W\n"
     },
     {
@@ -72,6 +74,7 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
         "W: w E*(M*.6+H*.4)\n"
         "\n"
         "O: 1\n"
+        "META: \\\"mode:sample one_shot:1\\\"\n"
         "W\n"
     },
     {
@@ -91,6 +94,7 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
         "W: w E*(M*.4+H*.6)\n"
         "\n"
         "O: 1\n"
+        "META: \\\"mode:sample one_shot:1\\\"\n"
         "W\n"
     },
     {
@@ -124,6 +128,7 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
         "W: w (X*B*.3)+(Y*D*.5)+Z*F\n"
         "\n"
         "O: 1\n"
+        "META: \\\"mode:sample one_shot:1\\\"\n"
         "W\n"
     },
     {
@@ -144,6 +149,7 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
         "W: w E*(S*.6+H*.5)\n"
         "\n"
         "O: 1\n"
+        "META: \\\"mode:sample one_shot:1\\\"\n"
         "W\n"
     },
     {
@@ -164,6 +170,7 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
         "W: w E*S+Q*C*.1\n"
         "\n"
         "O: 1\n"
+        "META: \\\"mode:sample one_shot:1\\\"\n"
         "W\n"
     },
     {
@@ -184,6 +191,7 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
         "W: w E*S+Q*C*.08\n"
         "\n"
         "O: 1\n"
+        "META: \\\"mode:sample one_shot:1\\\"\n"
         "W\n"
     },
     {
@@ -207,6 +215,7 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
         "W: w E*S+Q*C*.08\n"
         "\n"
         "O: 1\n"
+        "META: \\\"mode:sample one_shot:1\\\"\n"
         "W\n"
     },
     {
@@ -226,6 +235,7 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
         "W: w (E*S)+(Q*C*.1)\n"
         "\n"
         "O: 1\n"
+        "META: \\\"mode:sample one_shot:1\\\"\n"
         "W\n"
     },
     {
@@ -245,6 +255,7 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
         "W: w (E*S)+(Q*C*.08)\n"
         "\n"
         "O: 1\n"
+        "META: \\\"mode:sample one_shot:1\\\"\n"
         "W\n"
     },
     {
@@ -265,6 +276,7 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
         "W: w (E*S)+(Q*C*.08)\n"
         "\n"
         "O: 1\n"
+        "META: \\\"mode:sample one_shot:1\\\"\n"
         "W\n"
     },
     {
@@ -286,6 +298,7 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
         "W: w (R*Q)+(S*A)\n"
         "\n"
         "O: 1\n"
+        "META: \\\"mode:sample one_shot:1\\\"\n"
         "W\n"
     },
     {
@@ -319,6 +332,7 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
         "M: E*(D*0.4 + H*0.6) + G*(Y*0.3)\n"
         "\n"
         "O: 1\n"
+        "META: \\\"mode:sample one_shot:1\\\"\n"
         "M\n"
     },
     {
@@ -357,6 +371,7 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
         "M: (X*0.6 + Y*0.4) * C\n"
         "\n"
         "O: 1\n"
+        "META: \\\"mode:sample one_shot:1\\\"\n"
         "M\n"
     },
     {
@@ -376,6 +391,7 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
         "W: w (E*S)+(V*R*.15)\n"
         "\n"
         "O: 1\n"
+        "META: \\\"mode:sample one_shot:1\\\"\n"
         "W\n"
     },
     {
@@ -394,6 +410,7 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
         "W: w E*(H*.7+M*.3)\n"
         "\n"
         "O: 1\n"
+        "META: \\\"mode:sample one_shot:1\\\"\n"
         "W\n"
     },
     {
@@ -413,6 +430,7 @@ static const drum_patch_source_t DRUM_PATCH_SOURCES[] = {
         "W: w (E*S)+(Q*C*.08)\n"
         "\n"
         "O: 1\n"
+        "META: \\\"mode:sample one_shot:1\\\"\n"
         "W\n"
     },
     { 0, 0, 0 }

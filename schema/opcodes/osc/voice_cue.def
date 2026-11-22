@@ -1,0 +1,29 @@
+@name     voice_cue
+@alias    VC
+@group    osc
+@c_name   skode_clause_voice_cue_0
+@type     immediate
+@arity    0
+@match    ()
+@summary  reset voice playback range to default
+@doc
+Resets voice playback range to full waveform.
+Usage: VC (or voice_cue)
+@code
+    return skode_exec_VC(ctx, s, args, argc);
+@end
+
+@name     voice_cue
+@alias    VC
+@group    osc
+@c_name   skode_clause_voice_cue_1
+@type     immediate
+@arity    1
+@match    (finite)
+@summary  set voice playback range to cue index
+@doc
+Sets voice playback range to the specified cue index on active wave.
+Usage: cue_idx VC (or voice_cue cue_idx)
+@code
+    return skode_exec_VC(ctx, s, args, argc);
+@end

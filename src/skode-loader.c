@@ -1,6 +1,6 @@
 #include "skode-internal.h"
 #include "sk_error.h"
-
+#include "sk_meta.h"
 
 #include "miniaudio.h"
 
@@ -655,7 +655,30 @@ int data_load(skode_t *ctx, int wave_slot, int one_shot, float rate, float offse
     ctx->printf(ctx, "# cannot write to w%d r/o\n", wave_slot);
     return -1;
   }
+
+  /* Parse metadata from active ands_string if present */
+  sk_meta_info_t meta;
+  int has_meta = 0;
+  if (ctx->parse) {
+    const char *str = ands_string(ctx->parse);
+    if (str && str[0] != '\0') {
+      has_meta = sk_parse_metadata(str, &meta);
+    }
+  }
+
+  if (has_meta) {
+    if (meta.has_rate && (!isfinite(rate) || rate <= 0 || rate == (float)MAIN_SAMPLE_RATE)) {
+      rate = meta.rate;
+    }
+    if (meta.has_one_shot) {
+      one_shot = meta.one_shot;
+    }
+  }
+
   if (!isfinite(rate) || rate <= 0) {
+    rate = (float)MAIN_SAMPLE_RATE;
+  }
+  if (rate <= 0) {
     ctx->printf(ctx, "# invalid rate %g > 0\n", rate);
     return -1;
   }
@@ -677,24 +700,242 @@ int data_load(skode_t *ctx, int wave_slot, int one_shot, float rate, float offse
     float offset_hz = offset > 0 ? (float)len / rate * 440.0f : 0.0f;
     wave_install_memory(wave_slot, table, len, rate, one_shot, wave_name,
       offset > 0 ? 69.0f : 0.0f, offset_hz);
+
+  /* Apply metadata loop points, root note, and mipmaps */
+  if (has_meta) {
+    if (meta.has_loop) {
+      sw.loop_enabled[wave_slot] = 1;
+      sw.loop_start[wave_slot] = meta.loop_start;
+      sw.loop_end[wave_slot] = meta.loop_end >= len ? len : meta.loop_end;
+    }
+    if (meta.has_root_note) {
+      sw.midi_note[wave_slot] = meta.root_note;
+    }
+    if (meta.num_cues > 0 && sw.cues && sw.num_cues) {
+      if (sw.cues[wave_slot]) free(sw.cues[wave_slot]);
+      sw.cues[wave_slot] = (sk_cue_t *)malloc(meta.num_cues * sizeof(sk_cue_t));
+      if (sw.cues[wave_slot]) {
+        memcpy(sw.cues[wave_slot], meta.cues, meta.num_cues * sizeof(sk_cue_t));
+        sw.num_cues[wave_slot] = meta.num_cues;
+      }
+    }
+    if (meta.mode == SK_WAVE_MODE_OSC) {
+      sw.one_shot[wave_slot] = 0;
+      wave_generate_mipmaps(wave_slot);
+    }
+  }
+
     char *name = "data";
     int channels = 1;
     if (0) ctx->printf(ctx, "# read %d frames from %s to %d (ch:%d sr:%g)\n", len, name, wave_slot, channels, rate);
   return 0;
 }
 
+int wav_parse_riff_metadata(const void *data, size_t data_size, int frames,
+                            sk_meta_info_t *out_meta) {
+  const unsigned char *bytes = (const unsigned char *)data;
+  size_t pos = 12;
+
+  if (!out_meta) return 0;
+  sk_meta_init(out_meta);
+  out_meta->mode = SK_WAVE_MODE_SAMPLE;
+
+  if (!bytes || data_size < 12 || frames <= 0) return 0;
+  if (memcmp(bytes, "RIFF", 4) != 0 || memcmp(bytes + 8, "WAVE", 4) != 0)
+    return 0;
+
+  typedef struct {
+    uint32_t id;
+    uint32_t sample_offset;
+  } raw_cue_pt_t;
+  raw_cue_pt_t raw_cues[SK_MAX_CUES];
+  int raw_cue_count = 0;
+
+  while (pos + 8 <= data_size) {
+    const unsigned char *chunk = bytes + pos;
+    uint32_t chunk_size = mw_le_u32(chunk + 4);
+    size_t data_start = pos + 8;
+    size_t next_chunk = data_start + (size_t)chunk_size + (size_t)(chunk_size & 1u);
+
+    if (next_chunk < data_start || data_start > data_size) break;
+
+    if (memcmp(chunk, "smpl", 4) == 0 && chunk_size >= 36) {
+      const unsigned char *header = bytes + data_start;
+      uint32_t unity_note = mw_le_u32(header + 12);
+      if (unity_note <= 127) {
+        out_meta->root_note = (float)unity_note;
+        out_meta->has_root_note = 1;
+      }
+      uint32_t sample_loop_count = mw_le_u32(header + 28);
+      for (uint32_t i = 0; i < sample_loop_count && (36 + (i + 1) * 24 <= chunk_size); i++) {
+        const unsigned char *sample_loop = header + 36 + i * 24;
+        uint32_t type = mw_le_u32(sample_loop + 4);
+        uint32_t start = mw_le_u32(sample_loop + 8);
+        uint32_t end = mw_le_u32(sample_loop + 12);
+        int end_exclusive = end >= (uint32_t)frames ? frames : (int)end + 1;
+        if (start < (uint32_t)frames && end_exclusive > (int)start) {
+          if (i == 0) {
+            out_meta->has_loop = 1;
+            out_meta->loop_start = (int)start;
+            out_meta->loop_end = end_exclusive;
+          }
+          if (out_meta->num_cues < SK_MAX_CUES) {
+            sk_cue_t *c = &out_meta->cues[out_meta->num_cues++];
+            c->start = start;
+            c->end = (uint32_t)end_exclusive;
+            c->type = (i == 0) ? SK_CUE_LOOP_SUSTAIN : SK_CUE_LOOP_RELEASE;
+            snprintf(c->label, sizeof(c->label), "loop%u", (unsigned int)i);
+          }
+        }
+      }
+    } else if (memcmp(chunk, "cue ", 4) == 0 && chunk_size >= 4) {
+      const unsigned char *cdata = bytes + data_start;
+      uint32_t num_cues = mw_le_u32(cdata);
+      for (uint32_t j = 0; j < num_cues && (4 + (j + 1) * 24 <= chunk_size); j++) {
+        if (raw_cue_count >= SK_MAX_CUES) break;
+        const unsigned char *cp = cdata + 4 + j * 24;
+        raw_cues[raw_cue_count].id = mw_le_u32(cp + 0);
+        raw_cues[raw_cue_count].sample_offset = mw_le_u32(cp + 20);
+        raw_cue_count++;
+      }
+    } else if (memcmp(chunk, "LIST", 4) == 0 && chunk_size >= 4) {
+      const unsigned char *ldata = bytes + data_start;
+      if (chunk_size >= 4 && memcmp(ldata, "adtl", 4) == 0) {
+        size_t lpos = 4;
+        while (lpos + 8 <= chunk_size) {
+          const unsigned char *sub = ldata + lpos;
+          uint32_t sub_sz = mw_le_u32(sub + 4);
+          size_t sub_data_start = lpos + 8;
+          size_t next_sub = sub_data_start + sub_sz + (sub_sz & 1u);
+          if (next_sub > chunk_size) break;
+
+          if (memcmp(sub, "labl", 4) == 0 && sub_sz >= 4) {
+            uint32_t cid = mw_le_u32(ldata + sub_data_start);
+            const char *txt = (const char *)(ldata + sub_data_start + 4);
+            size_t txt_len = sub_sz - 4;
+            /* Check if this cid matches an existing cue in out_meta */
+            int found = 0;
+            for (int k = 0; k < out_meta->num_cues; k++) {
+              if (strcmp(out_meta->cues[k].label, "loop0") == 0 && cid == 0) {
+                snprintf(out_meta->cues[k].label, sizeof(out_meta->cues[k].label), "%.*s", (int)txt_len, txt);
+                found = 1;
+                break;
+              }
+            }
+            /* Match with raw_cues */
+            for (int r = 0; r < raw_cue_count; r++) {
+              if (raw_cues[r].id == cid) {
+                if (out_meta->num_cues < SK_MAX_CUES) {
+                  sk_cue_t *c = &out_meta->cues[out_meta->num_cues++];
+                  c->start = raw_cues[r].sample_offset;
+                  c->end = c->start;
+                  c->type = SK_CUE_POINT;
+                  snprintf(c->label, sizeof(c->label), "%.*s", (int)txt_len, txt);
+                }
+                found = 1;
+                break;
+              }
+            }
+          } else if (memcmp(sub, "ltxt", 4) == 0 && sub_sz >= 8) {
+            uint32_t cid = mw_le_u32(ldata + sub_data_start);
+            uint32_t slen = mw_le_u32(ldata + sub_data_start + 4);
+            for (int k = 0; k < out_meta->num_cues; k++) {
+              for (int r = 0; r < raw_cue_count; r++) {
+                if (raw_cues[r].id == cid && out_meta->cues[k].start == raw_cues[r].sample_offset) {
+                  out_meta->cues[k].end = out_meta->cues[k].start + slen;
+                  out_meta->cues[k].type = SK_CUE_SLICE;
+                  break;
+                }
+              }
+            }
+          }
+          if (next_sub <= lpos) break;
+          lpos = next_sub;
+        }
+      }
+    }
+
+    if (next_chunk <= pos) break;
+    pos = next_chunk;
+  }
+
+  /* Any raw_cues that didn't get a labl */
+  for (int r = 0; r < raw_cue_count; r++) {
+    int already = 0;
+    for (int k = 0; k < out_meta->num_cues; k++) {
+      if (out_meta->cues[k].start == raw_cues[r].sample_offset) {
+        already = 1;
+        break;
+      }
+    }
+    if (!already && out_meta->num_cues < SK_MAX_CUES) {
+      sk_cue_t *c = &out_meta->cues[out_meta->num_cues++];
+      c->start = raw_cues[r].sample_offset;
+      c->end = c->start;
+      c->type = SK_CUE_POINT;
+      snprintf(c->label, sizeof(c->label), "cue%u", raw_cues[r].id);
+    }
+  }
+
+  return (out_meta->has_loop || out_meta->has_root_note || out_meta->num_cues > 0);
+}
+
+static void wave_load_apply_metadata(skode_t *ctx, const char *name,
+                                     const void *data, size_t data_size,
+                                     int wave_index, int len, float sample_rate) {
+  mw_smpl_loop_t loop;
+  int has_smpl = mw_get_smpl_loop_mem(data, data_size, len, &loop);
+  if (has_smpl) {
+    sw.loop_enabled[wave_index] = 1;
+    sw.loop_start[wave_index] = loop.start;
+    sw.loop_end[wave_index] = loop.end;
+    sw.direction[wave_index] = loop.type == 1 ? 2.0f :
+      (loop.type == 2 ? 1.0f : 0.0f);
+    ctx->printf(ctx, "# smpl loop %d..%d type:%d play:%d\n",
+      loop.start, loop.end, loop.type, loop.play_count);
+  }
+
+  sk_meta_info_t meta;
+  sk_meta_init(&meta);
+  meta.mode = SK_WAVE_MODE_SAMPLE;
+  meta.rate = sample_rate;
+  meta.has_rate = 1;
+  meta.one_shot = 1;
+  meta.has_one_shot = 1;
+
+  if (wav_parse_riff_metadata(data, data_size, len, &meta)) {
+    if (meta.has_loop && !has_smpl) {
+      sw.loop_enabled[wave_index] = 1;
+      sw.loop_start[wave_index] = meta.loop_start;
+      sw.loop_end[wave_index] = meta.loop_end;
+    }
+    if (meta.has_root_note) {
+      sw.midi_note[wave_index] = meta.root_note;
+    }
+    if (meta.num_cues > 0 && sw.cues && sw.num_cues) {
+      if (sw.cues[wave_index]) free(sw.cues[wave_index]);
+      sw.cues[wave_index] = (sk_cue_t *)malloc(meta.num_cues * sizeof(sk_cue_t));
+      if (sw.cues[wave_index]) {
+        memcpy(sw.cues[wave_index], meta.cues, meta.num_cues * sizeof(sk_cue_t));
+        sw.num_cues[wave_index] = meta.num_cues;
+      }
+      ctx->printf(ctx, "# loaded %d cues\n", meta.num_cues);
+    }
+  }
+
+  /* Always populate ands_string with metadata string */
+  if (ctx && ctx->parse) {
+    char meta_str[512];
+    sk_format_metadata(&meta, meta_str, sizeof(meta_str));
+    ands_string_from_external(ctx->parse, meta_str, (int)strlen(meta_str));
+  }
+}
+
 static void wave_load_apply_smpl_loop(skode_t *ctx, const char *name,
                                       const void *data, size_t data_size,
                                       int wave_index, int len) {
-  mw_smpl_loop_t loop;
-  if (!mw_get_smpl_loop_mem(data, data_size, len, &loop)) return;
-  sw.loop_enabled[wave_index] = 1;
-  sw.loop_start[wave_index] = loop.start;
-  sw.loop_end[wave_index] = loop.end;
-  sw.direction[wave_index] = loop.type == 1 ? 2.0f :
-    (loop.type == 2 ? 1.0f : 0.0f);
-  ctx->printf(ctx, "# smpl loop %d..%d type:%d play:%d\n",
-    loop.start, loop.end, loop.type, loop.play_count);
+  wave_load_apply_metadata(ctx, name, data, data_size, wave_index, len,
+                           sw.rate && sw.rate[wave_index] > 0 ? sw.rate[wave_index] : (float)MAIN_SAMPLE_RATE);
 }
 
 int wave_load_string(skode_t *ctx, char *name, int wave_index, int ch, int normalize) {
@@ -750,7 +991,7 @@ int wave_load_string(skode_t *ctx, char *name, int wave_index, int ch, int norma
   } else {
     wave_install_memory(wave_index, table, len, (float)wav.SamplesRate, 1,
       resolved, 69.0f, (float)len / (float)wav.SamplesRate * 440.0f);
-    wave_load_apply_smpl_loop(ctx, resolved, data, data_size, wave_index, len);
+    wave_load_apply_metadata(ctx, resolved, data, data_size, wave_index, len, (float)wav.SamplesRate);
     if (0) ctx->printf(ctx, "# read %d frames from %s to %d (ch:%d sr:%d)\n",
       len, resolved, wave_index, wav.Channels, wav.SamplesRate);
     normalize_preserve_zero(table, len);
@@ -842,7 +1083,7 @@ int wave_load(skode_t *ctx, int file_num, int wave_index, int ch, int normalize)
   } else {
     wave_install_memory(wave_index, table, len, (float)wav.SamplesRate, 1,
       resolved, 69.0f, (float)len / (float)wav.SamplesRate * 440.0f);
-    wave_load_apply_smpl_loop(ctx, resolved, data, data_size, wave_index, len);
+    wave_load_apply_metadata(ctx, resolved, data, data_size, wave_index, len, (float)wav.SamplesRate);
     if (0) ctx->printf(ctx, "# read %d frames from %s to %d (ch:%d sr:%d)\n",
       len, resolved, wave_index, wav.Channels, wav.SamplesRate);
     normalize_preserve_zero(table, len);

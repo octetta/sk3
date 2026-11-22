@@ -472,6 +472,7 @@ int skode_exec_vt(skode_t *ctx, ands_t *s, const double *arg, int argc);
 int skode_exec_WL(skode_t *ctx, ands_t *s, const double *arg, int argc);
 int skode_exec_VL(skode_t *ctx, ands_t *s, const double *arg, int argc);
 int skode_exec_VS(skode_t *ctx, ands_t *s, const double *arg, int argc);
+int skode_exec_VC(skode_t *ctx, ands_t *s, const double *arg, int argc);
 int skode_exec_VW(skode_t *ctx, ands_t *s, const double *arg, int argc);
 
 int skode_exec_w_gtd(skode_t *ctx, ands_t *s, const double *arg, int argc);

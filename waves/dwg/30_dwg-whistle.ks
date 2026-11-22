@@ -1,4 +1,6 @@
 / DW-8000 Wave 16: whistle
 / Pure sine. h1 only.
 P: ~4096
+META: \"mode:osc\"
+
 W: s P
