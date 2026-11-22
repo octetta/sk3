@@ -2698,9 +2698,9 @@ void skode_stream_gen(void *ctx, int n, double min, double max, double step) {
     s->len = -1;
     s->min = min;
     s->max = max;
-    s->step = step;
+    s->step = fabs(step);
     s->val = min;
-    s->dir = (step >= 0.0) ? 1 : -1;
+    s->dir = (step < 0.0 || min > max) ? -1 : 1;
     s->pos = 0;
 }
 

@@ -3640,6 +3640,20 @@ static void test_stream_gen_and_dynamic_growth(void) {
   expect_float(test, (float)skode_stream_pull(NULL, 10), 300.0f, 1e-4f, "pull 3 is 300");
   expect_float(test, (float)skode_stream_pull(NULL, 10), 100.0f, 1e-4f, "pull 4 wraps to 100");
 
+  /* Test rerunning /SG with new parameters on the same slot */
+  consume(test, &ctx, "/SG 10 500 800 150");
+  expect_float(test, (float)skode_stream_pull(NULL, 10), 500.0f, 1e-4f, "rerun /SG resets to new min 500");
+  expect_float(test, (float)skode_stream_pull(NULL, 10), 650.0f, 1e-4f, "rerun /SG step 2 is 650");
+  expect_float(test, (float)skode_stream_pull(NULL, 10), 800.0f, 1e-4f, "rerun /SG step 3 is 800");
+  expect_float(test, (float)skode_stream_pull(NULL, 10), 500.0f, 1e-4f, "rerun /SG step 4 wraps to 500");
+
+  /* Test descending sweep with min > max */
+  consume(test, &ctx, "/SG 10 800 600 100");
+  expect_float(test, (float)skode_stream_pull(NULL, 10), 800.0f, 1e-4f, "descending sweep start 800");
+  expect_float(test, (float)skode_stream_pull(NULL, 10), 700.0f, 1e-4f, "descending sweep step 2 is 700");
+  expect_float(test, (float)skode_stream_pull(NULL, 10), 600.0f, 1e-4f, "descending sweep step 3 is 600");
+  expect_float(test, (float)skode_stream_pull(NULL, 10), 800.0f, 1e-4f, "descending sweep wraps to 800");
+
   /* 2. Test ping-pong mode (mode 2) on generator */
   consume(test, &ctx, "/SG 11 0 20 10 2");
   expect_int(test, global_stream[11].mode, 2, "stream 11 mode is 2 (ping-pong)");
