@@ -612,6 +612,139 @@ int skode_exec_qerr(skode_t *ctx, ands_t *s, const double *arg, int argc) {
   return 0;
 }
 
+#ifdef _WIN32
+#ifndef popen
+#define popen _popen
+#endif
+#ifndef pclose
+#define pclose _pclose
+#endif
+#endif
+
+typedef struct {
+  char code[16];
+  char payload[1024];
+  int used;
+} skode_clip_slot_t;
+
+static skode_clip_slot_t g_local_clips[16];
+static int g_local_clip_idx = 0;
+
+static void skode_gen_short_code(char *out, size_t sz) {
+  const char chars[] = "abcdefghjkmnpqrstuvwxyz23456789";
+  for (size_t i = 0; i < sz - 1; i++) {
+    out[i] = chars[rand() % (sizeof(chars) - 1)];
+  }
+  out[sz - 1] = '\0';
+}
+
+int skode_exec_share(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  (void)s;
+  if (!ctx) return -1;
+  const char *payload = ands_string(ctx->parse);
+  if (!payload || !payload[0]) {
+    ctx->printf(ctx, "# /share: string buffer is empty. Usage: [your code] /share\n");
+    return -1;
+  }
+  char code[16] = {0};
+  if (argc > 0) {
+    int num = 0;
+    if (skode_double_to_int(arg[0], &num)) {
+      snprintf(code, sizeof(code), "%d", num);
+    }
+  }
+  if (!code[0]) {
+    skode_gen_short_code(code, 5); // 4-char code
+  }
+
+  // Cache locally
+  int slot = g_local_clip_idx;
+  g_local_clip_idx = (g_local_clip_idx + 1) % 16;
+  snprintf(g_local_clips[slot].code, sizeof(g_local_clips[slot].code), "%s", code);
+  snprintf(g_local_clips[slot].payload, sizeof(g_local_clips[slot].payload), "%s", payload);
+  g_local_clips[slot].used = 1;
+
+#if !defined(__EMSCRIPTEN__)
+  char cmd[256];
+  snprintf(cmd, sizeof(cmd), "curl -s -m 2 -d @- \"https://ntfy.sh/sk-%s\" > /dev/null 2>&1", code);
+  FILE *fp = popen(cmd, "w");
+  if (fp) {
+    fwrite(payload, 1, strlen(payload), fp);
+    pclose(fp);
+  }
+#endif
+
+  ctx->printf(ctx, "# ====================================================\n");
+  ctx->printf(ctx, "# Published to public clipboard! Code: %s\n", code);
+  ctx->printf(ctx, "# Load in CLI/GUI with: [%s] /load\n", code);
+  ctx->printf(ctx, "# Open in web: https://octetta.github.io/skred-web/?c=%s\n", code);
+  ctx->printf(ctx, "# ====================================================\n");
+  return 0;
+}
+
+int skode_exec_load(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  (void)s;
+  if (!ctx) return -1;
+  char code[32] = {0};
+  if (argc > 0) {
+    int num = 0;
+    if (skode_double_to_int(arg[0], &num)) {
+      snprintf(code, sizeof(code), "%d", num);
+    }
+  }
+  if (!code[0]) {
+    const char *str = ands_string(ctx->parse);
+    if (str && str[0]) {
+      snprintf(code, sizeof(code), "%.31s", str);
+    }
+  }
+  if (!code[0]) {
+    ctx->printf(ctx, "# /load: code missing. Usage: [code] /load or 1234 /load\n");
+    return -1;
+  }
+
+  // Check local cache first
+  for (int i = 0; i < 16; i++) {
+    if (g_local_clips[i].used && strcmp(g_local_clips[i].code, code) == 0) {
+      ctx->printf(ctx, "# Loaded from local cache [%s]: %s\n", code, g_local_clips[i].payload);
+      return skode_load_buffer(ctx, g_local_clips[i].payload, strlen(g_local_clips[i].payload), code, 0);
+    }
+  }
+
+#if defined(__EMSCRIPTEN__)
+  ctx->printf(ctx, "# /load: clipboard [%s] not found in local cache\n", code);
+  return -1;
+#else
+  char cmd[256];
+  snprintf(cmd, sizeof(cmd), "curl -s -m 2 \"https://ntfy.sh/sk-%s/raw?poll=1\"", code);
+  FILE *fp = popen(cmd, "r");
+  if (!fp) {
+    ctx->printf(ctx, "# /load: error invoking curl\n");
+    return -1;
+  }
+  char buf[8192];
+  size_t n = fread(buf, 1, sizeof(buf) - 1, fp);
+  pclose(fp);
+  buf[n] = '\0';
+
+  while (n > 0 && (buf[n - 1] == '\n' || buf[n - 1] == '\r' || buf[n - 1] == ' ')) {
+    buf[--n] = '\0';
+  }
+
+  if (n == 0) {
+    ctx->printf(ctx, "# /load: clipboard [%s] is empty or expired\n", code);
+    return -1;
+  }
+  if (strncmp(buf, "{\"code\":", 8) == 0 || strncmp(buf, "<!DOCTYPE", 9) == 0 || strncmp(buf, "<html", 5) == 0) {
+    ctx->printf(ctx, "# /load: clipboard service rate limited or unavailable\n");
+    return -1;
+  }
+
+  ctx->printf(ctx, "# Loaded from clipboard [%s]: %s\n", code, buf);
+  return skode_load_buffer(ctx, buf, (size_t)n, code, 0);
+#endif
+}
+
 void skode_register_words_system(skode_vocab_t *vocab) {
   (void)vocab;
 }

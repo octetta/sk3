@@ -1,0 +1,31 @@
+@name     clip_share
+@alias    /share
+@group    sys
+@c_name   skode_clause_clip_share_0
+@type     immediate
+@arity    0
+@match    ()
+@needs    string
+@summary  share code in string buffer to public clipboard
+@doc
+Shares the code from the string buffer to an ephemeral public clipboard (ntfy.sh) and prints the 4-character short code and URL.
+Usage: [v0 w301 f440 a-6 l1] /share
+@code
+    return skode_exec_share(ctx, s, args, argc);
+@end
+
+@name     clip_share
+@alias    /share
+@group    sys
+@c_name   skode_clause_clip_share_1
+@type     immediate
+@arity    1
+@match    (finite)
+@needs    string
+@summary  share code to a specific numeric channel
+@doc
+Shares the code from the string buffer to the specified numeric channel.
+Usage: [v0 w301 f440] 1234 /share
+@code
+    return skode_exec_share(ctx, s, args, argc);
+@end

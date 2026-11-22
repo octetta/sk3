@@ -1,0 +1,30 @@
+@name     clip_load
+@alias    /load
+@group    sys
+@c_name   skode_clause_clip_load_0
+@type     immediate
+@arity    0
+@match    ()
+@needs    string
+@summary  load code from public clipboard via code in string buffer
+@doc
+Fetches and executes code from the public clipboard using the short code in the string buffer.
+Usage: [7k2m] /load
+@code
+    return skode_exec_load(ctx, s, args, argc);
+@end
+
+@name     clip_load
+@alias    /load
+@group    sys
+@c_name   skode_clause_clip_load_1
+@type     immediate
+@arity    1
+@match    (finite)
+@summary  load code from public clipboard via numeric channel
+@doc
+Fetches and executes code from the public clipboard using a numeric short code.
+Usage: 1234 /load
+@code
+    return skode_exec_load(ctx, s, args, argc);
+@end

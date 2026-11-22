@@ -9,10 +9,10 @@ Generated automatically by `tools/mkopcodes` from modular opcode definitions in 
 
 ## Architecture & System Overview
 
-- **Total Command Words**: 309
-- **Total Dispatch Clauses**: 628
+- **Total Command Words**: 311
+- **Total Dispatch Clauses**: 632
 - **Real-Time Audio Opcode Handlers**: 159 (audio-thread safe, zero allocation, zero string lookup)
-- **Immediate / Control Plane Clauses**: 469 (REPL / parser / file system / diagnostics)
+- **Immediate / Control Plane Clauses**: 473 (REPL / parser / file system / diagnostics)
 
 ### Functional Command Groups
 
@@ -37,7 +37,7 @@ Generated automatically by `tools/mkopcodes` from modular opcode definitions in 
 | macro | `macro` | 7 | User macro definition, storage, and execution |
 | data | `data` | 23 | Variables, Forth stack words, data arrays, string slots |
 | vfs | `vfs` | 10 | Virtual file system, ZIP archives, script loading |
-| sys | `sys` | 32 | Hardware audio I/O, engine lifecycle, system diagnostics |
+| sys | `sys` | 34 | Hardware audio I/O, engine lifecycle, system diagnostics |
 
 ---
 
@@ -274,7 +274,7 @@ Triggers voice gate on.
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `280` (`skode_clause_inst_note_c579`)
+- **Discrete Opcode ID**: `280` (`skode_clause_inst_note_c583`)
 - **Summary**: trigger instrument note
 
 **Description & Details**:
@@ -288,7 +288,7 @@ Usage: i note
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `281` (`skode_clause_inst_note_c580`)
+- **Discrete Opcode ID**: `281` (`skode_clause_inst_note_c584`)
 - **Summary**: trigger instrument note with velocity
 
 **Description & Details**:
@@ -302,7 +302,7 @@ Usage: i note velocity
 
 - **Arity**: `3`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `282` (`skode_clause_inst_note_c581`)
+- **Discrete Opcode ID**: `282` (`skode_clause_inst_note_c585`)
 - **Summary**: trigger instrument note with velocity and cents
 
 **Description & Details**:
@@ -10003,6 +10003,8 @@ Unmounts active VFS bundle.
 | [`audio_list`](#audio_list) | `/als` | 1 | 0 | Immediate | list audio devices |
 | [`audio_output`](#audio_output) | `/ao` | 1 | 1 | Immediate | select audio output device |
 | [`audio_query`](#audio_query) | `/a?` | 1 | 0 | Immediate | query audio device status |
+| [`clip_load`](#clip_load) | `/load` | 2 | 0..1 | Immediate | load code from public clipboard via code in string buffer |
+| [`clip_share`](#clip_share) | `/share` | 2 | 0..1 | Immediate | share code in string buffer to public clipboard |
 | [`dictionary_show`](#dictionary_show) | `?M` | 2 | 0..1 | Immediate | show all dictionary words |
 | [`engine_flag`](#engine_flag) | `/f` | 2 | 0..1 | Immediate | query engine flag |
 | [`engine_quit`](#engine_quit) | `/q` | 2 | 0..1 | Immediate | quit engine |
@@ -10112,6 +10114,77 @@ Usage: /ao index
 ```text
 Prints active audio input/output configuration and status.
 Usage: /a?
+```
+
+---
+
+### `clip_load`
+
+- **Alias**: `/load`
+- **Group**: `sys`
+- **Clause Count**: 2
+
+#### Clause 1: `clip_load()`
+
+- **Arity**: `0`
+- **Execution Model**: `immediate (control plane)`
+- **Parser State Requirements**: `string`
+- **Summary**: load code from public clipboard via code in string buffer
+
+**Description & Details**:
+
+```text
+Fetches and executes code from the public clipboard using the short code in the string buffer.
+Usage: [7k2m] /load
+```
+
+#### Clause 2: `clip_load(finite)`
+
+- **Arity**: `1`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: load code from public clipboard via numeric channel
+
+**Description & Details**:
+
+```text
+Fetches and executes code from the public clipboard using a numeric short code.
+Usage: 1234 /load
+```
+
+---
+
+### `clip_share`
+
+- **Alias**: `/share`
+- **Group**: `sys`
+- **Clause Count**: 2
+
+#### Clause 1: `clip_share()`
+
+- **Arity**: `0`
+- **Execution Model**: `immediate (control plane)`
+- **Parser State Requirements**: `string`
+- **Summary**: share code in string buffer to public clipboard
+
+**Description & Details**:
+
+```text
+Shares the code from the string buffer to an ephemeral public clipboard (ntfy.sh) and prints the 4-character short code and URL.
+Usage: [v0 w301 f440 a-6 l1] /share
+```
+
+#### Clause 2: `clip_share(finite)`
+
+- **Arity**: `1`
+- **Execution Model**: `immediate (control plane)`
+- **Parser State Requirements**: `string`
+- **Summary**: share code to a specific numeric channel
+
+**Description & Details**:
+
+```text
+Shares the code from the string buffer to the specified numeric channel.
+Usage: [v0 w301 f440] 1234 /share
 ```
 
 ---

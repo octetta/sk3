@@ -408,6 +408,8 @@ int skode_exec_GS_lt(skode_t *ctx, ands_t *s, const double *arg, int argc);
 int skode_exec_x(skode_t *ctx, ands_t *s, const double *arg, int argc);
 int skode_exec_x_data(skode_t *ctx, ands_t *s, const double *arg, int argc);
 int skode_exec_x_range(skode_t *ctx, ands_t *s, const double *arg, int argc);
+int skode_exec_share(skode_t *ctx, ands_t *s, const double *arg, int argc);
+int skode_exec_load(skode_t *ctx, ands_t *s, const double *arg, int argc);
 int skode_exec_slashm_(skode_t *ctx, ands_t *s, const double *arg, int argc);
 int skode_exec_slashq(skode_t *ctx, ands_t *s, const double *arg, int argc);
 int skode_exec_slashf(skode_t *ctx, ands_t *s, const double *arg, int argc);

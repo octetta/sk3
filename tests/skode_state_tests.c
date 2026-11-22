@@ -3696,6 +3696,20 @@ static void test_stream_gen_and_dynamic_growth(void) {
   expect_int(test, strcmp(seq_step_get(1, 14), "v1 a-6"), 0, "pattern 1 step 14 has program via step_range");
 }
 
+static void test_clipboard_share_and_load(void) {
+  const char *test = "clipboard /share and /load";
+  skode_t ctx = new_ctx();
+  voice_init();
+
+  /* 1. Publish snippet to clipboard with explicit channel 9911 */
+  consume(test, &ctx, "[v0 f330 a-3] 9911 /share");
+
+  /* 2. Load snippet from clipboard channel 9911 */
+  consume(test, &ctx, "[9911] /load");
+  expect_float(test, sv.freq[0], 330.0f, 1e-4f, "loaded voice 0 frequency is 330");
+  expect_float(test, sv.user_amp[0], -3.0f, 1e-4f, "loaded voice 0 amplitude is -3");
+}
+
 static void test_voice_show_names(void) {
   const char *test = "voice show names - ???";
   skode_t ctx = new_ctx();
@@ -4209,6 +4223,7 @@ int main(int argc, char **argv) {
   test_step_all_data();
   test_inst_note_and_stream_ties();
   test_stream_gen_and_dynamic_growth();
+  test_clipboard_share_and_load();
   test_voice_show_names();
   test_voice_show_all();
   test_voice_show_connected();
