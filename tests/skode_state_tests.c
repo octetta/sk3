@@ -4148,6 +4148,90 @@ static void test_tts_speech_synthesis_and_wavetable_install(void) {
   expect_int(test, sw.one_shot[305], 1, "tts wave slot one-shot mode");
 }
 
+static void test_sample_render_physical_modeling_and_loop_metadata(void) {
+  const char *test = "physical modeling sample render and loop metadata";
+  skode_t ctx = new_ctx();
+  ctx.log_enable = 1;
+
+  synth_free();
+  synth_init(8);
+  wave_table_init(0);
+  voice_init();
+  seq_init();
+
+  /* 1. Percussion kick: direct render to data, one-shot metadata */
+  consume(test, &ctx, "[drum:kick d:0.4 p:160 end:45] /render");
+  int kick_len = ands_data_len(ctx.parse);
+  if (kick_len <= 0) {
+    fail(test, "[drum:kick] /render did not populate data array");
+  }
+  expect_substr(test, ands_string(ctx.parse), "mode:sample", "kick metadata mode:sample");
+  expect_substr(test, ands_string(ctx.parse), "one_shot:1", "kick metadata one_shot:1");
+
+  /* 2. Percussion snare: render and direct install into w301 */
+  consume(test, &ctx, "[drum:snare snap:0.8 d:0.1 tail:0.25] 301 /render");
+  if (!sw.data[301] || sw.size[301] <= 0) {
+    fail(test, "[drum:snare] 301 /render did not install wavetable to w301");
+  }
+  expect_int(test, sw.one_shot[301], 1, "snare wave slot one-shot mode");
+
+  /* 3. Horn brass: sustain loop calculation and metadata */
+  consume(test, &ctx, "[horn:brass n60 pr:0.8] /render");
+  int brass_len = ands_data_len(ctx.parse);
+  if (brass_len <= 0) {
+    fail(test, "[horn:brass] /render did not populate data array");
+  }
+  expect_substr(test, ands_string(ctx.parse), "mode:sample", "brass metadata mode:sample");
+  expect_substr(test, ands_string(ctx.parse), "one_shot:0", "brass metadata one_shot:0 (sustained)");
+  expect_substr(test, ands_string(ctx.parse), "root:60", "brass metadata root:60");
+  expect_substr(test, ands_string(ctx.parse), "loop:", "brass metadata has loop points");
+
+  /* 4. Horn brass: direct install to w302 with loop points applied to sw */
+  consume(test, &ctx, "[horn:brass n60 pr:0.8] 302 /render");
+  if (!sw.data[302] || sw.size[302] <= 0) {
+    fail(test, "[horn:brass] 302 /render did not install to w302");
+  }
+  expect_int(test, sw.one_shot[302], 0, "brass w302 sustained mode (one_shot=0)");
+  expect_int(test, sw.loop_enabled[302], 1, "brass w302 loop_enabled=1");
+  if (sw.loop_start[302] <= 0 || sw.loop_end[302] <= sw.loop_start[302]) {
+    fail(test, "brass w302 invalid loop range");
+  }
+  expect_int(test, (int)sw.midi_note[302], 60, "brass w302 midi_note=60");
+
+  /* 5. Wind flute using alias render!: root 72, loop enabled */
+  consume(test, &ctx, "[wind:flute n72 air:0.15] 303 render!");
+  if (!sw.data[303] || sw.size[303] <= 0) {
+    fail(test, "[wind:flute] 303 render! did not install to w303");
+  }
+  expect_int(test, sw.loop_enabled[303], 1, "flute w303 loop_enabled=1");
+  expect_int(test, (int)sw.midi_note[303], 72, "flute w303 midi_note=72");
+
+  /* 6. Bell church using alias /dsp: root 60, one_shot=1 */
+  consume(test, &ctx, "[bell:church n60 d:1.5] 304 /dsp");
+  if (!sw.data[304] || sw.size[304] <= 0) {
+    fail(test, "[bell:church] 304 /dsp did not install to w304");
+  }
+  expect_int(test, sw.one_shot[304], 1, "church w304 one_shot=1");
+  expect_int(test, (int)sw.midi_note[304], 60, "church w304 midi_note=60");
+
+  /* 7. Tibetan singing bowl with loop:1 */
+  consume(test, &ctx, "[bell:bowl n55 loop:1] 306 /render");
+  if (!sw.data[306] || sw.size[306] <= 0) {
+    fail(test, "[bell:bowl] 306 /render did not install to w306");
+  }
+  expect_int(test, sw.loop_enabled[306], 1, "bowl w306 loop_enabled=1");
+  expect_int(test, (int)sw.midi_note[306], 55, "bowl w306 midi_note=55");
+
+  /* 8. Plucked guitar rendered to data, then loaded via d>w */
+  consume(test, &ctx, "[string:guitar n60 p:0.25] /render");
+  consume(test, &ctx, "307 d>w");
+  if (!sw.data[307] || sw.size[307] <= 0) {
+    fail(test, "307 d>w did not load guitar from data");
+  }
+  expect_int(test, (int)sw.midi_note[307], 60, "guitar w307 midi_note=60 via d>w");
+  expect_int(test, sw.one_shot[307], 1, "guitar w307 one_shot=1 via d>w");
+}
+
 int main(int argc, char **argv) {
   synth_init(8);
   wave_table_init(0);
@@ -4155,6 +4239,7 @@ int main(int argc, char **argv) {
   seq_init();
 
   test_tts_speech_synthesis_and_wavetable_install();
+  test_sample_render_physical_modeling_and_loop_metadata();
 
   if (argc > 1 && strcmp(argv[1], "--session-only") == 0) {
     test_session_zip_round_trip();

@@ -1,0 +1,134 @@
+@name     sample_render
+@alias    /render
+@group    wave
+@c_name   skode_clause_sample_render_slash_0
+@type     immediate
+@arity    0
+@match    ()
+@summary  render physical modeling instrument DSL to data array
+@doc
+Renders physical modeling instrument DSL string into active data array with metadata. See doc/SAMPLE_SYNTH_DSL.md for full catalog, parameters, and examples.
+Usage: [instrument:preset ...] /render
+@code
+    return skode_exec_sample_render(ctx, s, args, argc);
+@end
+
+@name     sample_render
+@alias    /render
+@group    wave
+@c_name   skode_clause_sample_render_slash_1
+@type     immediate
+@arity    1
+@match    (finite)
+@summary  render physical modeling instrument DSL to data and wave slot
+@doc
+Renders physical modeling instrument DSL to data array and installs into wavetable slot with metadata.
+Usage: [instrument:preset ...] slot /render
+@code
+    return skode_exec_sample_render(ctx, s, args, argc);
+@end
+
+@name     sample_render
+@alias    /render
+@group    wave
+@c_name   skode_clause_sample_render_slash_2
+@type     immediate
+@arity    2
+@match    (finite, finite)
+@summary  render physical modeling instrument DSL to data and wave slot with one_shot override
+@doc
+Renders physical modeling instrument DSL to data array and wavetable slot with explicit one_shot mode.
+Usage: [instrument:preset ...] slot one_shot /render
+@code
+    return skode_exec_sample_render(ctx, s, args, argc);
+@end
+
+@name     sample_render_bang
+@alias    render!
+@group    wave
+@c_name   skode_clause_sample_render_bang_0
+@type     immediate
+@arity    0
+@match    ()
+@summary  render physical modeling instrument DSL to data array
+@doc
+Renders physical modeling instrument DSL string into active data array with metadata.
+Usage: [instrument:preset ...] render!
+@code
+    return skode_exec_sample_render(ctx, s, args, argc);
+@end
+
+@name     sample_render_bang
+@alias    render!
+@group    wave
+@c_name   skode_clause_sample_render_bang_1
+@type     immediate
+@arity    1
+@match    (finite)
+@summary  render physical modeling instrument DSL to data and wave slot
+@doc
+Renders physical modeling instrument DSL to data array and installs into wavetable slot with metadata.
+Usage: [instrument:preset ...] slot render!
+@code
+    return skode_exec_sample_render(ctx, s, args, argc);
+@end
+
+@name     sample_render_bang
+@alias    render!
+@group    wave
+@c_name   skode_clause_sample_render_bang_2
+@type     immediate
+@arity    2
+@match    (finite, finite)
+@summary  render physical modeling instrument DSL to data and wave slot with one_shot override
+@doc
+Renders physical modeling instrument DSL to data array and wavetable slot with explicit one_shot mode.
+Usage: [instrument:preset ...] slot one_shot render!
+@code
+    return skode_exec_sample_render(ctx, s, args, argc);
+@end
+
+@name     sample_render_dsp
+@alias    /dsp
+@group    wave
+@c_name   skode_clause_sample_render_dsp_0
+@type     immediate
+@arity    0
+@match    ()
+@summary  render physical modeling instrument DSL to data array
+@doc
+Renders physical modeling instrument DSL string into active data array with metadata.
+Usage: [instrument:preset ...] /dsp
+@code
+    return skode_exec_sample_render(ctx, s, args, argc);
+@end
+
+@name     sample_render_dsp
+@alias    /dsp
+@group    wave
+@c_name   skode_clause_sample_render_dsp_1
+@type     immediate
+@arity    1
+@match    (finite)
+@summary  render physical modeling instrument DSL to data and wave slot
+@doc
+Renders physical modeling instrument DSL to data array and installs into wavetable slot with metadata.
+Usage: [instrument:preset ...] slot /dsp
+@code
+    return skode_exec_sample_render(ctx, s, args, argc);
+@end
+
+@name     sample_render_dsp
+@alias    /dsp
+@group    wave
+@c_name   skode_clause_sample_render_dsp_2
+@type     immediate
+@arity    2
+@match    (finite, finite)
+@summary  render physical modeling instrument DSL to data and wave slot with one_shot override
+@doc
+Renders physical modeling instrument DSL to data array and wavetable slot with explicit one_shot mode.
+Usage: [instrument:preset ...] slot one_shot /dsp
+@code
+    return skode_exec_sample_render(ctx, s, args, argc);
+@end
