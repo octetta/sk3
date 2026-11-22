@@ -295,6 +295,7 @@ void skode_stream_set(void *ctx, int n, const double *data, int len);
 void skode_stream_copy(void *ctx, int dst, int src);
 void skode_stream_mode(void *ctx, int n, int mode);
 void skode_stream_pos(void *ctx, int n, int pos);
+void skode_stream_gen(void *ctx, int n, double min, double max, double step);
 
 #define WAVE_DISPLAY_DEFAULT_WIDTH 60
 #define WAVE_DISPLAY_DEFAULT_HEIGHT 12
@@ -406,6 +407,7 @@ int skode_exec_GS_gt(skode_t *ctx, ands_t *s, const double *arg, int argc);
 int skode_exec_GS_lt(skode_t *ctx, ands_t *s, const double *arg, int argc);
 int skode_exec_x(skode_t *ctx, ands_t *s, const double *arg, int argc);
 int skode_exec_x_data(skode_t *ctx, ands_t *s, const double *arg, int argc);
+int skode_exec_x_range(skode_t *ctx, ands_t *s, const double *arg, int argc);
 int skode_exec_slashm_(skode_t *ctx, ands_t *s, const double *arg, int argc);
 int skode_exec_slashq(skode_t *ctx, ands_t *s, const double *arg, int argc);
 int skode_exec_slashf(skode_t *ctx, ands_t *s, const double *arg, int argc);

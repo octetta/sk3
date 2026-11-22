@@ -2617,16 +2617,32 @@ double global_var[ANDS_VAR_MAX];
 skode_stream_t global_stream[ANDS_VAR_MAX];
 
 void skode_stream_set(void *ctx, int n, const double *data, int len) {
+    (void)ctx;
     if (n < 0 || n >= 128) return;
-    if (len > SKODE_STREAM_MAX_LEN) len = SKODE_STREAM_MAX_LEN;
-    if (len > 0 && data) {
-        memcpy(global_stream[n].data, data, len * sizeof(double));
+    skode_stream_t *s = &global_stream[n];
+    if (len <= 0) {
+        s->len = 0;
+        s->pos = 0;
+        s->dir = 1;
+        return;
     }
-    global_stream[n].len = len;
-    global_stream[n].pos = 0; global_stream[n].dir = 1;
+    if (len > s->cap) {
+        int new_cap = len < 64 ? 64 : len;
+        double *new_data = (double *)realloc(s->data, (size_t)new_cap * sizeof(double));
+        if (!new_data) return;
+        s->data = new_data;
+        s->cap = new_cap;
+    }
+    if (data && s->data) {
+        memcpy(s->data, data, (size_t)len * sizeof(double));
+    }
+    s->len = len;
+    s->pos = 0;
+    s->dir = 1;
 }
 
 void skode_stream_copy(void *ctx, int dst, int src) {
+    (void)ctx;
     if (dst < 0 || dst >= 128 || src < 0 || src >= 128) return;
     skode_stream_t *s_dst = &global_stream[dst];
     skode_stream_t *s_src = &global_stream[src];
@@ -2634,30 +2650,98 @@ void skode_stream_copy(void *ctx, int dst, int src) {
     s_dst->mode = s_src->mode;
     s_dst->pos = s_src->pos;
     s_dst->dir = s_src->dir;
-    if (s_src->len > 0) {
-        memcpy(s_dst->data, s_src->data, s_src->len * sizeof(double));
+    s_dst->min = s_src->min;
+    s_dst->max = s_src->max;
+    s_dst->step = s_src->step;
+    s_dst->val = s_src->val;
+    if (s_src->len > 0 && s_src->data) {
+        if (s_src->len > s_dst->cap) {
+            double *new_data = (double *)realloc(s_dst->data, (size_t)s_src->len * sizeof(double));
+            if (!new_data) return;
+            s_dst->data = new_data;
+            s_dst->cap = s_src->len;
+        }
+        if (s_dst->data) {
+            memcpy(s_dst->data, s_src->data, (size_t)s_src->len * sizeof(double));
+        }
     }
 }
 
 void skode_stream_mode(void *ctx, int n, int mode) {
+    (void)ctx;
     if (n >= 0 && n < 128) global_stream[n].mode = mode;
 }
 
 void skode_stream_pos(void *ctx, int n, int pos) {
+    (void)ctx;
     if (n < 0 || n >= 128) return;
-    global_stream[n].pos = pos;
-    if (pos >= 0 && global_stream[n].len > 0) {
-        global_stream[n].pos = pos % global_stream[n].len;
-    } else {
-        global_stream[n].pos = 0; global_stream[n].dir = 1;
+    skode_stream_t *s = &global_stream[n];
+    if (s->len == -1) {
+        s->pos = pos;
+        s->val = s->min + (double)pos * s->step;
+        s->dir = (s->step >= 0.0) ? 1 : -1;
+        return;
     }
-    global_stream[n].dir = 1;
+    s->pos = pos;
+    if (pos >= 0 && s->len > 0) {
+        s->pos = pos % s->len;
+    } else {
+        s->pos = 0; s->dir = 1;
+    }
+    s->dir = 1;
+}
+
+void skode_stream_gen(void *ctx, int n, double min, double max, double step) {
+    (void)ctx;
+    if (n < 0 || n >= 128) return;
+    skode_stream_t *s = &global_stream[n];
+    s->len = -1;
+    s->min = min;
+    s->max = max;
+    s->step = step;
+    s->val = min;
+    s->dir = (step >= 0.0) ? 1 : -1;
+    s->pos = 0;
 }
 
 double skode_stream_pull(void *ctx, int n) {
+    (void)ctx;
     if (n < 0 || n >= 128) return NAN;
     skode_stream_t *s = &global_stream[n];
-    if (s->len <= 0 ) return 0.0;
+    if (s->len == -1) {
+        double current = s->val;
+        if (s->mode == 4) {
+            double r = (double)rand() / (double)RAND_MAX;
+            s->val = s->min + r * (s->max - s->min);
+            return current;
+        }
+        double step = (s->step == 0.0) ? 1.0 : s->step;
+        double next = s->val + (step * (double)s->dir);
+        double range_min = (s->min <= s->max) ? s->min : s->max;
+        double range_max = (s->min <= s->max) ? s->max : s->min;
+
+        if (s->mode == 0) {
+            if (next > range_max) next = range_min;
+            else if (next < range_min) next = range_max;
+        } else if (s->mode == 1) {
+            if (next < range_min) next = range_max;
+            else if (next > range_max) next = range_min;
+        } else if (s->mode == 2) {
+            if (next >= range_max) {
+                next = range_max;
+                s->dir = -1;
+            } else if (next <= range_min) {
+                next = range_min;
+                s->dir = 1;
+            }
+        } else if (s->mode == 3) {
+            if (next > range_max) next = range_max;
+            else if (next < range_min) next = range_min;
+        }
+        s->val = next;
+        return current;
+    }
+    if (s->len <= 0 || !s->data) return 0.0;
     
     double val = s->data[s->pos];
     
@@ -2676,6 +2760,8 @@ double skode_stream_pull(void *ctx, int n) {
         }
     } else if (s->mode == 3) { // clamp forward
         if (s->pos < s->len - 1) s->pos++;
+    } else if (s->mode == 4) { // random pick
+        s->pos = rand() % s->len;
     }
     return val;
 }

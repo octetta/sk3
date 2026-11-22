@@ -3628,6 +3628,60 @@ static void test_inst_note_and_stream_ties(void) {
   expect_int(test, program.op[1].opcode.code, SKODE_OP_INST_NOTE, "opcode 1 is SKODE_OP_INST_NOTE");
 }
 
+static void test_stream_gen_and_dynamic_growth(void) {
+  const char *test = "stream generator /SG and dynamic growth";
+  skode_t ctx = new_ctx();
+
+  /* 1. Test /SG virtual generator with wrap mode (mode 0) */
+  consume(test, &ctx, "/SG 10 100 300 100");
+  expect_int(test, global_stream[10].len, -1, "stream 10 is virtual generator (len=-1)");
+  expect_float(test, (float)skode_stream_pull(NULL, 10), 100.0f, 1e-4f, "pull 1 is 100");
+  expect_float(test, (float)skode_stream_pull(NULL, 10), 200.0f, 1e-4f, "pull 2 is 200");
+  expect_float(test, (float)skode_stream_pull(NULL, 10), 300.0f, 1e-4f, "pull 3 is 300");
+  expect_float(test, (float)skode_stream_pull(NULL, 10), 100.0f, 1e-4f, "pull 4 wraps to 100");
+
+  /* 2. Test ping-pong mode (mode 2) on generator */
+  consume(test, &ctx, "/SG 11 0 20 10 2");
+  expect_int(test, global_stream[11].mode, 2, "stream 11 mode is 2 (ping-pong)");
+  expect_float(test, (float)skode_stream_pull(NULL, 11), 0.0f, 1e-4f, "pp pull 1 is 0");
+  expect_float(test, (float)skode_stream_pull(NULL, 11), 10.0f, 1e-4f, "pp pull 2 is 10");
+  expect_float(test, (float)skode_stream_pull(NULL, 11), 20.0f, 1e-4f, "pp pull 3 is 20 (hits max)");
+  expect_float(test, (float)skode_stream_pull(NULL, 11), 10.0f, 1e-4f, "pp pull 4 bounces to 10");
+  expect_float(test, (float)skode_stream_pull(NULL, 11), 0.0f, 1e-4f, "pp pull 5 bounces to 0");
+  expect_float(test, (float)skode_stream_pull(NULL, 11), 10.0f, 1e-4f, "pp pull 6 bounces up to 10");
+
+  /* 3. Test clamp mode (mode 3) on generator */
+  consume(test, &ctx, "/SG 12 50 70 10 3");
+  expect_float(test, (float)skode_stream_pull(NULL, 12), 50.0f, 1e-4f, "clamp pull 1 is 50");
+  expect_float(test, (float)skode_stream_pull(NULL, 12), 60.0f, 1e-4f, "clamp pull 2 is 60");
+  expect_float(test, (float)skode_stream_pull(NULL, 12), 70.0f, 1e-4f, "clamp pull 3 is 70");
+  expect_float(test, (float)skode_stream_pull(NULL, 12), 70.0f, 1e-4f, "clamp pull 4 clamps at 70");
+  expect_float(test, (float)skode_stream_pull(NULL, 12), 70.0f, 1e-4f, "clamp pull 5 stays at 70");
+
+  /* 4. Test dynamic array growth past old 1024-element limit */
+  double *large_arr = (double *)malloc(1500 * sizeof(double));
+  for (int i = 0; i < 1500; i++) large_arr[i] = (double)(i * 2);
+  skode_stream_set(&ctx, 13, large_arr, 1500);
+  expect_int(test, global_stream[13].len, 1500, "stream 13 dynamically grew to 1500 elements");
+  expect_float(test, (float)global_stream[13].data[0], 0.0f, 1e-4f, "element 0 is 0");
+  expect_float(test, (float)global_stream[13].data[1499], 2998.0f, 1e-4f, "element 1499 is 2998");
+  free(large_arr);
+
+  /* 5. Test X: step_range assigning program to step range */
+  consume(test, &ctx, "y0 %1");
+  consume(test, &ctx, "[v0 f&10] 5 8 X:");
+  expect_int(test, strcmp(seq_step_get(0, 5), "v0 f&10"), 0, "pattern 0 step 5 has program via X:");
+  expect_int(test, strcmp(seq_step_get(0, 6), "v0 f&10"), 0, "pattern 0 step 6 has program via X:");
+  expect_int(test, strcmp(seq_step_get(0, 7), "v0 f&10"), 0, "pattern 0 step 7 has program via X:");
+  expect_int(test, strcmp(seq_step_get(0, 8), "v0 f&10"), 0, "pattern 0 step 8 has program via X:");
+
+  /* Test canonical name step_range on explicit pattern */
+  consume(test, &ctx, "[v1 a-6] 12 14 1 step_range");
+  expect_int(test, strcmp(seq_step_get(1, 12), "v1 a-6"), 0, "pattern 1 step 12 has program via step_range");
+  expect_int(test, strcmp(seq_step_get(1, 13), "v1 a-6"), 0, "pattern 1 step 13 has program via step_range");
+  expect_int(test, strcmp(seq_step_get(1, 14), "v1 a-6"), 0, "pattern 1 step 14 has program via step_range");
+}
+
 static void test_voice_show_names(void) {
   const char *test = "voice show names - ???";
   skode_t ctx = new_ctx();
@@ -4140,6 +4194,7 @@ int main(int argc, char **argv) {
   test_multistep_assignment();
   test_step_all_data();
   test_inst_note_and_stream_ties();
+  test_stream_gen_and_dynamic_growth();
   test_voice_show_names();
   test_voice_show_all();
   test_voice_show_connected();

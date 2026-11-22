@@ -213,6 +213,38 @@ int skode_exec_x_data(skode_t *ctx, ands_t *s, const double *arg, int argc) {
   return 0;
 }
 
+int skode_exec_x_range(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  (void)s;
+  if (!ctx || argc < 2) return -1;
+  int start = 0, end = 0;
+  if (!skode_double_to_int(arg[0], &start) || !skode_double_to_int(arg[1], &end)) return -1;
+  int target_pattern = ctx->pattern;
+  if (argc > 2) {
+    int p = 0;
+    if (skode_double_to_int(arg[2], &p) && p >= 0 && p < PATTERNS_MAX) {
+      target_pattern = p;
+    }
+  }
+  const char *source = ands_string(ctx->parse);
+  if (!source || !source[0]) return 0;
+  event_program_t program;
+  int source_only = source[0] == '\0' || source[0] == '-';
+  char hint[16] = "";
+  skode_compile_result_t result = source_only ?
+    SKODE_COMPILE_OK :
+    skode_compile_program_describe(source, &program, hint, sizeof(hint));
+  if (result != SKODE_COMPILE_OK) return -1;
+
+  int step_dir = (start <= end) ? 1 : -1;
+  for (int step = start; ; step += step_dir) {
+    if (step >= 0) {
+      seq_step_set(target_pattern, step, source, source_only ? NULL : &program);
+    }
+    if (step == end) break;
+  }
+  return 0;
+}
+
 int skode_exec_slashm_(skode_t *ctx, ands_t *s, const double *arg, int argc) {
   (void)s; (void)arg; (void)argc;
   synth_voice_bench(ctx->voice);

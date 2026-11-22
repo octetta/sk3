@@ -1,0 +1,31 @@
+@name     step_range
+@alias    X:
+@group    seq
+@c_name   skode_clause_step_range_0
+@type     immediate
+@arity    2
+@match    (finite, finite)
+@needs    string
+@summary  assign step program to a range of steps on active pattern
+@doc
+Assigns the compiled step program from the string buffer to all steps from start to end on the current active pattern.
+Usage: [v0 f&0] 10 25 X:
+@code
+    return skode_exec_x_range(ctx, s, args, argc);
+@end
+
+@name     step_range
+@alias    X:
+@group    seq
+@c_name   skode_clause_step_range_1
+@type     immediate
+@arity    3
+@match    (finite, finite, finite)
+@needs    string
+@summary  assign step program to a range of steps on explicit pattern
+@doc
+Assigns the compiled step program from the string buffer to all steps from start to end on the specified pattern.
+Usage: [v0 f&0] 10 25 1 X:
+@code
+    return skode_exec_x_range(ctx, s, args, argc);
+@end

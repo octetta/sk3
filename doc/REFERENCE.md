@@ -9,10 +9,10 @@ Generated automatically by `tools/mkopcodes` from modular opcode definitions in 
 
 ## Architecture & System Overview
 
-- **Total Command Words**: 307
-- **Total Dispatch Clauses**: 623
-- **Real-Time Audio Opcode Handlers**: 156 (audio-thread safe, zero allocation, zero string lookup)
-- **Immediate / Control Plane Clauses**: 467 (REPL / parser / file system / diagnostics)
+- **Total Command Words**: 309
+- **Total Dispatch Clauses**: 628
+- **Real-Time Audio Opcode Handlers**: 159 (audio-thread safe, zero allocation, zero string lookup)
+- **Immediate / Control Plane Clauses**: 469 (REPL / parser / file system / diagnostics)
 
 ### Functional Command Groups
 
@@ -26,10 +26,10 @@ Generated automatically by `tools/mkopcodes` from modular opcode definitions in 
 | mod | `mod` | 14 | Cross-modulation, FM, AM, ring mod, sample & hold, glissando |
 | delay | `delay` | 9 | Stereo delay engine, feedback, pingpong, damping, grit |
 | poly | `poly` | 13 | Polyphonic voice pools, voice allocation, prototype groups |
-| seq | `seq` | 29 | Sequencer patterns, steps, tempo, ratchets, loop modulo |
+| seq | `seq` | 30 | Sequencer patterns, steps, tempo, ratchets, loop modulo |
 | ctrl | `ctrl` | 9 | Control plane events, event bus, responder bindings |
 | repeat | `repeat` | 11 | Scheduled repeats, tick loops, and deferred queues |
-| stream | `stream` | 5 | Step data streams and stream cursors |
+| stream | `stream` | 6 | Step data streams and stream cursors |
 | rec | `rec` | 24 | Track stems, buffer recording, auto-trim, track routing |
 | midi | `midi` | 24 | MIDI devices, bindings, routes, file playback |
 | scope | `scope` | 4 | Oscilloscope shared-memory IPC and events |
@@ -114,7 +114,7 @@ Turns gate off for all voices.
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `265` (`skode_clause_amp_set`)
+- **Discrete Opcode ID**: `268` (`skode_clause_amp_set`)
 - **Summary**: set voice output amplitude / gain
 
 **Description & Details**:
@@ -128,7 +128,7 @@ Usage: a level (or amp level)
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `266` (`skode_clause_amp_reset`)
+- **Discrete Opcode ID**: `269` (`skode_clause_amp_reset`)
 - **Summary**: reset voice output amplitude to default 0.5
 
 **Description & Details**:
@@ -150,7 +150,7 @@ Usage: a - (or amp -)
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `271` (`skode_clause_amp_bend`)
+- **Discrete Opcode ID**: `274` (`skode_clause_amp_bend`)
 - **Summary**: amplitude bend (-1..1)
 
 **Description & Details**:
@@ -172,7 +172,7 @@ Usage: ab amount (or amp_bend amount)
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `272` (`skode_clause_amp_bend_param_1`)
+- **Discrete Opcode ID**: `275` (`skode_clause_amp_bend_param_1`)
 - **Summary**: amplitude bend range in dB
 
 **Description & Details**:
@@ -186,7 +186,7 @@ Usage: abp range (or amp_bend_param range)
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `273` (`skode_clause_amp_bend_param_2`)
+- **Discrete Opcode ID**: `276` (`skode_clause_amp_bend_param_2`)
 - **Summary**: amplitude bend range and offset
 
 **Description & Details**:
@@ -274,7 +274,7 @@ Triggers voice gate on.
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `277` (`skode_clause_inst_note_c574`)
+- **Discrete Opcode ID**: `280` (`skode_clause_inst_note_c579`)
 - **Summary**: trigger instrument note
 
 **Description & Details**:
@@ -288,7 +288,7 @@ Usage: i note
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `278` (`skode_clause_inst_note_c575`)
+- **Discrete Opcode ID**: `281` (`skode_clause_inst_note_c580`)
 - **Summary**: trigger instrument note with velocity
 
 **Description & Details**:
@@ -302,7 +302,7 @@ Usage: i note velocity
 
 - **Arity**: `3`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `279` (`skode_clause_inst_note_c576`)
+- **Discrete Opcode ID**: `282` (`skode_clause_inst_note_c581`)
 - **Summary**: trigger instrument note with velocity and cents
 
 **Description & Details**:
@@ -357,7 +357,7 @@ Master volume no-op.
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `269` (`skode_clause_mute_set`)
+- **Discrete Opcode ID**: `272` (`skode_clause_mute_set`)
 - **Summary**: mute or unmute voice audio output (0 = unmute, 1 = mute)
 
 **Description & Details**:
@@ -371,7 +371,7 @@ Usage: m 1 (mute) or m 0 (unmute)
 
 - **Arity**: `0`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `270` (`skode_clause_mute_toggle`)
+- **Discrete Opcode ID**: `273` (`skode_clause_mute_toggle`)
 - **Summary**: toggle voice mute state
 
 **Description & Details**:
@@ -393,7 +393,7 @@ Usage: m (or mute)
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `267` (`skode_clause_pan_set`)
+- **Discrete Opcode ID**: `270` (`skode_clause_pan_set`)
 - **Summary**: set voice stereo pan position (-1.0 left to +1.0 right)
 
 **Description & Details**:
@@ -407,7 +407,7 @@ Usage: p pan (or pan pan)
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `268` (`skode_clause_pan_center`)
+- **Discrete Opcode ID**: `271` (`skode_clause_pan_center`)
 - **Summary**: center voice stereo pan (0.0)
 
 **Description & Details**:
@@ -528,7 +528,7 @@ Queries voice information with argument.
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `274` (`skode_clause_velocity`)
+- **Discrete Opcode ID**: `277` (`skode_clause_velocity`)
 - **Summary**: set voice note velocity
 
 **Description & Details**:
@@ -673,7 +673,7 @@ Voice control events no-op.
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `276` (`skode_clause_voice_copy`)
+- **Discrete Opcode ID**: `279` (`skode_clause_voice_copy`)
 - **Summary**: copy voice state to target voice
 
 **Description & Details**:
@@ -729,7 +729,7 @@ Usage: v* param var
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `275` (`skode_clause_voice_reset`)
+- **Discrete Opcode ID**: `278` (`skode_clause_voice_reset`)
 - **Summary**: reset voice state to defaults
 
 **Description & Details**:
@@ -1925,7 +1925,7 @@ Usage: VW voice width height
 
 - **Arity**: `0`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `282` (`skode_clause_wave_bandlimit_0`)
+- **Discrete Opcode ID**: `285` (`skode_clause_wave_bandlimit_0`)
 - **Summary**: bandlimit active voice wavetable
 
 **Description & Details**:
@@ -1939,7 +1939,7 @@ Usage: WB (or wave_bandlimit)
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `283` (`skode_clause_wave_bandlimit_1`)
+- **Discrete Opcode ID**: `286` (`skode_clause_wave_bandlimit_1`)
 - **Summary**: bandlimit specified wavetable slot
 
 **Description & Details**:
@@ -1961,7 +1961,7 @@ Usage: WB <slot> (or wave_bandlimit <slot>)
 
 - **Arity**: `0`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `280` (`skode_clause_wave_default_0`)
+- **Discrete Opcode ID**: `283` (`skode_clause_wave_default_0`)
 - **Summary**: reset voice waveform to default sine
 
 **Description & Details**:
@@ -1975,7 +1975,7 @@ Usage: /
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `281` (`skode_clause_wave_default_1`)
+- **Discrete Opcode ID**: `284` (`skode_clause_wave_default_1`)
 - **Summary**: reset voice waveform to default sine with argument
 
 **Description & Details**:
@@ -4795,6 +4795,7 @@ Usage: gr pool key velocity
 | [`step_get`](#step_get) | `xg` | 1 | 1 | Immediate | get pattern step source string |
 | [`step_goto`](#step_goto) | `>x` | 1 | 1 | Immediate | jump active pattern to target step |
 | [`step_program_set`](#step_program_set) | `x` | 8 | 1..8 | Immediate | set pattern step program |
+| [`step_range`](#step_range) | `X:` | 2 | 2..3 | Immediate | assign step program to a range of steps on active pattern |
 | [`step_read`](#step_read) | `<x` | 1 | 1 | Immediate | read pattern step source into parser string buffer |
 
 ### `bpm`
@@ -5601,6 +5602,42 @@ Sets program for specified pattern steps from string buffer.
 
 ---
 
+### `step_range`
+
+- **Alias**: `X:`
+- **Group**: `seq`
+- **Clause Count**: 2
+
+#### Clause 1: `step_range(finite, finite)`
+
+- **Arity**: `2`
+- **Execution Model**: `immediate (control plane)`
+- **Parser State Requirements**: `string`
+- **Summary**: assign step program to a range of steps on active pattern
+
+**Description & Details**:
+
+```text
+Assigns the compiled step program from the string buffer to all steps from start to end on the current active pattern.
+Usage: [v0 f&0] 10 25 X:
+```
+
+#### Clause 2: `step_range(finite, finite, finite)`
+
+- **Arity**: `3`
+- **Execution Model**: `immediate (control plane)`
+- **Parser State Requirements**: `string`
+- **Summary**: assign step program to a range of steps on explicit pattern
+
+**Description & Details**:
+
+```text
+Assigns the compiled step program from the string buffer to all steps from start to end on the specified pattern.
+Usage: [v0 f&0] 10 25 1 X:
+```
+
+---
+
 ### `step_read`
 
 - **Alias**: `<x`
@@ -6229,6 +6266,7 @@ Usage: DO?
 | Command | Alias | Clauses | Arity | Execution | Summary |
 |:---|:---|:---:|:---:|:---:|:---|
 | [`stream_copy`](#stream_copy) | `/SC` | 1 | 2 | Real-Time | copy stream contents |
+| [`stream_gen`](#stream_gen) | `/SG` | 3 | 3..5 | Real-Time | configure virtual stream generator with default step 1.0 |
 | [`stream_mode`](#stream_mode) | `/SM` | 1 | 2 | Real-Time | set stream playback mode |
 | [`stream_pos`](#stream_pos) | `/SP` | 1 | 2 | Real-Time | set stream read position |
 | [`stream_set`](#stream_set) | `/SS` | 1 | 1 | Immediate | set stream array from stack data |
@@ -6244,7 +6282,7 @@ Usage: DO?
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `262` (`skode_clause_stream_copy_c432`)
+- **Discrete Opcode ID**: `262` (`skode_clause_stream_copy_c434`)
 - **Summary**: copy stream contents
 
 **Description & Details**:
@@ -6252,6 +6290,56 @@ Usage: DO?
 ```text
 Copies contents from source stream to destination stream.
 Usage: /SC dst src
+```
+
+---
+
+### `stream_gen`
+
+- **Alias**: `/SG`
+- **Group**: `stream`
+- **Clause Count**: 3
+
+#### Clause 1: `stream_gen(finite, finite, finite)`
+
+- **Arity**: `3`
+- **Execution Model**: `realtime (audio thread safe)`
+- **Discrete Opcode ID**: `265` (`skode_clause_stream_gen_c437`)
+- **Summary**: configure virtual stream generator with default step 1.0
+
+**Description & Details**:
+
+```text
+Configures a virtual stream generator with min and max, using step 1.0.
+Usage: /SG stream_idx min max
+```
+
+#### Clause 2: `stream_gen(finite, finite, finite, finite)`
+
+- **Arity**: `4`
+- **Execution Model**: `realtime (audio thread safe)`
+- **Discrete Opcode ID**: `266` (`skode_clause_stream_gen_c438`)
+- **Summary**: configure virtual stream generator with step
+
+**Description & Details**:
+
+```text
+Configures a virtual stream generator with min, max, and step values.
+Usage: /SG stream_idx min max step
+```
+
+#### Clause 3: `stream_gen(finite, finite, finite, finite, finite)`
+
+- **Arity**: `5`
+- **Execution Model**: `realtime (audio thread safe)`
+- **Discrete Opcode ID**: `267` (`skode_clause_stream_gen_c439`)
+- **Summary**: configure virtual stream generator with step and mode
+
+**Description & Details**:
+
+```text
+Configures a virtual stream generator with min, max, step, and playback mode.
+Usage: /SG stream_idx min max step mode
 ```
 
 ---
@@ -6266,7 +6354,7 @@ Usage: /SC dst src
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `263` (`skode_clause_stream_mode_c433`)
+- **Discrete Opcode ID**: `263` (`skode_clause_stream_mode_c435`)
 - **Summary**: set stream playback mode
 
 **Description & Details**:
@@ -6288,7 +6376,7 @@ Usage: /SM stream_idx mode
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `264` (`skode_clause_stream_pos_c434`)
+- **Discrete Opcode ID**: `264` (`skode_clause_stream_pos_c436`)
 - **Summary**: set stream read position
 
 **Description & Details**:

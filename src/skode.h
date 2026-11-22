@@ -130,15 +130,17 @@ typedef enum {
 #define SPECTRO_LOG_LINE_BUDGET SKODE_LOG_LINE_MAX - 32
 
 
-#ifndef SKODE_STREAM_MAX_LEN
-#define SKODE_STREAM_MAX_LEN 1024
-#endif
 typedef struct {
-  double data[SKODE_STREAM_MAX_LEN];
-  int len;
+  double *data;
+  int cap;
+  int len;       /* >0 for array table, -1 for virtual generator */
   int pos;
   int dir;
   int mode;
+  double min;    /* for virtual generator */
+  double max;    /* for virtual generator */
+  double step;   /* for virtual generator */
+  double val;    /* current generator value */
 } skode_stream_t;
 
 extern skode_stream_t global_stream[128];
@@ -226,6 +228,7 @@ int skode_inst_note(int voice, float note, float velocity, float cents);
 int skode_linked_velocity(int voice, float velocity, uint64_t sample);
 void skode_envelope_velocity(int voice, float x, uint64_t now);
 extern double global_var[ANDS_VAR_MAX];
+void skode_stream_gen(void *ctx, int n, double min, double max, double step);
 double skode_stream_pull(void *ctx, int n);
 void show_threads(skode_t *w);
 void system_show(skode_t *w);

@@ -1,0 +1,48 @@
+@name     stream_gen
+@alias    /SG
+@group    stream
+@type     realtime
+@arity    3
+@match    (finite, finite, finite)
+@summary  configure virtual stream generator with default step 1.0
+@doc
+Configures a virtual stream generator with min and max, using step 1.0.
+Usage: /SG stream_idx min max
+@code
+    (void)voice;
+    skode_stream_gen(NULL, (int)args[0], args[1], args[2], 1.0);
+    return 0;
+@end
+
+@name     stream_gen
+@alias    /SG
+@group    stream
+@type     realtime
+@arity    4
+@match    (finite, finite, finite, finite)
+@summary  configure virtual stream generator with step
+@doc
+Configures a virtual stream generator with min, max, and step values.
+Usage: /SG stream_idx min max step
+@code
+    (void)voice;
+    skode_stream_gen(NULL, (int)args[0], args[1], args[2], args[3]);
+    return 0;
+@end
+
+@name     stream_gen
+@alias    /SG
+@group    stream
+@type     realtime
+@arity    5
+@match    (finite, finite, finite, finite, finite)
+@summary  configure virtual stream generator with step and mode
+@doc
+Configures a virtual stream generator with min, max, step, and playback mode.
+Usage: /SG stream_idx min max step mode
+@code
+    (void)voice;
+    skode_stream_gen(NULL, (int)args[0], args[1], args[2], args[3]);
+    skode_stream_mode(NULL, (int)args[0], (int)args[4]);
+    return 0;
+@end

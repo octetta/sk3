@@ -940,6 +940,12 @@ int skode_stream_show_helper(skode_t *ctx, int stream_idx) {
           ctx->printf(ctx, "/SP %d %d ", i, stream->pos);
         }
         ctx->printf(ctx, "# len=%d\n", stream->len);
+      } else if (stream->len == -1) {
+        ctx->printf(ctx, "/SG %d %g %g %g ", i, stream->min, stream->max, stream->step);
+        if (stream->mode != 0) {
+          ctx->printf(ctx, "/SM %d %d ", i, stream->mode);
+        }
+        ctx->printf(ctx, "# generator (val=%g)\n", stream->val);
       } else if (stream_idx >= 0) {
          ctx->printf(ctx, "# stream %d is empty\n", i);
       }

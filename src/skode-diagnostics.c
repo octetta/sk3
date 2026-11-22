@@ -240,6 +240,12 @@ void global_status_show(skode_t *ctx, int full) {
         ctx->printf(ctx, "/SP %d %d ", i, global_stream[i].pos);
       }
       ctx->printf(ctx, "# len=%d\n", global_stream[i].len);
+    } else if (global_stream[i].len == -1) {
+      ctx->printf(ctx, "/SG %d %g %g %g ", i, global_stream[i].min, global_stream[i].max, global_stream[i].step);
+      if (global_stream[i].mode != 0) {
+        ctx->printf(ctx, "/SM %d %d ", i, global_stream[i].mode);
+      }
+      ctx->printf(ctx, "# generator (val=%g)\n", global_stream[i].val);
     }
   }
 
