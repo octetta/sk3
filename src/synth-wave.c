@@ -440,44 +440,6 @@ static void synth_init_ksynth_base_waves(void) {
       "P: ~4096\n"
       "W: w s P\n"
     },
-    {
-      WAVE_TABLE_SQR, "square",
-      "/ Bandlimited square wave: odd harmonics 1/h\n"
-      "P: ~4096\n"
-      "H: !64\n"
-      "H: H+1\n"
-      "M: a(s(H*1.5707963))\n"
-      "A: (1%H)*M\n"
-      "W: w P $ A\n"
-    },
-    {
-      WAVE_TABLE_SAW_DOWN, "saw-down",
-      "/ Bandlimited sawtooth: rising ramp -1 up to 1\n"
-      "P: ~4096\n"
-      "H: !64\n"
-      "H: H+1\n"
-      "A: 1%H\n"
-      "W: w 0 - P $ A\n"
-    },
-    {
-      WAVE_TABLE_SAW_UP, "saw-up",
-      "/ Bandlimited sawtooth: falling ramp 1 down to -1\n"
-      "P: ~4096\n"
-      "H: !64\n"
-      "H: H+1\n"
-      "A: 1%H\n"
-      "W: w P $ A\n"
-    },
-    {
-      WAVE_TABLE_TRI, "triangle",
-      "/ Bandlimited triangle wave: alternating odd harmonics 1/h^2\n"
-      "P: ~4096\n"
-      "H: !64\n"
-      "H: H+1\n"
-      "M: s(H*1.5707963)\n"
-      "A: (1%(H*H))*M\n"
-      "W: w P $ A\n"
-    },
     { 0, NULL, NULL }
   };
 
@@ -560,7 +522,9 @@ void wave_table_init(int flag) {
       default: name = "?"; break;
     }
     strncpy(sw.name[w], name, WAVE_NAME_MAX);
-    if ((w >= WAVE_TABLE_CAP_1 && w <= WAVE_TABLE_CONTROL) || w == WAVE_TABLE_NOISE || w == WAVE_TABLE_NOISE_ALT) {
+    if ((w >= WAVE_TABLE_SQR && w <= WAVE_TABLE_TRI) ||
+        (w >= WAVE_TABLE_NOISE && w <= WAVE_TABLE_CONTROL) ||
+        w == WAVE_TABLE_COSINE || w == WAVE_TABLE_CENTERED_PULSE) {
       sw.data[w] = NULL;
       sw.size[w] = 0;
       sw.rate[w] = MAIN_SAMPLE_RATE;

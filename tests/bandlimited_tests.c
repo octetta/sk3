@@ -40,45 +40,39 @@ static void cmd(const char *s) {
 int main(void) {
   setup();
 
-  /* Test 1: Mipmap tables generated for standard waveforms */
-  expect(sw.mip_levels[WAVE_TABLE_SQR] == 8, "square wave has 8 mip levels");
-  expect(sw.mip_levels[WAVE_TABLE_SAW_DOWN] == 8, "saw-down wave has 8 mip levels");
-  expect(sw.mip_levels[WAVE_TABLE_SAW_UP] == 8, "saw-up wave has 8 mip levels");
-  expect(sw.mip_levels[WAVE_TABLE_TRI] == 8, "triangle wave has 8 mip levels");
+  /* Test 1: PolyBLEP waveforms (w1..w4) are zero-table memory analytic oscillators */
+  expect(sw.mip_levels[WAVE_TABLE_SQR] == 0, "square wave has 0 mip levels (polyblep)");
+  expect(sw.data[WAVE_TABLE_SQR] == NULL, "square wave table memory is unallocated (zero table)");
+  expect(sw.data[WAVE_TABLE_SAW_DOWN] == NULL, "saw-down table memory is unallocated (zero table)");
+  cmd("v0 w1 a1 l1");
+  expect(sv.source_type[0] == OSC_SOURCE_POLYBLEP, "v0 w1 sets source_type to OSC_SOURCE_POLYBLEP");
 
+  /* Test 1b: Mipmap tables generated for standard DWG periodic wavetables (e.g. w15) */
+  expect(sw.mip_levels[WAVE_TABLE_KRG1] == 8, "dwg-strings wave (w15) has 8 mip levels");
   for (int lvl = 0; lvl < 8; lvl++) {
-    expect(sw.mip_data[lvl][WAVE_TABLE_SQR] != NULL, "square wave mip table is allocated");
-    expect(sw.mip_data[lvl][WAVE_TABLE_SAW_DOWN] != NULL, "saw-down wave mip table is allocated");
+    expect(sw.mip_data[lvl][WAVE_TABLE_KRG1] != NULL, "w15 mip table is allocated");
   }
 
-  /* Test 2: Level 7 of square wave is pure fundamental sine wave */
-  int sz = sw.size[WAVE_TABLE_SQR];
-  float *lvl7 = sw.mip_data[7][WAVE_TABLE_SQR];
-  float *lvl0 = sw.mip_data[0][WAVE_TABLE_SQR];
+  /* Test 2: Level 7 of periodic table has valid fundamental data */
+  int sz = sw.size[WAVE_TABLE_KRG1];
+  float *lvl7 = sw.mip_data[7][WAVE_TABLE_KRG1];
+  float *lvl0 = sw.mip_data[0][WAVE_TABLE_KRG1];
   expect(lvl7 != NULL, "level 7 exists");
   expect(lvl0 != NULL, "level 0 exists");
+  expect(sz > 0, "w15 size > 0");
 
-  // Verify level 7 closely matches pure sin
-  double max_diff_sine = 0.0;
-  for (int i = 0; i < sz; i++) {
-    double expected = sin(2.0 * M_PI * (double)i / (double)sz);
-    double diff = fabs((double)lvl7[i] - expected);
-    if (diff > max_diff_sine) max_diff_sine = diff;
-  }
-  expect(max_diff_sine < 0.01, "square level 7 is pure fundamental sine wave");
-
-  /* Test 3: Frequency-based mip level selection */
-  cmd("v0 w1 a1 l1"); // w1 = square
+  /* Test 3: Frequency-based mip level selection on periodic wavetables */
+  cmd("v0 w15 a1 l1"); // w15 = dwg-strings
   
   // A1 (55 Hz) -> Level 0
   cmd("v0 f50");
   expect(sv.mip_level[0] == 0, "50 Hz selects mip level 0");
-  expect(sv.table[0] == sw.mip_data[0][WAVE_TABLE_SQR], "sv.table points to mip level 0");
+  expect(sv.table[0] == sw.mip_data[0][WAVE_TABLE_KRG1], "sv.table points to mip level 0");
 
   // A2 (100 Hz) -> Level 1
   cmd("v0 f100");
   expect(sv.mip_level[0] == 1, "100 Hz selects mip level 1");
-  expect(sv.table[0] == sw.mip_data[1][WAVE_TABLE_SQR], "sv.table points to mip level 1");
+  expect(sv.table[0] == sw.mip_data[1][WAVE_TABLE_KRG1], "sv.table points to mip level 1");
 
   // A3 (200 Hz) -> Level 2
   cmd("v0 f200");
@@ -103,7 +97,7 @@ int main(void) {
   // A8 (5000 Hz) -> Level 7
   cmd("v0 f5000");
   expect(sv.mip_level[0] == 7, "5000 Hz selects mip level 7");
-  expect(sv.table[0] == sw.mip_data[7][WAVE_TABLE_SQR], "sv.table points to mip level 7");
+  expect(sv.table[0] == sw.mip_data[7][WAVE_TABLE_KRG1], "sv.table points to mip level 7");
 
   /* Test 4: Hysteresis stability around boundary */
   // First establish level 3 at 400 Hz

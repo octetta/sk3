@@ -431,95 +431,138 @@ void print_audio_braille_labeled(skode_t *ctx, float *data, int n, int width_cha
 }
 
 int wavetable_summary_show(skode_t *ctx, int n) {
-  if (skode_wave_valid(n) && sw.data[n] && sw.size[n]) {
-    int readonly = sw.readonly[n];
-    int refcount = sw.refcount[n];
-    int size = sw.size[n];
-    float rate = sw.rate[n] > 0.0f ? sw.rate[n] : (float)MAIN_SAMPLE_RATE;
-    float ms = (float)size * 1000.0f / rate;
-    char eval_buf[32] = "";
-    if (sw.eval_ms && sw.eval_ms[n] > 0.0f) {
-      snprintf(eval_buf, sizeof(eval_buf), " | %5.2f ms eval", sw.eval_ms[n]);
+  if (!skode_wave_valid(n)) return 0;
+  if (!sw.data[n] || sw.size[n] == 0) {
+    int refcount = sw.refcount ? sw.refcount[n] : 0;
+    if ((n >= WAVE_TABLE_SQR && n <= WAVE_TABLE_TRI) || n == WAVE_TABLE_COSINE || n == WAVE_TABLE_CENTERED_PULSE) {
+      ctx->printf(ctx, "# W%-3d |  polyblep |   0.0 ms | R/O | ref#%-2d | analytic     | [%s]\n", 
+        n, refcount, sw.name[n]);
+    } else if (n == WAVE_TABLE_NOISE || n == WAVE_TABLE_NOISE_ALT) {
+      ctx->printf(ctx, "# W%-3d | procedural|   0.0 ms | R/O | ref#%-2d | noise-gen    | [%s]\n", 
+        n, refcount, sw.name[n]);
+    } else if (n >= WAVE_TABLE_CAP_1 && n <= WAVE_TABLE_CAP_2) {
+      ctx->printf(ctx, "# W%-3d | live-input|   0.0 ms | R/O | ref#%-2d | stereo-in    | [%s]\n", 
+        n, refcount, sw.name[n]);
+    } else if (n >= WAVE_TABLE_SILENCE && n <= WAVE_TABLE_CONTROL) {
+      ctx->printf(ctx, "# W%-3d | procedural|   0.0 ms | R/O | ref#%-2d | cv-utility   | [%s]\n", 
+        n, refcount, sw.name[n]);
     }
-    
-    if (sw.one_shot[n]) {
-      ctx->printf(ctx, "# W%-3d | %6d smp | %6.1f ms%s | %s | ref#%-2d | 1-shot %5gHz | [%s]\n", 
-        n, size, ms, eval_buf, readonly ? "R/O" : "R/W", refcount, rate, sw.name[n]);
-    } else if (sw.mip_levels && sw.mip_levels[n] > 0) {
-      char cycle_buf[20];
-      snprintf(cycle_buf, sizeof(cycle_buf), "cycle (%dtbl)", sw.mip_levels[n]);
-      ctx->printf(ctx, "# W%-3d | %6d smp | %6.1f ms%s | %s | ref#%-2d | %-14s | [%s]\n", 
-        n, size, ms, eval_buf, readonly ? "R/O" : "R/W", refcount, cycle_buf, sw.name[n]);
-    } else {
-      ctx->printf(ctx, "# W%-3d | %6d smp | %6.1f ms%s | %s | ref#%-2d | cycle          | [%s]\n", 
-        n, size, ms, eval_buf, readonly ? "R/O" : "R/W", refcount, sw.name[n]);
-    }
+    return 0;
+  }
+  int readonly = sw.readonly[n];
+  int refcount = sw.refcount[n];
+  int size = sw.size[n];
+  float rate = sw.rate[n] > 0.0f ? sw.rate[n] : (float)MAIN_SAMPLE_RATE;
+  float ms = (float)size * 1000.0f / rate;
+  char eval_buf[32] = "";
+  if (sw.eval_ms && sw.eval_ms[n] > 0.0f) {
+    snprintf(eval_buf, sizeof(eval_buf), " | %5.2f ms eval", sw.eval_ms[n]);
+  }
+  
+  if (sw.one_shot[n]) {
+    ctx->printf(ctx, "# W%-3d | %6d smp | %6.1f ms%s | %s | ref#%-2d | 1-shot %5gHz | [%s]\n", 
+      n, size, ms, eval_buf, readonly ? "R/O" : "R/W", refcount, rate, sw.name[n]);
+  } else if (sw.mip_levels && sw.mip_levels[n] > 0) {
+    char cycle_buf[20];
+    snprintf(cycle_buf, sizeof(cycle_buf), "cycle (%dtbl)", sw.mip_levels[n]);
+    ctx->printf(ctx, "# W%-3d | %6d smp | %6.1f ms%s | %s | ref#%-2d | %-14s | [%s]\n", 
+      n, size, ms, eval_buf, readonly ? "R/O" : "R/W", refcount, cycle_buf, sw.name[n]);
+  } else {
+    ctx->printf(ctx, "# W%-3d | %6d smp | %6.1f ms%s | %s | ref#%-2d | cycle          | [%s]\n", 
+      n, size, ms, eval_buf, readonly ? "R/O" : "R/W", refcount, sw.name[n]);
   }
   return 0;
 }
 
 int wavetable_show(skode_t *ctx, int n) {
-  if (skode_wave_valid(n) && sw.data[n] && sw.size[n]) {
-    int readonly = sw.readonly[n];
-    int refcount = sw.refcount[n];
-    int size = sw.size[n];
-    int loop_start = sw.loop_start[n];
-    int loop_end = sw.loop_end[n];
-    if (loop_start < 0) loop_start = 0;
-    if (loop_end < loop_start) loop_end = loop_start;
-    if (loop_end > size) loop_end = size;
-    int loop_len = loop_end - loop_start;
-    float rate = sw.rate[n] > 0.0f ? sw.rate[n] : (float)MAIN_SAMPLE_RATE;
-    wave_stats_t stats = wave_stats(sw.data[n], size);
-    ctx->printf(ctx, "# W%d", n);
-    WTWFS(wave_samples_to_ms(size, rate));
-    if (readonly) ctx->printf(ctx, " R/O"); else ctx->printf(ctx, " R/W");
-    ctx->printf(ctx, " ref#%d", refcount);
-    if (sw.mip_levels && sw.mip_levels[n] > 0) {
-      ctx->printf(ctx, " (%d tables)", sw.mip_levels[n]);
-    }
-    ctx->printf(ctx, " [%s]", sw.name[n]);
-    ctx->puts(ctx, "");
-    ctx->printf(ctx, "# playback rate %gHz offset %+gHz MIDI %g mode %s",
-      sw.rate[n], sw.offset_hz[n], sw.midi_note[n],
-      sw.one_shot[n] ? "one-shot" : "cycle");
-    if (!sw.one_shot[n] && sw.mip_levels && sw.mip_levels[n] > 0) {
-      ctx->printf(ctx, " (%d bandlimited tables)", sw.mip_levels[n]);
-    }
-    ctx->puts(ctx, "");
-    ctx->printf(ctx, "# loop %d..%d |%d| %gms\n", loop_start, loop_end, loop_len, wave_samples_to_ms(loop_len, rate));
-    if (sw.num_cues && sw.num_cues[n] > 0 && sw.cues && sw.cues[n]) {
-      ctx->printf(ctx, "# cues (%d):", sw.num_cues[n]);
-      for (int c = 0; c < sw.num_cues[n]; c++) {
-        if (sw.cues[n][c].start != sw.cues[n][c].end && sw.cues[n][c].end > 0) {
-          ctx->printf(ctx, " %s@%u..%u", sw.cues[n][c].label, sw.cues[n][c].start, sw.cues[n][c].end);
-        } else {
-          ctx->printf(ctx, " %s@%u", sw.cues[n][c].label, sw.cues[n][c].start);
-        }
+  if (!skode_wave_valid(n)) return 0;
+  if (!sw.data[n] || sw.size[n] == 0) {
+    int refcount = sw.refcount ? sw.refcount[n] : 0;
+    if ((n >= WAVE_TABLE_SQR && n <= WAVE_TABLE_TRI) || n == WAVE_TABLE_COSINE || n == WAVE_TABLE_CENTERED_PULSE) {
+      ctx->printf(ctx, "# W%d R/O ref#%d [%s]\n", n, refcount, sw.name[n]);
+      ctx->printf(ctx, "# type: PolyBLEP closed-form analytic bandlimited oscillator (zero table memory)\n");
+    } else if (n == WAVE_TABLE_NOISE || n == WAVE_TABLE_NOISE_ALT) {
+      ctx->printf(ctx, "# W%d R/O ref#%d [%s]\n", n, refcount, sw.name[n]);
+      ctx->printf(ctx, "# type: Procedural %s noise generator (zero table memory)\n",
+        n == WAVE_TABLE_NOISE ? "clocked LFSR chiptune" : "64-bit continuous xorshift white");
+    } else if (n >= WAVE_TABLE_CAP_1 && n <= WAVE_TABLE_CAP_2) {
+      ctx->printf(ctx, "# W%d R/O ref#%d [%s]\n", n, refcount, sw.name[n]);
+      ctx->printf(ctx, "# type: Live audio input stream (%s)\n",
+        n == WAVE_TABLE_CAP_1 ? "left channel / stereo pass-through" : "right channel");
+    } else if (n >= WAVE_TABLE_SILENCE && n <= WAVE_TABLE_CONTROL) {
+      const char *desc = "procedural utility";
+      switch (n) {
+        case WAVE_TABLE_SILENCE: desc = "DC 0.0 (mute / zero reference)"; break;
+        case WAVE_TABLE_UNITY: desc = "DC +1.0 (constant CV / envelope generator)"; break;
+        case WAVE_TABLE_IMPULSE: desc = "Dirac delta single-sample click at phase reset"; break;
+        case WAVE_TABLE_METRO: desc = "BPM clock pulse / metronome tick"; break;
+        case WAVE_TABLE_DELAY_TAP: desc = "delay line audio return tap"; break;
+        case WAVE_TABLE_CONTROL: desc = "live MIDI CC / control plane stream"; break;
       }
-      ctx->puts(ctx, "");
+      ctx->printf(ctx, "# W%d R/O ref#%d [%s]\n", n, refcount, sw.name[n]);
+      ctx->printf(ctx, "# type: Procedural modular utility: %s\n", desc);
     }
-    ctx->printf(ctx,
-      "# min %+0.3f max %+0.3f peak %0.3f rms %0.3f dc %+0.4f zc %d",
-      stats.min, stats.max, stats.peak, stats.rms, stats.dc, stats.zero_crossings);
-    if (stats.clipped) ctx->printf(ctx, " clip %d", stats.clipped);
-    ctx->puts(ctx, "");
-    if (sw.eval_ms && sw.eval_ms[n] > 0.0f) {
-      ctx->printf(ctx, "# ksynth eval: %.3f ms\n", sw.eval_ms[n]);
-    }
-    if (sw.source && sw.source[n] && sw.source[n][0] != '\0') {
-      ctx->printf(ctx, "# ksynth source:\n");
-      const char *p = sw.source[n];
-      while (*p) {
-        char line[256];
-        size_t len = strcspn(p, "\n\r");
-        if (len >= sizeof(line)) len = sizeof(line) - 1;
-        memcpy(line, p, len);
-        line[len] = '\0';
-        p += len;
-        while (*p == '\n' || *p == '\r') p++;
-        ctx->printf(ctx, "#   %s\n", line);
+    return 0;
+  }
+  int readonly = sw.readonly[n];
+  int refcount = sw.refcount[n];
+  int size = sw.size[n];
+  int loop_start = sw.loop_start[n];
+  int loop_end = sw.loop_end[n];
+  if (loop_start < 0) loop_start = 0;
+  if (loop_end < loop_start) loop_end = loop_start;
+  if (loop_end > size) loop_end = size;
+  int loop_len = loop_end - loop_start;
+  float rate = sw.rate[n] > 0.0f ? sw.rate[n] : (float)MAIN_SAMPLE_RATE;
+  wave_stats_t stats = wave_stats(sw.data[n], size);
+  ctx->printf(ctx, "# W%d", n);
+  WTWFS(wave_samples_to_ms(size, rate));
+  if (readonly) ctx->printf(ctx, " R/O"); else ctx->printf(ctx, " R/W");
+  ctx->printf(ctx, " ref#%d", refcount);
+  if (sw.mip_levels && sw.mip_levels[n] > 0) {
+    ctx->printf(ctx, " (%d tables)", sw.mip_levels[n]);
+  }
+  ctx->printf(ctx, " [%s]", sw.name[n]);
+  ctx->puts(ctx, "");
+  ctx->printf(ctx, "# playback rate %gHz offset %+gHz MIDI %g mode %s",
+    sw.rate[n], sw.offset_hz[n], sw.midi_note[n],
+    sw.one_shot[n] ? "one-shot" : "cycle");
+  if (!sw.one_shot[n] && sw.mip_levels && sw.mip_levels[n] > 0) {
+    ctx->printf(ctx, " (%d bandlimited tables)", sw.mip_levels[n]);
+  }
+  ctx->puts(ctx, "");
+  ctx->printf(ctx, "# loop %d..%d |%d| %gms\n", loop_start, loop_end, loop_len, wave_samples_to_ms(loop_len, rate));
+  if (sw.num_cues && sw.num_cues[n] > 0 && sw.cues && sw.cues[n]) {
+    ctx->printf(ctx, "# cues (%d):", sw.num_cues[n]);
+    for (int c = 0; c < sw.num_cues[n]; c++) {
+      if (sw.cues[n][c].start != sw.cues[n][c].end && sw.cues[n][c].end > 0) {
+        ctx->printf(ctx, " %s@%u..%u", sw.cues[n][c].label, sw.cues[n][c].start, sw.cues[n][c].end);
+      } else {
+        ctx->printf(ctx, " %s@%u", sw.cues[n][c].label, sw.cues[n][c].start);
       }
+    }
+    ctx->puts(ctx, "");
+  }
+  ctx->printf(ctx,
+    "# min %+0.3f max %+0.3f peak %0.3f rms %0.3f dc %+0.4f zc %d",
+    stats.min, stats.max, stats.peak, stats.rms, stats.dc, stats.zero_crossings);
+  if (stats.clipped) ctx->printf(ctx, " clip %d", stats.clipped);
+  ctx->puts(ctx, "");
+  if (sw.eval_ms && sw.eval_ms[n] > 0.0f) {
+    ctx->printf(ctx, "# ksynth eval: %.3f ms\n", sw.eval_ms[n]);
+  }
+  if (ctx->trace && sw.source && sw.source[n] && sw.source[n][0] != '\0') {
+    ctx->printf(ctx, "# ksynth source:\n");
+    const char *p = sw.source[n];
+    while (*p) {
+      char line[256];
+      size_t len = strcspn(p, "\n\r");
+      if (len >= sizeof(line)) len = sizeof(line) - 1;
+      memcpy(line, p, len);
+      line[len] = '\0';
+      p += len;
+      while (*p == '\n' || *p == '\r') p++;
+      ctx->printf(ctx, "#   %s\n", line);
     }
   }
   return 0;
@@ -528,7 +571,12 @@ int wavetable_show(skode_t *ctx, int n) {
 void wavetable_waveform_show(skode_t *ctx, int wave, int width, int height,
                                     int loop_start, int loop_end,
                                     const char *label) {
-  if (!skode_wave_valid(wave) || !sw.data[wave] || sw.size[wave] <= 0) return;
+  if (!skode_wave_valid(wave)) return;
+  if (!sw.data[wave] || sw.size[wave] <= 0) {
+    if (label && label[0]) ctx->printf(ctx, "# %s\n", label);
+    wavetable_show(ctx, wave);
+    return;
+  }
   wavetable_show(ctx, wave);
   if (label && label[0]) ctx->printf(ctx, "# %s\n", label);
   print_audio_braille_labeled(ctx, sw.data[wave], sw.size[wave], width, height,

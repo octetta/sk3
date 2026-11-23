@@ -588,6 +588,38 @@ void osc_set_wave_table_index(skred_engine_t *engine, int voice, int wave) {
     if (sv.table_right) sv.table_right[voice] = NULL;
     return;
   }
+  if ((wave >= WAVE_TABLE_SQR && wave <= WAVE_TABLE_TRI) ||
+      wave == WAVE_TABLE_COSINE || wave == WAVE_TABLE_CENTERED_PULSE) {
+    sv.wave_table_index[voice] = wave;
+    if (sv.source_type) sv.source_type[voice] = OSC_SOURCE_POLYBLEP;
+    sv.finished[voice] = 0;
+    sv.table[voice] = NULL;
+    if (sv.table_right) sv.table_right[voice] = NULL;
+    sv.table_rate[voice] = (float)MAIN_SAMPLE_RATE;
+    sv.table_size[voice] = SIZE_SINE;
+    sv.table_size_rate[voice] = (float)SIZE_SINE / (float)MAIN_SAMPLE_RATE;
+    sv.one_shot[voice] = 0;
+    sv.loop_override[voice] = 0;
+    sv.wave_range_override[voice] = 0;
+    sv.wave_range_start[voice] = 0;
+    sv.wave_range_end[voice]   = SIZE_SINE;
+    sv.wave_range_start_f[voice] = 0.0f;
+    sv.wave_range_end_f[voice]   = (float)SIZE_SINE;
+    sv.loop_start[voice] = 0;
+    sv.loop_enabled[voice] = 1;
+    sv.loop_active[voice] = 1;
+    sv.loop_bounded[voice] = 0;
+    sv.loop_remaining[voice] = 0;
+    sv.loop_stop_requested[voice] = 0;
+    sv.loop_release_tail[voice] = 0;
+    sv.loop_ended[voice] = 0;
+    sv.loop_valid[voice] = 1;
+    sv.loop_start_f[voice] = 0.0f;
+    sv.loop_end_f[voice] = (float)SIZE_SINE;
+    sv.loop_length[voice] = (float)SIZE_SINE;
+    sv.phase_inc[voice] = osc_get_phase_inc(engine, voice, sv.freq[voice]);
+    return;
+  }
 
   if (sw.data[wave] && sw.size[wave] && sw.rate[wave] > 0.0) {
     sv.wave_table_index[voice] = wave;

@@ -19,6 +19,10 @@ extern int synth_sample_rate;
 #define NEG_60_DB_AS_LINEAR (0.001)
 #define SILENT NEG_60_DB
 
+#ifndef SIZE_SINE
+#define SIZE_SINE (4096)
+#endif
+
 
 typedef struct {
     int slot;
