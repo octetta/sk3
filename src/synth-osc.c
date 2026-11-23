@@ -344,6 +344,13 @@ static inline float osc_sample_at_phase(skred_engine_t *engine, int voice, doubl
 float osc_next_at(skred_engine_t *engine, int voice, float phase_inc, float phase_offset,
     uint64_t current_sample) {
     if (sv.finished[voice]) return 0.0f;
+    if (sv.paused && sv.paused[voice]) {
+        double phase = sv.phase[voice];
+        float s = osc_sample_at_phase(engine, voice, phase, phase_offset, current_sample,
+            sv.table_size[voice], 0.0f, (float)sv.table_size[voice], sv.one_shot[voice],
+            sv.loop_start_f[voice], sv.loop_end_f[voice]);
+        return s;
+    }
 
     if (sv.playback_class[voice] == OSC_PLAYBACK_CYCLE_SIMPLE) {
         double phase = osc_cycle_phase_next(voice, phase_inc);
@@ -537,8 +544,34 @@ float osc_next_at(skred_engine_t *engine, int voice, float phase_inc, float phas
         }
     }
     
+    double old_phase = sv.phase[voice];
     if (sync_wrap) osc_hard_sync_fire(voice, wrap_fraction);
     sv.phase[voice] = phase;
+
+    int wave = sv.wave_table_index[voice];
+    if (sw.num_cues && sw.num_cues[wave] > 0 && sw.cues && sw.cues[wave]) {
+        int n_cues = sw.num_cues[wave];
+        const sk_cue_t *cues = sw.cues[wave];
+        int cursor = (sv.cue_cursor ? sv.cue_cursor[voice] : 0);
+        if (cursor < 0) cursor = 0;
+        while (cursor < n_cues) {
+            uint32_t c_start = cues[cursor].start;
+            if (old_phase < (double)c_start && phase >= (double)c_start) {
+                skred_control_cue_event(current_sample, voice, wave, cursor,
+                                        c_start, cues[cursor].end, cues[cursor].type);
+                cursor++;
+            } else if (phase < (double)c_start) {
+                break;
+            } else {
+                cursor++;
+            }
+        }
+        if (sync_wrap || phase < old_phase) {
+            cursor = 0;
+            while (cursor < n_cues && cues[cursor].start < (uint32_t)phase) cursor++;
+        }
+        if (sv.cue_cursor) sv.cue_cursor[voice] = cursor;
+    }
     float s = osc_sample_at_phase(engine, voice, phase, phase_offset, current_sample,
         table_size, wave_range_start, wave_range_end, one_shot,
         (float)loop_start, (float)loop_end);
@@ -642,9 +675,18 @@ void osc_set_wave_table_index(skred_engine_t *engine, int voice, int wave) {
     sv.table_rate[voice] = sw.rate[wave];
     sv.table_size[voice] = sw.size[wave];
     sv.table_size_rate[voice] = (float)sv.table_size[voice] / MAIN_SAMPLE_RATE;
-    sv.table[voice] = sw.data[wave];
-    if (sv.table_right) {
-      sv.table_right[voice] = (sw.data_right && sw.channels && sw.channels[wave] == 2) ? sw.data_right[wave] : NULL;
+    int pair = sv.channel_pair ? sv.channel_pair[voice] : 0;
+    int ch_left = pair * 2;
+    int ch_right = pair * 2 + 1;
+    if (sw.channels_data && sw.channels_data[wave] && ch_right < sw.channels[wave]) {
+      sv.table[voice] = sw.channels_data[wave][ch_left];
+      if (sv.table_right) sv.table_right[voice] = sw.channels_data[wave][ch_right];
+    } else if (sw.data_right && sw.channels && sw.channels[wave] == 2 && pair == 0) {
+      sv.table[voice] = sw.data[wave];
+      if (sv.table_right) sv.table_right[voice] = sw.data_right[wave];
+    } else {
+      sv.table[voice] = sw.data[wave];
+      if (sv.table_right) sv.table_right[voice] = NULL;
     }
     sv.one_shot[voice] = sw.one_shot[wave];
     sv.loop_override[voice] = 0;
@@ -780,6 +822,9 @@ int wave_loop_points_set(int wave, int start, int end) {
 
 void osc_trigger(skred_engine_t *engine, int voice) {
     sv.finished[voice] = 0;
+    if (sv.paused) sv.paused[voice] = 0;
+    if (sv.pause_gain) sv.pause_gain[voice] = 1.0f;
+    if (sv.cue_cursor) sv.cue_cursor[voice] = 0;
     sv.loop_active[voice] = sv.loop_enabled[voice];
     sv.loop_bounded[voice] = sv.loop_count[voice] > 0;
     sv.loop_remaining[voice] = sv.loop_count[voice];

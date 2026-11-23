@@ -323,7 +323,7 @@ int skode_execute_word(skode_t *ctx, ands_t *s, uint32_t atom, double *arg,
         op.code = c->opcode_id;
         op.argc = argc;
         for (int i = 0; i < argc && i < SEQ_OPCODE_ARG_MAX; i++) {
-          op.arg[i] = (float)arg[i];
+          op.arg[i] = ands_is_tie(arg[i]) ? skode_double_to_float_note(arg[i]) : (float)arg[i];
         }
         int r = skode_execute_voice_opcode(&op, ctx ? ctx->voice : 0);
         if (r < 0) {

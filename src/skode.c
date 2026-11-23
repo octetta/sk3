@@ -854,7 +854,7 @@ void downsample_block_average(const float *source, int source_len, float *dest, 
 #include <math.h>
 
 #define WAVE_DISPLAY_DEFAULT_WIDTH 60
-#define WAVE_DISPLAY_DEFAULT_HEIGHT 12
+#define WAVE_DISPLAY_DEFAULT_HEIGHT 4
 #define WAVE_DISPLAY_MIN_WIDTH 8
 #define WAVE_DISPLAY_MAX_WIDTH 160
 #define WAVE_DISPLAY_MIN_HEIGHT 2

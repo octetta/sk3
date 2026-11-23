@@ -134,7 +134,8 @@ static int skred_control_event_key(const skred_control_event_t *event) {
     case SKRED_CONTROL_EVENT_PATTERN_DOWNBEAT_SWITCH: return event->pattern;
     case SKRED_CONTROL_EVENT_VOICE_TRIGGER:
     case SKRED_CONTROL_EVENT_VOICE_RELEASE:
-    case SKRED_CONTROL_EVENT_VOICE_FINISHED: return event->voice;
+    case SKRED_CONTROL_EVENT_VOICE_FINISHED:
+    case SKRED_CONTROL_EVENT_CUE: return event->voice;
     case SKRED_CONTROL_EVENT_MIDI: return event->id;
     default: return -1;
   }
@@ -359,6 +360,16 @@ void skred_control_pattern_event(uint32_t type, uint64_t sample, int pattern,
       type != SKRED_CONTROL_EVENT_PATTERN_DOWNBEAT_SWITCH) return;
   skred_control_event_publish(type, sample, -1, pattern, step, -1, 0, 0, 0,
     NULL);
+}
+
+void skred_control_cue_event(uint64_t sample, int voice, int wave, int cue_index,
+    uint32_t cue_start, uint32_t cue_end, uint32_t cue_type) {
+  if (voice < 0 || voice >= SKRED_CONTROL_VOICE_CAPACITY) return;
+  if (!sv.control_events || !sv.control_events[voice]) return;
+  double values[3] = { (double)cue_start, (double)cue_end, (double)cue_type };
+  skred_control_event_publish(SKRED_CONTROL_EVENT_CUE, sample, voice,
+    control_voice_pattern[voice], control_voice_step[voice], wave,
+    control_voice_opcode[voice], cue_index, 3, values);
 }
 
 int skred_trigger_voice(int voice, float velocity) {

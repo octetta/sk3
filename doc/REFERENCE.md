@@ -9,16 +9,16 @@ Generated automatically by `tools/mkopcodes` from modular opcode definitions in 
 
 ## Architecture & System Overview
 
-- **Total Command Words**: 321
-- **Total Dispatch Clauses**: 662
-- **Real-Time Audio Opcode Handlers**: 159 (audio-thread safe, zero allocation, zero string lookup)
-- **Immediate / Control Plane Clauses**: 503 (REPL / parser / file system / diagnostics)
+- **Total Command Words**: 323
+- **Total Dispatch Clauses**: 665
+- **Real-Time Audio Opcode Handlers**: 161 (audio-thread safe, zero allocation, zero string lookup)
+- **Immediate / Control Plane Clauses**: 504 (REPL / parser / file system / diagnostics)
 
 ### Functional Command Groups
 
 | Group | Identifier | Words | Description |
 |:---|:---|:---:|:---|
-| voice | `voice` | 25 | Core voice selection, levels, panning, and voice diagnostics |
+| voice | `voice` | 27 | Core voice selection, levels, panning, and voice diagnostics |
 | osc | `osc` | 20 | Oscillators, waveforms, frequency, tuning, detune, loops |
 | wave | `wave` | 24 | Wavetable slots, visualizers, WAV import and export |
 | filter | `filter` | 8 | Filter cutoff frequency, resonance, modes, wavefolding |
@@ -49,9 +49,11 @@ Generated automatically by `tools/mkopcodes` from modular opcode definitions in 
 | [`amp`](#amp) | `a` | 2 | 1 | Real-Time | set voice output amplitude / gain |
 | [`amp_bend`](#amp_bend) | `ab` | 1 | 1 | Real-Time | amplitude bend (-1..1) |
 | [`amp_bend_param`](#amp_bend_param) | `abp` | 2 | 1..2 | Real-Time | amplitude bend range in dB |
+| [`channel_pair`](#channel_pair) | `cp` | 1 | 1 | Real-Time | select stereo channel pair from multi-channel wave |
 | [`gate_off`](#gate_off) | `off` | 2 | 0..1 | Immediate | turn active voice gate off |
 | [`gate_on`](#gate_on) | `on` | 2 | 0..1 | Immediate | turn active voice gate on |
 | [`inst_note`](#inst_note) | `i` | 3 | 1..3 | Real-Time | trigger instrument note |
+| [`jump_to_cue`](#jump_to_cue) | `jc` | 2 | 0..1 | Hybrid | jump voice playback phase to cue point by index |
 | [`master_volume`](#master_volume) | `V` | 2 | 0..1 | Immediate | set master output volume |
 | [`mute`](#mute) | `m` | 2 | 0..1 | Real-Time | mute or unmute voice audio output (0 = unmute, 1 = mute) |
 | [`pan`](#pan) | `p` | 2 | 1 | Real-Time | set voice stereo pan position (-1.0 left to +1.0 right) |
@@ -198,6 +200,28 @@ Usage: abp range offset (or amp_bend_param range offset)
 
 ---
 
+### `channel_pair`
+
+- **Alias**: `cp`
+- **Group**: `voice`
+- **Clause Count**: 1
+
+#### Clause 1: `channel_pair(finite)`
+
+- **Arity**: `1`
+- **Execution Model**: `realtime (audio thread safe)`
+- **Discrete Opcode ID**: `283` (`skode_clause_channel_pair`)
+- **Summary**: select stereo channel pair from multi-channel wave
+
+**Description & Details**:
+
+```text
+Selects which stereo channel pair this voice plays from a multi-channel wave (0 = ch 0/1, 1 = ch 2/3, etc.).
+Usage: cp pair (or channel_pair pair)
+```
+
+---
+
 ### `gate_off`
 
 - **Alias**: `off`
@@ -310,6 +334,42 @@ Usage: i note velocity
 ```text
 Triggers instrument note with velocity and fine cents offset. Supports Note-On, Rest (-), Tie (.), and Slur (-note).
 Usage: i note velocity cents
+```
+
+---
+
+### `jump_to_cue`
+
+- **Alias**: `jc`
+- **Group**: `voice`
+- **Clause Count**: 2
+
+#### Clause 1: `jump_to_cue(finite)`
+
+- **Arity**: `1`
+- **Execution Model**: `realtime (audio thread safe)`
+- **Discrete Opcode ID**: `284` (`skode_clause_jump_to_cue_1`)
+- **Summary**: jump voice playback phase to cue point by index
+
+**Description & Details**:
+
+```text
+Seeks voice playback phase directly to the specified cue point index.
+Usage: jc index (or jump_to_cue index)
+```
+
+#### Clause 2: `jump_to_cue()`
+
+- **Arity**: `0`
+- **Execution Model**: `immediate (control plane)`
+- **Parser State Requirements**: `string`
+- **Summary**: jump voice playback phase to cue point by label
+
+**Description & Details**:
+
+```text
+Seeks voice playback phase directly to cue point matching bracketed string label.
+Usage: [label] jc
 ```
 
 ---
@@ -524,7 +584,7 @@ Queries voice information with argument.
 - **Group**: `voice`
 - **Clause Count**: 1
 
-#### Clause 1: `velocity(finite)`
+#### Clause 1: `velocity(any)`
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
@@ -2264,7 +2324,7 @@ Usage: [phonemes] slot /vox
 
 - **Arity**: `0`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `285` (`skode_clause_wave_bandlimit_0`)
+- **Discrete Opcode ID**: `287` (`skode_clause_wave_bandlimit_0`)
 - **Summary**: bandlimit active voice wavetable
 
 **Description & Details**:
@@ -2278,7 +2338,7 @@ Usage: WB (or wave_bandlimit)
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `286` (`skode_clause_wave_bandlimit_1`)
+- **Discrete Opcode ID**: `288` (`skode_clause_wave_bandlimit_1`)
 - **Summary**: bandlimit specified wavetable slot
 
 **Description & Details**:
@@ -2300,7 +2360,7 @@ Usage: WB <slot> (or wave_bandlimit <slot>)
 
 - **Arity**: `0`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `283` (`skode_clause_wave_default_0`)
+- **Discrete Opcode ID**: `285` (`skode_clause_wave_default_0`)
 - **Summary**: reset voice waveform to default sine
 
 **Description & Details**:
@@ -2314,7 +2374,7 @@ Usage: /
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `284` (`skode_clause_wave_default_1`)
+- **Discrete Opcode ID**: `286` (`skode_clause_wave_default_1`)
 - **Summary**: reset voice waveform to default sine with argument
 
 **Description & Details**:

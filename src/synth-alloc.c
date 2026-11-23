@@ -191,6 +191,10 @@ void synth_alloc_voices(int voice_max) {
     VALLOC(record_pending,   atomic_int_t);
     VALLOC(interpolate,      int);
     VALLOC(phase_reset,      int);
+    VALLOC(channel_pair,     int);
+    VALLOC(paused,           int);
+    VALLOC(pause_gain,       float);
+    VALLOC(cue_cursor,       int);
 
     VALLOC(mark_go,          int);
     VALLOC(mark_a,           struct timespec);
@@ -310,7 +314,8 @@ void synth_free_voices(void) {
     VFREE(record);
     free((void *)sv.record_pending);
     sv.record_pending = NULL;
-    VFREE(interpolate);      VFREE(phase_reset);
+    VFREE(interpolate);      VFREE(phase_reset);     VFREE(channel_pair);
+    VFREE(paused);           VFREE(pause_gain);      VFREE(cue_cursor);
     VFREE(mark_go);          VFREE(mark_a);          VFREE(mark_b);
 
     VFREE(quantize);
@@ -349,6 +354,7 @@ void synth_alloc_waves(int wave_table_max) {
 
     WALLOC(data,         float *);
     WALLOC(data_right,   float *);
+    sw.channels_data = synth_alloc(w, sizeof(float **), "channels_data");
     WALLOC(channels,     int);
     for (int lvl = 0; lvl < WAVETABLE_MIP_LEVELS; lvl++) {
         sw.mip_data[lvl] = synth_alloc(w, sizeof(float *), "mip_data");
@@ -415,6 +421,18 @@ void synth_free_waves(void) {
             free(sw.data_right[i]);
             sw.data_right[i] = NULL;
         }
+        if (sw.channels_data && sw.channels_data[i]) {
+            int chs = sw.channels ? sw.channels[i] : 0;
+            for (int c = 2; c < chs; c++) {
+                if (sw.channels_data[i][c]) free(sw.channels_data[i][c]);
+            }
+            free(sw.channels_data[i]);
+            sw.channels_data[i] = NULL;
+        }
+    }
+    if (sw.channels_data) {
+        free(sw.channels_data);
+        sw.channels_data = NULL;
     }
     WFREE(num_harmonics);
     WFREE(mip_levels);

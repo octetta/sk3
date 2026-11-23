@@ -1,0 +1,33 @@
+@name     jump_to_cue
+@alias    jc
+@group    voice
+@c_name   skode_clause_jump_to_cue_1
+@type     realtime
+@arity    1
+@match    (finite)
+@summary  jump voice playback phase to cue point by index
+@doc
+Seeks voice playback phase directly to the specified cue point index.
+Usage: jc index (or jump_to_cue index)
+@code
+    if (voice < 0 || voice >= synth_config.voice_max) return -1;
+    return voice_jump_to_cue(voice, (int)args[0]);
+@end
+
+@name     jump_to_cue
+@alias    jc
+@group    voice
+@c_name   skode_clause_jump_to_cue_0
+@type     immediate
+@arity    0
+@match    ()
+@summary  jump voice playback phase to cue point by label
+@doc
+Seeks voice playback phase directly to cue point matching bracketed string label.
+Usage: [label] jc
+@code
+    if (!ctx || !ctx->parse) return -1;
+    const char *label = ands_string(ctx->parse);
+    if (!label || label[0] == '\0') return -1;
+    return voice_jump_to_cue_label(ctx->voice, label);
+@end

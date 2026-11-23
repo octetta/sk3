@@ -97,14 +97,63 @@ The `tts!` formant speech engine accepts `|marker|` tokens embedded directly in 
 
 When loading standard WAV files through `/ws` (by name) or `/w` (by numeric asset ID), the engine parses RIFF chunks:
 - **`smpl` Chunk**: Extracts MIDI unity note (`root:`) and all sample loops. Primary loop becomes `loop:start,end` and `sw.loop_start`/`sw.loop_end`. Secondary loops are stored as cues (`SK_CUE_LOOP_RELEASE`).
-- **`cue ` Chunk**: Reads all cue point sample offsets.
+- **`cue ` Chunk**: Reads all cue point sample offsets (up to `SK_MAX_CUES = 256`).
 - **`LIST` / `adtl` Chunks**: Parses `labl` (text labels for cues) and `ltxt` (slice lengths, converting cue points into slice regions).
 
 The complete extracted metadata is stored into `ands_string(ctx->parse)` and applied to the destination wave slot.
 
 ---
 
-## 6. Wave Diagnostics (`wavetable_show`)
+## 6. Multi-Channel WAV Loading & Channel Pair Selection (`cp`)
+
+For symmetry with `sk3`'s 10-channel recording stem output, loading WAV files with even numbers of channels (2, 4, 6, 8, 10...) is fully supported:
+
+1. **Storage**: Channels are de-interleaved into contiguous planar float buffers in `sw.channels_data[wave]`.
+2. **Channel Pair Selection (`cp`)**:
+   - Voices select which stereo pair to stream via the `cp` opcode:
+     - `cp 0`: channels 0 (left) and 1 (right) [default]
+     - `cp 1`: channels 2 (left) and 3 (right)
+     - `cp 2`: channels 4 (left) and 5 (right)
+     - `cp 3`: channels 6 (left) and 7 (right)
+     - `cp 4`: channels 8 (left) and 9 (right)
+   - Zero redundant allocations: Multiple voices can play different stem pairs from the same wave slot simultaneously.
+3. **Voice Queries (`?` / `??`)**:
+   - If `channel_pair > 0`, the voice query output displays `cp<pair>` (e.g. `v1 w100 cp1 a0 l1`).
+4. **Waveform Slot Query (`W`)**:
+   - The `W` command displays channel and pair metrics: e.g. `(stereo)` or `(10-channel, 5 pairs)`.
+
+---
+
+## 7. Jump to Cue (`jc`) & Playback Pause (`l.`)
+
+### Jump to Cue (`jc`)
+Voices can immediately seek their playback phase to any cue point while playing or paused:
+- By index: `jc <index>` (e.g. `v0 jc1` or `jc 0`)
+- By label: `[label] jc` (e.g. `v0 [verse] jc` or `[drop] jc`)
+- Seeking immediately updates `sv.phase[voice] = cue.start` and aligns `sv.cue_cursor[voice]` to ensure subsequent cue crossing events fire properly.
+
+### Playback Pause / Resume (`l.`)
+- `l.` toggles the voice pause state on one-shot and cyclic sample voices.
+- While paused:
+  - Playback phase freezes without advancing.
+  - Micro-fade ramp (48 samples, ~1ms) smoothly attenuates to silence to prevent DC offset clicks.
+  - Envelope sample tick clocks freeze in place.
+- Resuming with `l.` unpauses and ramps gain back to unity smoothly.
+
+---
+
+## 8. Compact Waveform Display & Integrated Timeline (`W` / `VW`)
+
+The ASCII/Braille waveform display is optimized for minimal screen real estate and maximum visual clarity:
+- **Default Height**: 4 character rows (compact vertical footprint).
+- **Cue Marker Timeline**: Row `# cue : |▼0    ▼1        ▼2|` displaying exact horizontal positions of cues.
+- **Loop Boundary Ruler**: Row `# loop: |...[=======]......|` displaying loop start/end brackets and active loop span.
+- **Voice Playhead Indicator (`VW`)**: Row `# play: |    ▲           | (v0 phase 14200 smp / 295.8ms [PAUSED])` showing live voice playback position and pause status.
+- **Cue Legend**: Detailed listing of cue indices, sample start offsets, and labels.
+
+---
+
+## 9. Wave Diagnostics (`wavetable_show`)
 
 Displaying wave slots (e.g. via `w?` or diagnostics) displays loop points along with any cues:
 

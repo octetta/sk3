@@ -603,6 +603,16 @@ void wave_free_one(int i) {
     }
     sw.data_right[i] = NULL;
   }
+  if (sw.channels_data && sw.channels_data[i]) {
+    int chs = sw.channels ? sw.channels[i] : 0;
+    if (sw.is_heap && sw.is_heap[i]) {
+      for (int c = 2; c < chs; c++) {
+        if (sw.channels_data[i][c]) free(sw.channels_data[i][c]);
+      }
+    }
+    free(sw.channels_data[i]);
+    sw.channels_data[i] = NULL;
+  }
   if (sw.channels) sw.channels[i] = 1;
   if (sw.cues && sw.cues[i]) {
     free(sw.cues[i]);

@@ -8,7 +8,7 @@
 #include <ctype.h>
 #include <stdio.h>
 
-#define SK_MAX_CUES 64
+#define SK_MAX_CUES 256
 
 typedef enum {
     SK_CUE_POINT = 0,

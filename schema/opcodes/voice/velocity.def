@@ -4,7 +4,7 @@
 @c_name   skode_clause_velocity
 @type     realtime
 @arity    1
-@match    (finite)
+@match    (any)
 @summary  set voice note velocity
 @doc
 Sets voice note velocity / gate duration.

@@ -146,6 +146,10 @@ typedef struct {
     atomic_int_t * restrict record_pending;
     int    * restrict interpolate;
     int    * restrict phase_reset;
+    int    * restrict channel_pair;   /* 0 = pair 0 (ch 0+1), 1 = pair 1 (ch 2+3), etc. */
+    int    * restrict paused;        /* 1 = voice playback is paused (phase frozen) */
+    float  * restrict pause_gain;    /* micro-fade ramp: 1.0 (playing) <-> 0.0 (paused) */
+    int    * restrict cue_cursor;    /* index of next cue point to cross (0..num_cues-1) */
 
     int             * restrict mark_go;
     struct timespec * restrict mark_a;
@@ -229,7 +233,8 @@ typedef struct {
 
     float      ** restrict data;
     float      ** restrict data_right;  /* Planar right channel (NULL for mono) */
-    int         * restrict channels;    /* 1 = mono, 2 = stereo */
+    float     *** restrict channels_data; /* Planar channels for multi-channel waves */
+    int         * restrict channels;    /* 1 = mono, 2 = stereo, N = multi-channel */
     float      ** restrict mip_data[WAVETABLE_MIP_LEVELS];
     int         * restrict mip_levels;
     double     ** restrict harmonics;

@@ -267,6 +267,182 @@ int main(void) {
     synth_free();
   }
 
+  // Verify l. (pause / resume) toggle on one-shot sample playback
+  {
+    synth_init(8); wave_table_init(0); voice_init();
+    synth_sample_rate_set(48000);
+    skode_t sk_pause = SKODE_EMPTY();
+    skode_init(&sk_pause);
+
+    int len = 48000;
+    float *t_left = (float *)calloc(len, sizeof(float));
+    for (int i = 0; i < len; i++) t_left[i] = (float)i / (float)len;
+    wave_install_memory(101, t_left, len, 48000.0f, 1 /* one-shot */, "ramp-sample", 60.0f, 0.0f);
+
+    // Trigger voice with velocity 1.0 (Skode: v0 w101 l1)
+    consume_skode(&sk_pause, "v0 w101 a0 l1");
+    expect(sv.paused[0] == 0, "voice 0 starts in non-paused state");
+
+    // Advance 128 frames
+    float buf[256];
+    synth(&skred_global_engine, buf, NULL, 128, 2, NULL);
+    double phase_before_pause = sv.phase[0];
+    expect(phase_before_pause > 10.0, "playback phase advances during playback");
+
+    // Send l. to PAUSE (TIE)
+    consume_skode(&sk_pause, "v0 l.");
+    expect(sv.paused[0] == 1, "l. toggles voice 0 into paused state");
+
+    // Advance 5 blocks (640 frames) while paused: phase MUST NOT advance!
+    for (int b = 0; b < 5; b++) {
+      synth(&skred_global_engine, buf, NULL, 128, 2, NULL);
+    }
+    expect(sv.phase[0] == phase_before_pause, "playback phase is frozen during pause");
+    expect(sv.pause_gain[0] == 0.0f, "pause micro-fade has ramped to complete silence");
+
+    // Send l. to UNPAUSE / RESUME
+    consume_skode(&sk_pause, "v0 l.");
+    expect(sv.paused[0] == 0, "second l. unpauses voice 0");
+
+    // Advance 1 block: phase advances from the exact frozen phase
+    synth(&skred_global_engine, buf, NULL, 128, 2, NULL);
+    expect(sv.phase[0] > phase_before_pause, "playback phase resumes advancing from paused position");
+    expect(sv.pause_gain[0] > 0.0f, "pause micro-fade ramps back in smoothly");
+
+    // Retrigger with l1: clears pause and resets phase to start
+    consume_skode(&sk_pause, "v0 l1");
+    expect(sv.paused[0] == 0, "l1 clears pause flag");
+
+    skode_free(&sk_pause);
+    wave_free();
+    synth_free();
+  }
+
+  // Verify cue point control plane events
+  {
+    synth_init(8); wave_table_init(0); voice_init();
+    synth_sample_rate_set(48000);
+    skode_t sk_cue = SKODE_EMPTY();
+    skode_init(&sk_cue);
+
+    int len = 48000;
+    float *t_left = (float *)calloc(len, sizeof(float));
+    for (int i = 0; i < len; i++) t_left[i] = 0.5f;
+    wave_install_memory(102, t_left, len, 48000.0f, 1, "cue-sample", 60.0f, 0.0f);
+
+    // Install 3 cue points into slot 102
+    sw.cues[102] = (sk_cue_t *)calloc(3, sizeof(sk_cue_t));
+    sw.num_cues[102] = 3;
+    sw.cues[102][0].start = 64;   sw.cues[102][0].end = 128;  sw.cues[102][0].type = SK_CUE_SLICE; snprintf(sw.cues[102][0].label, 32, "slice1");
+    sw.cues[102][1].start = 128;  sw.cues[102][1].end = 256;  sw.cues[102][1].type = SK_CUE_SLICE; snprintf(sw.cues[102][1].label, 32, "slice2");
+    sw.cues[102][2].start = 256;  sw.cues[102][2].end = 512;  sw.cues[102][2].type = SK_CUE_WORD;  snprintf(sw.cues[102][2].label, 32, "word1");
+
+    // Enable voice control events for voice 0
+    voice_control_events_set(0, 1);
+    skred_control_event_clear();
+
+    // Trigger voice (Skode: v0 w102 l1)
+    consume_skode(&sk_cue, "v0 w102 a0 l1");
+
+    // Render 4 blocks (512 frames) to cross cue points
+    float buf[256];
+    for (int b = 0; b < 4; b++) {
+      synth(&skred_global_engine, buf, NULL, 128, 2, NULL);
+    }
+
+    // Poll control events and verify cue events
+    skred_control_event_t events[16];
+    int count = skred_control_event_poll(events, 16);
+    int cue_event_count = 0;
+    for (int i = 0; i < count; i++) {
+      if (events[i].type == SKRED_CONTROL_EVENT_CUE) {
+        cue_event_count++;
+        expect(events[i].voice == 0, "cue event voice is 0");
+        expect(events[i].tag == 102, "cue event tag is wave 102");
+      }
+    }
+    expect(cue_event_count >= 2, "control plane emitted cue events for crossed cues");
+
+    // Test Jump to Cue (jc / [label] jc)
+    consume_skode(&sk_cue, "v0 jc1");
+    expect(sv.phase[0] == 128.0, "v0 jc1 jumps phase to cue index 1");
+
+    consume_skode(&sk_cue, "v0 [word1] jc");
+    expect(sv.phase[0] == 256.0, "v0 [word1] jc jumps phase to cue label 'word1'");
+
+    // Test Jump to Cue while paused
+    consume_skode(&sk_cue, "v0 l.");
+    expect(sv.paused[0] == 1, "voice is paused");
+    consume_skode(&sk_cue, "v0 jc0");
+    expect(sv.phase[0] == 64.0, "v0 jc0 jumps phase while paused");
+    expect(sv.paused[0] == 1, "voice remains paused after jc");
+
+    // Test compact waveform display with cues and playhead
+    consume_skode(&sk_cue, "v0 w102 VW");
+
+    skode_free(&sk_cue);
+    wave_free();
+    synth_free();
+  }
+
+  // Verify multi-channel wave loading and channel pair selection (cp)
+  {
+    synth_init(8); wave_table_init(0); voice_init();
+    synth_sample_rate_set(48000);
+    skode_t sk_mc = SKODE_EMPTY();
+    skode_init(&sk_mc);
+
+    int len = 48000;
+    float **planar = (float **)malloc(4 * sizeof(float *));
+    for (int c = 0; c < 4; c++) {
+      planar[c] = (float *)calloc(len, sizeof(float));
+      float val = (c == 0) ? 0.2f : (c == 1) ? 0.3f : (c == 2) ? 0.6f : 0.8f;
+      for (int i = 0; i < len; i++) planar[c][i] = val;
+    }
+    wave_install_memory_multich(103, planar, 4, len, 48000.0f, 0, "4ch-stems", 60.0f, 0.0f);
+    expect(sw.channels[103] == 4, "wave 103 reports 4 channels");
+
+    // Voice 0 plays Pair 0 (Ch 0 & Ch 1)
+    consume_skode(&sk_mc, "v0 w103 cp0 a0 l1");
+    expect(sv.table[0][0] == 0.2f, "pair 0 left table is ch0 (0.2)");
+    expect(sv.table_right[0][0] == 0.3f, "pair 0 right table is ch1 (0.3)");
+    float buf[256];
+    for (int b = 0; b < 10; b++) {
+      memset(buf, 0, sizeof(buf));
+      synth(&skred_global_engine, buf, NULL, 128, 2, NULL);
+    }
+    expect(buf[0] > 0.01f && buf[1] > 0.01f, "pair 0 outputs active stereo audio");
+    float ratio_p0 = buf[1] / buf[0];
+    expect(fabsf(ratio_p0 - 1.5f) < 0.05f, "pair 0 channel ratio matches 0.3 / 0.2 = 1.5");
+
+    // Voice 0 switches to Pair 1 (Ch 2 & Ch 3)
+    consume_skode(&sk_mc, "v0 cp1");
+    expect(sv.channel_pair[0] == 1, "v0 cp1 sets channel_pair to 1");
+    expect(sv.table[0][0] == 0.6f, "pair 1 left table is ch2 (0.6)");
+    expect(sv.table_right[0][0] == 0.8f, "pair 1 right table is ch3 (0.8)");
+    for (int b = 0; b < 10; b++) {
+      memset(buf, 0, sizeof(buf));
+      synth(&skred_global_engine, buf, NULL, 128, 2, NULL);
+    }
+    expect(buf[0] > 0.01f && buf[1] > 0.01f, "pair 1 outputs active stereo audio");
+    float ratio_p1 = buf[1] / buf[0];
+    expect(fabsf(ratio_p1 - (0.8f / 0.6f)) < 0.05f, "pair 1 channel ratio matches 0.8 / 0.6 = 1.33");
+
+    // Verify voice_format reflects cp1 when non-zero
+    char fmt[256];
+    voice_format(0, fmt, sizeof(fmt), 0);
+    expect(strstr(fmt, "cp1") != NULL, "voice_format includes cp1 when pair is 1");
+
+    // Reset back to cp0 and verify suppression in voice_format
+    consume_skode(&sk_mc, "v0 cp0");
+    voice_format(0, fmt, sizeof(fmt), 0);
+    expect(strstr(fmt, "cp") == NULL, "voice_format suppresses cp when pair is 0");
+
+    skode_free(&sk_mc);
+    wave_free();
+    synth_free();
+  }
+
   // Verify skred_set_string and skred_get_string for drag-and-drop ANDS integration
   {
     const char *test_path = "/tmp/skode_test_sample.wav";

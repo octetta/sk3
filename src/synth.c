@@ -618,6 +618,12 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
         amp = sv.smoother_gain[n];
       }
 #endif
+      if (sv.paused && sv.paused[n]) {
+        if (sv.amp_envelope[n].is_active) sv.amp_envelope[n].sample_start++;
+        if (sv.filter_envelope[n].is_active) sv.filter_envelope[n].sample_start++;
+        if (sv.cz_envelope[n].is_active) sv.cz_envelope[n].sample_start++;
+        if (sv.freq_envelope[n].is_active) sv.freq_envelope[n].sample_start++;
+      }
       float env = 1.0f;
       float mod = 1.0f;
 
@@ -641,6 +647,17 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
       }
       
       float final = amp * env * mod;
+      if (sv.paused && sv.pause_gain) {
+        float pause_target = sv.paused[n] ? 0.0f : 1.0f;
+        if (sv.pause_gain[n] < pause_target) {
+          sv.pause_gain[n] += (1.0f / 48.0f);
+          if (sv.pause_gain[n] > pause_target) sv.pause_gain[n] = pause_target;
+        } else if (sv.pause_gain[n] > pause_target) {
+          sv.pause_gain[n] -= (1.0f / 48.0f);
+          if (sv.pause_gain[n] < pause_target) sv.pause_gain[n] = pause_target;
+        }
+        final *= sv.pause_gain[n];
+      }
       
       if (synth_config.trace_latency && env > 0.0f && sv.latency_timestamp_ns[n] > 0) {
         struct timespec ts;

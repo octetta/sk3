@@ -325,7 +325,7 @@ int skode_inst_note(int voice, float note, float velocity, float cents) {
 
 int skode_linked_velocity(int voice, float velocity, uint64_t sample) {
   if (!event_voice_valid(voice)) return -1;
-  if (voice_is_rest[voice]) {
+  if (!skode_float_is_tie(velocity) && voice_is_rest[voice]) {
     velocity = 0.0f;
   }
   skode_envelope_velocity(voice, velocity, sample);

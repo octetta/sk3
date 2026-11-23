@@ -487,7 +487,10 @@ static int word_exec____l(const skode_word_t *self, skode_t *ctx, ands_t *s, dou
   (void)x_valid;
   (void)voice;
   (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
-      if (argc && isfinite(arg[0])) envelope_velocity(voice, arg[0]);
+      if (argc) {
+        float vel = ands_is_tie(arg[0]) ? skode_double_to_float_note(arg[0]) : (float)arg[0];
+        envelope_velocity(voice, vel);
+      }
       return 0;
 }
 static int word_exec_O(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
@@ -509,7 +512,10 @@ static int word_exec_l(const skode_word_t *self, skode_t *ctx, ands_t *s, double
   (void)voice;
   (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
     #if 1
-      if (argc) skode_linked_velocity(voice, arg[0], SAMPLE_COUNT_GET());
+      if (argc) {
+        float vel = ands_is_tie(arg[0]) ? skode_double_to_float_note(arg[0]) : (float)arg[0];
+        skode_linked_velocity(voice, vel, SAMPLE_COUNT_GET());
+      }
     #else
       if (argc) {
         uint64_t now = SAMPLE_COUNT_GET();
@@ -1117,9 +1123,11 @@ static int word_exec_VW(const skode_word_t *self, skode_t *ctx, ands_t *s, doubl
           if (skode_wave_valid(wave)) {
             // ctx->printf(ctx, "# wave [%d..%d)\n", sv.wave_range_start[target_voice], sv.wave_range_end[target_voice]);
             char label[96];
-            snprintf(label, sizeof(label), "voice %d wave %d", target_voice, wave);
-            wavetable_waveform_show(ctx, wave, w, h,
-              sv.loop_start[target_voice], sv.loop_end[target_voice], label);
+            snprintf(label, sizeof(label), "voice %d wave %d%s", target_voice, wave,
+                     (sv.paused && sv.paused[target_voice]) ? " [PAUSED]" : "");
+            wavetable_waveform_show_ex(ctx, wave, w, h,
+              sv.loop_start[target_voice], sv.loop_end[target_voice],
+              (int)sv.phase[target_voice], target_voice, label);
           }
         }
       }
@@ -1368,8 +1376,8 @@ static int word_exec_W(const skode_word_t *self, skode_t *ctx, ands_t *s, double
         }
         if (!show_record_buffer && skode_wave_valid(x)) {
           if (argc != 2) {
-            wavetable_waveform_show(ctx, x, w, h, sw.loop_start[x],
-              sw.loop_end[x], NULL);
+            wavetable_waveform_show_ex(ctx, x, w, h, sw.loop_start[x],
+              sw.loop_end[x], -1, -1, NULL);
           } else {
             ctx->printf(ctx, "# Wavetable Summary [%d..%d]\n", x, m);
             for (int i=x; i<=m; i++) {

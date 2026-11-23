@@ -87,9 +87,38 @@ static float *mw_decode(ma_decoder *decoder, const char *label,
       decoder->outputSampleRate);
   }
   w->data_right = NULL;
+  w->data_channels = NULL;
   (void)label;
   w->SamplesRate = decoder->outputSampleRate;
   *frames_out = (int)frameCount;
+
+  if (ch == -1 && decoder->outputChannels > 2 && (decoder->outputChannels % 2 == 0)) {
+    float **planar = (float **)malloc(decoder->outputChannels * sizeof(float *));
+    if (planar) {
+      int ok = 1;
+      for (ma_uint32 c = 0; c < decoder->outputChannels; c++) {
+        planar[c] = (float *)malloc(frameCount * sizeof(float));
+        if (!planar[c]) ok = 0;
+      }
+      if (ok) {
+        for (ma_uint64 i = 0; i < frameCount; i++) {
+          for (ma_uint32 c = 0; c < decoder->outputChannels; c++) {
+            planar[c][i] = pSamples[i * decoder->outputChannels + c];
+          }
+        }
+        w->data_channels = planar;
+        w->data_right = planar[1];
+        w->Channels = decoder->outputChannels;
+        free(pSamples);
+        return planar[0];
+      } else {
+        for (ma_uint32 c = 0; c < decoder->outputChannels; c++) {
+          if (planar[c]) free(planar[c]);
+        }
+        free(planar);
+      }
+    }
+  }
 
   if (ch == -1 && decoder->outputChannels == 2) {
     float *pRight = (float *)malloc(frameCount * sizeof(float));
@@ -596,6 +625,23 @@ void wave_install_memory_stereo(int wave_slot, float *table_left, float *table_r
   if (sw.source_is_heap) sw.source_is_heap[wave_slot] = 0;
 }
 
+void wave_install_memory_multich(int wave_slot, float **data_channels, int channels, int len,
+                                 float rate, int one_shot, const char *name,
+                                 float midi_note, float offset_hz) {
+  wave_install_memory_stereo(wave_slot, data_channels[0], data_channels[1], len,
+                             rate, one_shot, name, midi_note, offset_hz);
+  if (sw.channels) sw.channels[wave_slot] = channels;
+  if (sw.channels_data) {
+    if (sw.channels_data[wave_slot]) {
+      for (int c = 2; c < sw.channels[wave_slot]; c++) {
+        if (sw.channels_data[wave_slot][c]) free(sw.channels_data[wave_slot][c]);
+      }
+      free(sw.channels_data[wave_slot]);
+    }
+    sw.channels_data[wave_slot] = data_channels;
+  }
+}
+
 void wave_install_memory(int wave_slot, float *table, int len,
                          float rate, int one_shot, const char *name,
                          float midi_note, float offset_hz) {
@@ -1028,7 +1074,13 @@ int wave_load_string(skode_t *ctx, char *name, int wave_index, int ch, int norma
     skred_vfs_free_file(data);
     return SK_ERR_IO;
   } else {
-    if (wav.Channels == 2 && wav.data_right) {
+    if (wav.Channels > 2 && wav.data_channels) {
+      wave_install_memory_multich(wave_index, wav.data_channels, wav.Channels, len, (float)wav.SamplesRate, 1,
+        resolved, 69.0f, (float)len / (float)wav.SamplesRate * 440.0f);
+      for (int c = 0; c < wav.Channels; c++) {
+        normalize_preserve_zero(wav.data_channels[c], len);
+      }
+    } else if (wav.Channels == 2 && wav.data_right) {
       wave_install_memory_stereo(wave_index, table, wav.data_right, len, (float)wav.SamplesRate, 1,
         resolved, 69.0f, (float)len / (float)wav.SamplesRate * 440.0f);
       normalize_preserve_zero(wav.data_right, len);
@@ -1126,7 +1178,13 @@ int wave_load(skode_t *ctx, int file_num, int wave_index, int ch, int normalize)
     skred_vfs_free_file(data);
     return SK_ERR_IO;
   } else {
-    if (wav.Channels == 2 && wav.data_right) {
+    if (wav.Channels > 2 && wav.data_channels) {
+      wave_install_memory_multich(wave_index, wav.data_channels, wav.Channels, len, (float)wav.SamplesRate, 1,
+        resolved, 69.0f, (float)len / (float)wav.SamplesRate * 440.0f);
+      for (int c = 0; c < wav.Channels; c++) {
+        normalize_preserve_zero(wav.data_channels[c], len);
+      }
+    } else if (wav.Channels == 2 && wav.data_right) {
       wave_install_memory_stereo(wave_index, table, wav.data_right, len, (float)wav.SamplesRate, 1,
         resolved, 69.0f, (float)len / (float)wav.SamplesRate * 440.0f);
       normalize_preserve_zero(wav.data_right, len);

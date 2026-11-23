@@ -1,0 +1,16 @@
+@name     channel_pair
+@alias    cp
+@group    voice
+@c_name   skode_clause_channel_pair
+@type     realtime
+@arity    1
+@match    (finite)
+@summary  select stereo channel pair from multi-channel wave
+@doc
+Selects which stereo channel pair this voice plays from a multi-channel wave (0 = ch 0/1, 1 = ch 2/3, etc.).
+Usage: cp pair (or channel_pair pair)
+@code
+    if (voice < 0 || voice >= synth_config.voice_max) return -1;
+    int pair = (int)args[0];
+    return voice_channel_pair_set(voice, pair);
+@end

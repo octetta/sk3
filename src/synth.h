@@ -128,6 +128,10 @@ int voice_wave_range_set(int voice, int start, int end);
 int voice_wave_range_reset(int voice);
 int voice_loop_points_set(int voice, int start, int end);
 int voice_loop_points_reset(int voice);
+int voice_channel_pair_set(int voice, int pair);
+int voice_channel_pair_get(int voice);
+int voice_jump_to_cue(int voice, int cue_idx);
+int voice_jump_to_cue_label(int voice, const char *label);
 double midi2hz(float midi_note, double cents);
 
 void wave_table_init(int flag);

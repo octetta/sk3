@@ -430,7 +430,7 @@ int skode_execute_voice_opcode(const opcode_event_t *opcode, int voice) {
     case SKODE_OP_VELOCITY:
     #if 1
       return opcode->argc == 1 ?
-        skode_linked_velocity(voice, opcode->arg[0], SAMPLE_COUNT_GET()) : -1;
+        skode_linked_velocity(voice, ands_is_tie(opcode->arg[0]) ? skode_double_to_float_note(opcode->arg[0]) : (float)opcode->arg[0], SAMPLE_COUNT_GET()) : -1;
     #else
       if (opcode->argc != 1) return -1;
       {

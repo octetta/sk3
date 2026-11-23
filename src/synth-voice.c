@@ -1,6 +1,7 @@
 #include "synth.h"
 #include "synth-internal.h"
 #include "sk_dsp.h"
+#include "ands.h"
 #include "util.h"
 #include <math.h>
 #include <string.h>
@@ -104,6 +105,7 @@ char *voice_format(int v, char *out, size_t out_size, int verbose) {
           sv.user_amp[v]);
     }
     if (sv.control_events[v]) APPEND(" vc1");
+    if (sv.channel_pair && sv.channel_pair[v] > 0) APPEND(" cp%d", sv.channel_pair[v]);
     if (sv.wave_table_index[v] == WAVE_TABLE_NOISE) {
         if (sv.noise_type[v] == 7) {
             APPEND(" NT7,%d,%d,%d", sv.noise_bits[v], sv.noise_tap[v], sv.noise_dac[v]);
@@ -963,6 +965,10 @@ void voice_reset(int i) {
   sv.source_type[i] = OSC_SOURCE_WAVETABLE;
   sv.table_right[i] = NULL;
   sv.sample_r[i] = 0.0f;
+  if (sv.paused) sv.paused[i] = 0;
+  if (sv.pause_gain) sv.pause_gain[i] = 1.0f;
+  if (sv.cue_cursor) sv.cue_cursor[i] = 0;
+  if (sv.channel_pair) sv.channel_pair[i] = 0;
   sv.amp_envelope_mode[i] = 0; // exp
   sv.amp_envelope[i].is_active = 0;
   envelope_init(i, 0.0f, 0.0f, 1.0f, 0.0f);
@@ -1058,8 +1064,77 @@ int wave_reset(int voice) {
   return 0;
 }
 
+int voice_channel_pair_set(int voice, int pair) {
+    if (voice_invalid(voice)) return SYNTH_INVALID_VOICE;
+    if (pair < 0) pair = 0;
+    if (sv.channel_pair) sv.channel_pair[voice] = pair;
+    int wave = sv.wave_table_index[voice];
+    if (!wave_invalid(wave)) {
+        int ch_left = pair * 2;
+        int ch_right = pair * 2 + 1;
+        if (sw.channels_data && sw.channels_data[wave] && ch_right < sw.channels[wave]) {
+            sv.table[voice] = sw.channels_data[wave][ch_left];
+            if (sv.table_right) sv.table_right[voice] = sw.channels_data[wave][ch_right];
+        } else if (sw.data_right && sw.channels && sw.channels[wave] == 2 && pair == 0) {
+            sv.table[voice] = sw.data[wave];
+            if (sv.table_right) sv.table_right[voice] = sw.data_right[wave];
+        } else {
+            sv.table[voice] = sw.data[wave];
+            if (sv.table_right) sv.table_right[voice] = NULL;
+        }
+    }
+    return 0;
+}
+
+int voice_channel_pair_get(int voice) {
+    if (voice_invalid(voice) || !sv.channel_pair) return 0;
+    return sv.channel_pair[voice];
+}
+
+int voice_jump_to_cue(int voice, int cue_idx) {
+    if (voice_invalid(voice)) return SYNTH_INVALID_VOICE;
+    int wave = sv.wave_table_index[voice];
+    if (wave_invalid(wave) || !sw.cues || !sw.num_cues || !sw.cues[wave]) {
+        return -1;
+    }
+    if (cue_idx < 0 || cue_idx >= sw.num_cues[wave]) {
+        return -1;
+    }
+    sk_cue_t *c = &sw.cues[wave][cue_idx];
+    sv.phase[voice] = (double)c->start;
+    if (sv.cue_cursor) sv.cue_cursor[voice] = cue_idx;
+    return 0;
+}
+
+int voice_jump_to_cue_label(int voice, const char *label) {
+    if (voice_invalid(voice) || !label) return SYNTH_INVALID_VOICE;
+    int wave = sv.wave_table_index[voice];
+    if (wave_invalid(wave) || !sw.cues || !sw.num_cues || !sw.cues[wave]) {
+        return -1;
+    }
+    for (int i = 0; i < sw.num_cues[wave]; i++) {
+        if (strcmp(sw.cues[wave][i].label, label) == 0) {
+            return voice_jump_to_cue(voice, i);
+        }
+    }
+    return -1;
+}
+
 int envelope_velocity(int voice, float f) {
     if (voice_invalid(voice)) return SYNTH_INVALID_VOICE;
+    if (skode_float_is_tie(f)) {
+        if (sv.paused && sv.paused[voice]) {
+            sv.paused[voice] = 0;
+            skred_control_voice_event(SKRED_CONTROL_EVENT_VOICE_TRIGGER,
+              SAMPLE_COUNT_GET(), voice);
+        } else {
+            if (sv.paused) sv.paused[voice] = 1;
+            skred_control_voice_event(SKRED_CONTROL_EVENT_VOICE_RELEASE,
+              SAMPLE_COUNT_GET(), voice);
+        }
+        return 0;
+    }
+    if (sv.paused) sv.paused[voice] = 0;
     if (isnan(f)) f = 0.0f;
     if (f < 0 && sv.one_shot[voice]) {
         sv.loop_stop_requested[voice] = 0;

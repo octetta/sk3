@@ -23,6 +23,7 @@ typedef struct {
     char      DataSubchunkID[4];
     uint32_t  DataSubchunkSize;
     float    *data_right;
+    float   **data_channels;
 } wav_t;
 
 
@@ -193,6 +194,8 @@ void wave_install_memory(int wave_slot, float *table, int len,
     float rate, int one_shot, const char *name, float midi_note, float offset_hz);
 void wave_install_memory_stereo(int wave_slot, float *table_left, float *table_right, int len,
     float rate, int one_shot, const char *name, float midi_note, float offset_hz);
+void wave_install_memory_multich(int wave_slot, float **data_channels, int channels, int len,
+    float rate, int one_shot, const char *name, float midi_note, float offset_hz);
 extern synth_sample_t sampling;
 int skode_sample_alloc(int frames);
 int skode_load_buffer(skode_t *ctx, const char *data, size_t size,
@@ -246,6 +249,7 @@ void print_audio_braille_labeled(skode_t *ctx, float *data, int n, int width_cha
 int wavetable_show(skode_t *ctx, int n);
 int wavetable_summary_show(skode_t *ctx, int n);
 void wavetable_waveform_show(skode_t *ctx, int wave, int width, int height, int loop_start, int loop_end, const char *label);
+void wavetable_waveform_show_ex(skode_t *ctx, int wave, int width, int height, int loop_start, int loop_end, int playhead_phase, int voice_idx, const char *label);
 void spectro_fft(spectro_cplx_t *buf, int n);
 int spectro_next_pow2(int x);
 int skode_spectrogram_color_mode(void);
@@ -300,7 +304,7 @@ void skode_stream_pos(void *ctx, int n, int pos);
 void skode_stream_gen(void *ctx, int n, double min, double max, double step);
 
 #define WAVE_DISPLAY_DEFAULT_WIDTH 60
-#define WAVE_DISPLAY_DEFAULT_HEIGHT 12
+#define WAVE_DISPLAY_DEFAULT_HEIGHT 4
 #define WAVE_DISPLAY_MIN_WIDTH 8
 #define WAVE_DISPLAY_MAX_WIDTH 160
 #define WAVE_DISPLAY_MIN_HEIGHT 2
@@ -505,7 +509,7 @@ int skode_exec__qr(skode_t *ctx, ands_t *s, const double *arg, int argc);
 int skode_exec__slash(skode_t *ctx, ands_t *s, const double *arg, int argc);
 
 #define WAVE_DISPLAY_DEFAULT_WIDTH 60
-#define WAVE_DISPLAY_DEFAULT_HEIGHT 12
+#define WAVE_DISPLAY_DEFAULT_HEIGHT 4
 #define WAVE_DISPLAY_MIN_WIDTH 8
 #define WAVE_DISPLAY_MAX_WIDTH 160
 #define WAVE_DISPLAY_MIN_HEIGHT 2

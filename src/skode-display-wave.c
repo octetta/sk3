@@ -115,6 +115,86 @@ void print_wave_marker_row(skode_t *ctx, int n, int width, int start, int end,
     ctx->puts(ctx, "");
 }
 
+void print_wave_timeline(skode_t *ctx, int n, int width, int start, int end,
+                         int playhead_phase, int voice_idx, int wave, int braille) {
+    if (!ctx || n <= 0 || width <= 0) return;
+    if (start < 0) start = 0;
+    if (end < 0) end = 0;
+    if (start > n) start = n;
+    if (end > n) end = n;
+    if (end < start) {
+        int tmp = end;
+        end = start;
+        start = tmp;
+    }
+
+    int col_start = wave_boundary_col(start, n, width);
+    int col_end = wave_boundary_col(end, n, width);
+    if (col_end < col_start) {
+        int tmp = col_end;
+        col_end = col_start;
+        col_start = tmp;
+    }
+
+    /* 1. Cue marker row (if cues exist) */
+    if (wave >= 0 && sw.num_cues && sw.num_cues[wave] > 0) {
+        char cue_row[256];
+        int max_w = width < (int)sizeof(cue_row) - 1 ? width : (int)sizeof(cue_row) - 1;
+        memset(cue_row, ' ', max_w);
+        cue_row[max_w] = '\0';
+        for (int c = 0; c < sw.num_cues[wave]; c++) {
+            int col = wave_boundary_col((int)sw.cues[wave][c].start, n, width);
+            if (col >= 0 && col < max_w) {
+                cue_row[col] = (c < 10) ? ('0' + c) : ((c < 36) ? ('a' + c - 10) : 'v');
+            }
+        }
+        ctx->printf(ctx, "# cue :|%s|\n", cue_row);
+    }
+
+    /* 2. Loop boundary row */
+    if (braille) {
+        print_braille_cell(ctx, 0xFF);
+        for (int x = 0; x < width; x++) {
+            unsigned int pattern = 0;
+            if (x >= col_start && x <= col_end) pattern |= 0x12; /* dots 2,5 */
+            if (x == col_start) pattern |= 0x47; /* left column */
+            if (x == col_end) pattern |= 0xB8;   /* right column */
+            print_braille_cell(ctx, pattern);
+        }
+        print_braille_cell(ctx, 0xFF);
+        ctx->puts(ctx, "");
+    } else {
+        ctx->printf(ctx, "# loop:|");
+        for (int x = 0; x < width; x++) {
+            char ch = '.';
+            if (x >= col_start && x <= col_end) ch = '=';
+            if (x == col_start) ch = '[';
+            if (x == col_end) ch = ']';
+            if (col_start == col_end && x == col_start) ch = '|';
+            ctx->printf(ctx, "%c", ch);
+        }
+        ctx->printf(ctx, "|\n");
+    }
+
+    /* 3. Voice playhead row (if active) */
+    if (playhead_phase >= 0) {
+        char play_row[256];
+        int max_w = width < (int)sizeof(play_row) - 1 ? width : (int)sizeof(play_row) - 1;
+        memset(play_row, ' ', max_w);
+        play_row[max_w] = '\0';
+        int col_play = wave_boundary_col(playhead_phase, n, width);
+        if (col_play >= 0 && col_play < max_w) {
+            play_row[col_play] = '^';
+        }
+        double rate = (wave >= 0 && sw.rate && sw.rate[wave] > 0.0f) ? sw.rate[wave] : (float)MAIN_SAMPLE_RATE;
+        double pms = wave_samples_to_ms(playhead_phase, rate);
+        int is_paused = (voice_idx >= 0 && sv.paused && sv.paused[voice_idx]);
+        ctx->printf(ctx, "# play:|%s| (v%d phase %d smp / %.1f ms%s)\n",
+                    play_row, voice_idx >= 0 ? voice_idx : 0, playhead_phase, pms,
+                    is_paused ? " [PAUSED]" : "");
+    }
+}
+
 int skode_env_eq(const char *a, const char *b) {
     if (!a || !b) return 0;
     while (*a && *b) {
@@ -335,7 +415,7 @@ void print_audio_braille_connected(skode_t *ctx, float *data, int n, int width_c
     free(y_peak_max);
 }
 
-void print_audio_braille_labeled(skode_t *ctx, float *data, int n, int width_chars, int height_chars, int offset, int trim) {
+void print_audio_braille_labeled_ex(skode_t *ctx, float *data, int n, int width_chars, int height_chars, int offset, int trim, int playhead_phase, int voice_idx, int wave) {
     if (!skode_wave_display_use_braille()) {
         print_audio_ascii_wave(ctx, data, n, width_chars, height_chars, offset, trim, 1);
         return;
@@ -423,11 +503,15 @@ void print_audio_braille_labeled(skode_t *ctx, float *data, int n, int width_cha
         ctx->printf(ctx, ":\n");
     }
 
-    print_wave_marker_row(ctx, n, width_chars, offset, trim, 1);
+    print_wave_timeline(ctx, n, width_chars, offset, trim, playhead_phase, voice_idx, wave, 1);
 
     free(y_coords);
     free(y_peak_min);
     free(y_peak_max);
+}
+
+void print_audio_braille_labeled(skode_t *ctx, float *data, int n, int width_chars, int height_chars, int offset, int trim) {
+    print_audio_braille_labeled_ex(ctx, data, n, width_chars, height_chars, offset, trim, -1, -1, -1);
 }
 
 int wavetable_summary_show(skode_t *ctx, int n) {
@@ -519,6 +603,14 @@ int wavetable_show(skode_t *ctx, int n) {
   WTWFS(wave_samples_to_ms(size, rate));
   if (readonly) ctx->printf(ctx, " R/O"); else ctx->printf(ctx, " R/W");
   ctx->printf(ctx, " ref#%d", refcount);
+  int chs = sw.channels ? sw.channels[n] : 1;
+  if (chs > 2) {
+    ctx->printf(ctx, " (%d-channel, %d pairs)", chs, chs / 2);
+  } else if (chs == 2) {
+    ctx->printf(ctx, " (stereo)");
+  } else {
+    ctx->printf(ctx, " (mono)");
+  }
   if (sw.mip_levels && sw.mip_levels[n] > 0) {
     ctx->printf(ctx, " (%d tables)", sw.mip_levels[n]);
   }
@@ -568,9 +660,10 @@ int wavetable_show(skode_t *ctx, int n) {
   return 0;
 }
 
-void wavetable_waveform_show(skode_t *ctx, int wave, int width, int height,
-                                    int loop_start, int loop_end,
-                                    const char *label) {
+void wavetable_waveform_show_ex(skode_t *ctx, int wave, int width, int height,
+                                int loop_start, int loop_end,
+                                int playhead_phase, int voice_idx,
+                                const char *label) {
   if (!skode_wave_valid(wave)) return;
   if (!sw.data[wave] || sw.size[wave] <= 0) {
     if (label && label[0]) ctx->printf(ctx, "# %s\n", label);
@@ -579,8 +672,8 @@ void wavetable_waveform_show(skode_t *ctx, int wave, int width, int height,
   }
   wavetable_show(ctx, wave);
   if (label && label[0]) ctx->printf(ctx, "# %s\n", label);
-  print_audio_braille_labeled(ctx, sw.data[wave], sw.size[wave], width, height,
-    loop_start, loop_end);
+  print_audio_braille_labeled_ex(ctx, sw.data[wave], sw.size[wave], width, height,
+    loop_start, loop_end, playhead_phase, voice_idx, wave);
   ctx->printf(ctx, "# wave [0..%d) baseline", sw.size[wave]);
   double rate = sw.rate[wave] > 0.0f ? sw.rate[wave] : (float)MAIN_SAMPLE_RATE;
   double ms = wave_samples_to_ms(sw.size[wave], rate);
@@ -589,6 +682,12 @@ void wavetable_waveform_show(skode_t *ctx, int wave, int width, int height,
   double lms = wave_samples_to_ms(loop_end - loop_start, rate);
   WTWFS(lms);
   ctx->puts(ctx, "");
+}
+
+void wavetable_waveform_show(skode_t *ctx, int wave, int width, int height,
+                             int loop_start, int loop_end,
+                             const char *label) {
+  wavetable_waveform_show_ex(ctx, wave, width, height, loop_start, loop_end, -1, -1, label);
 }
 
 void spectro_fft(spectro_cplx_t *buf, int n) {
