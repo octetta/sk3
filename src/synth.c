@@ -652,6 +652,9 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
       }
 
       sv.sample[n] *= final;
+      if (sv.sample_r) {
+        sv.sample_r[n] *= final;
+      }
 
       if (sv.freq_mod_mode[n] == 2 && sv.freq_mod_feedback[n] > 0.0f) {
         sv.freq_mod_feedback_z2[n] = sv.freq_mod_feedback_z1[n];

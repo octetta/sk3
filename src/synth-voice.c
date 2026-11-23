@@ -1068,6 +1068,8 @@ int envelope_velocity(int voice, float f) {
         sv.filter_envelope[voice].is_active = 0;
         sv.cz_envelope[voice].is_active = 0;
         sv.finished[voice] = 1;
+        sv.sample[voice] = 0.0f;
+        if (sv.sample_r) sv.sample_r[voice] = 0.0f;
         skred_control_voice_event(SKRED_CONTROL_EVENT_VOICE_RELEASE,
           SAMPLE_COUNT_GET(), voice);
         return 0;

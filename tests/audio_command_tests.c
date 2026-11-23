@@ -6,6 +6,7 @@
 #include "skode.h"
 #include "synth.h"
 #include "synth-types.h"
+#include "skode-internal.h"
 
 static int failures;
 
@@ -212,6 +213,58 @@ int main(void) {
     skode_consume("v0 jd 0.0", &sk_filt);
     expect(sv.filter[0].drive == 0.0f, "jd 0.0 resets voice filter drive to clean");
     skode_free(&sk_filt); wave_free(); synth_free();
+  }
+
+  // Verify stereo sample playback and l0 stopping both channels
+  {
+    synth_init(8); wave_table_init(0); voice_init();
+    synth_sample_rate_set(48000);
+    skode_t sk_stereo = SKODE_EMPTY();
+    skode_init(&sk_stereo);
+
+    int len = 48000;
+    float *t_left = (float *)calloc(len, sizeof(float));
+    float *t_right = (float *)calloc(len, sizeof(float));
+    for (int i = 0; i < len; i++) {
+      t_left[i] = 0.5f;
+      t_right[i] = 0.8f;
+    }
+    wave_install_memory_stereo(100, t_left, t_right, len, 48000.0f, 0, "stereo-test", 60.0f, 0.0f);
+
+    wave_set(0, 100);
+    freq_set(0, 440.0f);
+    amp_set(0, 0.0f);
+    envelope_velocity(0, 1.0f);
+    float buf[256];
+    float l_active = 0.0f, r_active = 0.0f;
+    for (int b = 0; b < 10; b++) {
+      memset(buf, 0, sizeof(buf));
+      synth(&skred_global_engine, buf, NULL, 128, 2, NULL);
+      for (int i = 0; i < 128; i++) {
+        if (fabsf(buf[i * 2 + 0]) > l_active) l_active = fabsf(buf[i * 2 + 0]);
+        if (fabsf(buf[i * 2 + 1]) > r_active) r_active = fabsf(buf[i * 2 + 1]);
+      }
+    }
+    expect(l_active > 0.1f, "stereo sample left channel active on l1");
+    expect(r_active > 0.1f, "stereo sample right channel active on l1");
+
+    // Release voice with l0 and process beyond release stage
+    envelope_velocity(0, 0.0f);
+    for (int f = 0; f < 20; f++) {
+      memset(buf, 0, sizeof(buf));
+      synth(&skred_global_engine, buf, NULL, 128, 2, NULL);
+    }
+    float l_silent = 0.0f, r_silent = 0.0f;
+    for (int i = 0; i < 128; i++) {
+      if (fabsf(buf[i * 2 + 0]) > l_silent) l_silent = fabsf(buf[i * 2 + 0]);
+      if (fabsf(buf[i * 2 + 1]) > r_silent) r_silent = fabsf(buf[i * 2 + 1]);
+    }
+    expect(l_silent < 1e-4f, "stereo sample left channel mutes completely after l0");
+    expect(r_silent < 1e-4f, "stereo sample right channel mutes completely after l0");
+
+    skode_free(&sk_stereo);
+    wave_free();
+    synth_free();
   }
 
   // Verify skred_set_string and skred_get_string for drag-and-drop ANDS integration

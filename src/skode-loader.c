@@ -586,6 +586,14 @@ void wave_install_memory_stereo(int wave_slot, float *table_left, float *table_r
   sw.direction[wave_slot] = 0.0f;
   sw.midi_note[wave_slot] = midi_note;
   sw.offset_hz[wave_slot] = offset_hz;
+  if (sw.eval_ms) sw.eval_ms[wave_slot] = 0.0f;
+  if (sw.source) {
+    if (sw.source_is_heap && sw.source_is_heap[wave_slot] && sw.source[wave_slot]) {
+      free((void *)sw.source[wave_slot]);
+    }
+    sw.source[wave_slot] = NULL;
+  }
+  if (sw.source_is_heap) sw.source_is_heap[wave_slot] = 0;
 }
 
 void wave_install_memory(int wave_slot, float *table, int len,

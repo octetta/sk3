@@ -455,7 +455,7 @@ int wavetable_summary_show(skode_t *ctx, int n) {
   float rate = sw.rate[n] > 0.0f ? sw.rate[n] : (float)MAIN_SAMPLE_RATE;
   float ms = (float)size * 1000.0f / rate;
   char eval_buf[32] = "";
-  if (sw.eval_ms && sw.eval_ms[n] > 0.0f) {
+  if (sw.eval_ms && sw.eval_ms[n] > 0.0f && sw.source && sw.source[n] && sw.source[n][0] != '\0') {
     snprintf(eval_buf, sizeof(eval_buf), " | %5.2f ms eval", sw.eval_ms[n]);
   }
   
@@ -548,7 +548,7 @@ int wavetable_show(skode_t *ctx, int n) {
     stats.min, stats.max, stats.peak, stats.rms, stats.dc, stats.zero_crossings);
   if (stats.clipped) ctx->printf(ctx, " clip %d", stats.clipped);
   ctx->puts(ctx, "");
-  if (sw.eval_ms && sw.eval_ms[n] > 0.0f) {
+  if (sw.eval_ms && sw.eval_ms[n] > 0.0f && sw.source && sw.source[n] && sw.source[n][0] != '\0') {
     ctx->printf(ctx, "# ksynth eval: %.3f ms\n", sw.eval_ms[n]);
   }
   if (ctx->trace && sw.source && sw.source[n] && sw.source[n][0] != '\0') {

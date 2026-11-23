@@ -428,29 +428,8 @@ static void synth_init_ksynth_drums(void) {
 }
 
 static void synth_init_ksynth_base_waves(void) {
-#ifdef KSYNTH
-  static const struct {
-    int slot;
-    const char *name;
-    const char *ks_code;
-  } base_waves[] = {
-    {
-      WAVE_TABLE_SINE, "sine",
-      "/ Fundamental bandlimited sine wave\n"
-      "P: ~4096\n"
-      "W: w s P\n"
-    },
-    { 0, NULL, NULL }
-  };
-
-  for (int idx = 0; base_waves[idx].name != NULL; idx++) {
-    int w = base_waves[idx].slot;
-    synth_eval_and_register_ks_wave(w, base_waves[idx].name, base_waves[idx].ks_code, 0);
-    if (sw.data[w]) {
-      sw.rate[w] = MAIN_SAMPLE_RATE;
-    }
-  }
-#endif
+  // Base waves w0..w4 are purely built-in (w0: analytic sinf table, w1..w4: PolyBLEP).
+  // None of them need ksynth evaluation at startup.
 }
 
 void wave_table_init(int flag) {
@@ -588,7 +567,7 @@ void wave_table_init(int flag) {
   synth_init_ksynth_esq1();
   synth_init_ksynth_drums();
 
-  for (int w = WAVE_TABLE_SINE; w <= WAVE_TABLE_KRG32; w++) {
+  for (int w = WAVE_TABLE_KRG1; w <= WAVE_TABLE_KRG32; w++) {
     if (wave_invalid(w)) continue;
     if (w == WAVE_TABLE_NOISE || w == WAVE_TABLE_NOISE_ALT) continue;
     if (w >= WAVE_TABLE_CAP_1 && w <= WAVE_TABLE_CONTROL) continue;
@@ -630,6 +609,14 @@ void wave_free_one(int i) {
     sw.cues[i] = NULL;
   }
   if (sw.num_cues) sw.num_cues[i] = 0;
+  if (sw.eval_ms) sw.eval_ms[i] = 0.0f;
+  if (sw.source) {
+    if (sw.source_is_heap && sw.source_is_heap[i] && sw.source[i]) {
+      free((void *)sw.source[i]);
+    }
+    sw.source[i] = NULL;
+  }
+  if (sw.source_is_heap) sw.source_is_heap[i] = 0;
 }
 
 void wave_free(void) {
