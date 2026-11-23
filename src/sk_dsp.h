@@ -1,6 +1,6 @@
 /*
  * sk_dsp.h - Header-Only Modern Audio DSP & Physical Modeling Synthesis Library
- * Version 1.4.13
+ * Version 1.5.0
  *
  * Repository: https://github.com/octetta/sk3
  * Path: src/sk_dsp.h
@@ -30,9 +30,9 @@
 #define SK_DSP_H
 
 #define SK_DSP_VERSION_MAJOR 1
-#define SK_DSP_VERSION_MINOR 4
-#define SK_DSP_VERSION_PATCH 13
-#define SK_DSP_VERSION_STRING "1.4.13"
+#define SK_DSP_VERSION_MINOR 5
+#define SK_DSP_VERSION_PATCH 0
+#define SK_DSP_VERSION_STRING "1.5.0"
 
 #include <math.h>
 #include <stdint.h>
