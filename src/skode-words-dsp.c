@@ -1945,6 +1945,8 @@ typedef enum {
 typedef struct {
   dsl_family_t family;
   dsl_preset_t preset;
+  char family_str[32];
+  char preset_str[32];
   char preset_name[32];
   float freq;
   float midi_note;
@@ -2033,8 +2035,39 @@ static float parse_dsl_pitch(const char *val, float default_val, float *out_midi
   return default_val;
 }
 
-static int find_sustain_loop(const float *audio, int len, float freq, float sample_rate, int *loop_start, int *loop_end) {
-  if (!audio || len < 256 || freq < 20.0f || sample_rate < 1000.0f) return 0;
+static int find_sustain_loop_correlate(const float *audio, int len, float freq, float sample_rate, int *loop_start, int *loop_end, float *best_corr_out) {
+  if (!audio || len < 256 || sample_rate < 1000.0f) return 0;
+
+  /* If pitch is unknown or <= 20Hz, detect fundamental period via autocorrelation */
+  if (freq < 20.0f) {
+    int auto_start = (int)(sample_rate * 0.15f);
+    if (auto_start > len / 4) auto_start = len / 4;
+    int auto_len = (int)(sample_rate * 0.25f);
+    if (auto_start + auto_len >= len) auto_len = len - auto_start - 1;
+
+    int min_lag = (int)(sample_rate / 2000.0f); /* max 2000 Hz */
+    int max_lag = (int)(sample_rate / 40.0f);   /* min 40 Hz */
+    if (min_lag < 4) min_lag = 4;
+    if (max_lag >= auto_len / 2) max_lag = auto_len / 2 - 1;
+
+    int best_lag = 0;
+    float best_r = -1e9f;
+    for (int lag = min_lag; lag <= max_lag; lag++) {
+      float sum = 0.0f;
+      for (int i = 0; i < auto_len - lag; i++) {
+        sum += audio[auto_start + i] * audio[auto_start + i + lag];
+      }
+      if (sum > best_r) {
+        best_r = sum;
+        best_lag = lag;
+      }
+    }
+    if (best_lag > 0) {
+      freq = sample_rate / (float)best_lag;
+    } else {
+      freq = 220.0f;
+    }
+  }
 
   float period = sample_rate / freq;
   if (period < 2.0f || period > (float)(len / 3)) return 0;
@@ -2044,16 +2077,6 @@ static int find_sustain_loop(const float *audio, int len, float freq, float samp
   if (search_start > len / 3) search_start = len / 4;
   if (search_start + (int)(period * 3.0f) >= len) return 0;
 
-  /* Find first positive-going zero crossing at or after search_start */
-  int start_idx = -1;
-  for (int i = search_start; i < search_start + (int)(period * 2.5f) && i < len - 2; i++) {
-    if (audio[i] <= 0.0f && audio[i + 1] > 0.0f) {
-      start_idx = i;
-      break;
-    }
-  }
-  if (start_idx < 0) return 0;
-
   /* Target loop duration ~250-350ms, containing integer k periods */
   float target_sec = 0.28f;
   int k = (int)(target_sec * freq + 0.5f);
@@ -2061,43 +2084,341 @@ static int find_sustain_loop(const float *audio, int len, float freq, float samp
 
   int max_end = len - (int)(sample_rate * 0.20f); /* leave release tail */
   if (max_end < search_start + (int)(period * 4.0f)) max_end = len - (int)(sample_rate * 0.04f);
-  int nominal_end = start_idx + (int)(k * period + 0.5f);
-  while (nominal_end >= max_end && k > 1) {
-    k--;
-    nominal_end = start_idx + (int)(k * period + 0.5f);
-  }
-  if (k < 1 || nominal_end >= max_end) return 0;
 
-  /* Search around nominal_end for the zero crossing with matching slope */
-  float start_slope = audio[start_idx + 1] - audio[start_idx];
-  int radius = (int)(period * 0.6f);
-  if (radius < 2) radius = 2;
+  int best_s = -1, best_e = -1;
+  float best_score = -1e9f;
+  float best_corr = 0.0f;
+  int corr_win = (int)period;
+  if (corr_win < 32) corr_win = 32;
+  if (corr_win > 256) corr_win = 256;
 
-  int best_end = -1;
-  float best_diff = 1e9f;
+  int start_scan_end = search_start + (int)(period * 2.5f);
+  if (start_scan_end >= len - 2) start_scan_end = len - 2;
 
-  int scan_min = nominal_end - radius;
-  int scan_max = nominal_end + radius;
-  if (scan_min <= start_idx + (int)period) scan_min = start_idx + (int)period + 1;
-  if (scan_max >= len - 2) scan_max = len - 2;
+  for (int s_idx = search_start; s_idx < start_scan_end; s_idx++) {
+    if (audio[s_idx] <= 0.0f && audio[s_idx + 1] > 0.0f) {
+      float s_slope = audio[s_idx + 1] - audio[s_idx];
+      int nominal_end = s_idx + (int)(k * period + 0.5f);
+      while (nominal_end >= max_end && k > 1) {
+        k--;
+        nominal_end = s_idx + (int)(k * period + 0.5f);
+      }
+      if (k < 1 || nominal_end >= max_end) continue;
 
-  for (int j = scan_min; j <= scan_max; j++) {
-    if (audio[j] <= 0.0f && audio[j + 1] > 0.0f) {
-      float slope = audio[j + 1] - audio[j];
-      float diff = fabsf(slope - start_slope) + fabsf(audio[j] - audio[start_idx]);
-      if (diff < best_diff) {
-        best_diff = diff;
-        best_end = j;
+      int radius = (int)(period * 0.6f);
+      if (radius < 2) radius = 2;
+      int scan_min = nominal_end - radius;
+      int scan_max = nominal_end + radius;
+      if (scan_min <= s_idx + (int)period) scan_min = s_idx + (int)period + 1;
+      if (scan_max >= len - corr_win - 2) scan_max = len - corr_win - 2;
+
+      for (int e_idx = scan_min; e_idx <= scan_max; e_idx++) {
+        if (audio[e_idx] <= 0.0f && audio[e_idx + 1] > 0.0f) {
+          float e_slope = audio[e_idx + 1] - audio[e_idx];
+
+          float sum_xy = 0.0f, sum_xx = 0.0f, sum_yy = 0.0f;
+          for (int w = 0; w < corr_win; w++) {
+            float x = audio[s_idx + w];
+            float y = audio[e_idx + w];
+            sum_xy += x * y;
+            sum_xx += x * x;
+            sum_yy += y * y;
+          }
+          float denom = sqrtf(sum_xx * sum_yy) + 1e-9f;
+          float corr = sum_xy / denom;
+
+          float slope_diff = fabsf(e_slope - s_slope) / (fabsf(s_slope) + fabsf(e_slope) + 1e-6f);
+          float val_diff = fabsf(audio[s_idx] - audio[e_idx]);
+
+          float score = corr * 10.0f - slope_diff * 3.0f - val_diff * 5.0f;
+          if (score > best_score) {
+            best_score = score;
+            best_corr = corr;
+            best_s = s_idx;
+            best_e = e_idx;
+          }
+        }
       }
     }
   }
 
-  if (best_end > start_idx + 8) {
-    if (loop_start) *loop_start = start_idx;
-    if (loop_end) *loop_end = best_end;
+  if (best_e > best_s + 8 && best_s >= 0) {
+    if (loop_start) *loop_start = best_s;
+    if (loop_end) *loop_end = best_e;
+    if (best_corr_out) *best_corr_out = best_corr;
     return 1;
   }
   return 0;
+}
+
+static int find_sustain_loop(const float *audio, int len, float freq, float sample_rate, int *loop_start, int *loop_end) {
+  return find_sustain_loop_correlate(audio, len, freq, sample_rate, loop_start, loop_end, NULL);
+}
+
+int skode_exec_wave_findloop(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  (void)s;
+  if (!ctx || !ctx->parse) return -1;
+
+  int wave_slot = -1;
+  float pitch_hint = 0.0f;
+
+  if (argc > 0 && skode_double_to_int(arg[0], &wave_slot)) {
+    /* Slot explicitly passed */
+  } else if (ctx->voice >= 0 && ctx->voice < synth_config.voice_max) {
+    wave_slot = sv.wave_table_index[ctx->voice];
+  } else {
+    wave_slot = 0;
+  }
+
+  if (!skode_wave_valid(wave_slot) || !sw.data[wave_slot] || sw.size[wave_slot] < 512) {
+    ctx->printf(ctx, "# findloop: invalid or empty wave slot %d\n", wave_slot);
+    return -1;
+  }
+
+  if (argc > 1) {
+    pitch_hint = (float)arg[1];
+  } else if (sw.midi_note[wave_slot] > 0.0f) {
+    pitch_hint = sk_mtof(sw.midi_note[wave_slot]);
+  }
+
+  float *audio = sw.data[wave_slot];
+  int len = sw.size[wave_slot];
+  float rate = sw.rate[wave_slot] > 0.0f ? sw.rate[wave_slot] : (float)MAIN_SAMPLE_RATE;
+
+  int loop_start = 0, loop_end = 0;
+  float best_corr = 0.0f;
+  int ok = find_sustain_loop_correlate(audio, len, pitch_hint, rate, &loop_start, &loop_end, &best_corr);
+
+  if (!ok) {
+    ctx->printf(ctx, "# findloop: no stable sustain loop detected for w%d (%d samples)\n", wave_slot, len);
+    return 0;
+  }
+
+  /* Apply loop points directly to wavetable slot */
+  wave_loop_points_set(wave_slot, loop_start, loop_end);
+  sw.loop_enabled[wave_slot] = 1;
+  sw.one_shot[wave_slot] = 0;
+
+  /* Format standard metadata string into ctx->parse */
+  char meta_buf[256];
+  snprintf(meta_buf, sizeof(meta_buf), "[mode:sample loop:%d,%d one_shot:0 rate:%.0f root:%.1f]",
+           loop_start, loop_end, rate, sw.midi_note[wave_slot] > 0.0f ? sw.midi_note[wave_slot] : 69.0f);
+  ands_string_from_external(ctx->parse, meta_buf, (int)strlen(meta_buf));
+
+  ctx->printf(ctx, "# findloop: w%d loop points set to %d..%d (len=%d samples, %.2f ms, corr=%.3f)\n",
+              wave_slot, loop_start, loop_end, loop_end - loop_start,
+              (double)(loop_end - loop_start) * 1000.0 / rate, best_corr);
+  return 0;
+}
+
+/* Extensible Generator Registry Architecture */
+typedef int (*sk_gen_fn)(skode_t *ctx, const char *domain, const char *instrument, const dsl_params_t *params, float *out_buf, int total_samples, float rate);
+
+typedef struct {
+  char domain[32];
+  sk_gen_fn handler;
+  char description[64];
+} sk_gen_entry_t;
+
+#define SK_GEN_REGISTRY_MAX 32
+static sk_gen_entry_t s_gen_registry[SK_GEN_REGISTRY_MAX];
+static int s_gen_registry_count = 0;
+
+int sk_gen_register(const char *domain, sk_gen_fn handler, const char *description) {
+  if (!domain || !handler) return -1;
+  for (int i = 0; i < s_gen_registry_count; i++) {
+    if (strcasecmp(s_gen_registry[i].domain, domain) == 0) {
+      s_gen_registry[i].handler = handler;
+      if (description) strncpy(s_gen_registry[i].description, description, sizeof(s_gen_registry[i].description) - 1);
+      return 0;
+    }
+  }
+  if (s_gen_registry_count >= SK_GEN_REGISTRY_MAX) return -1;
+  strncpy(s_gen_registry[s_gen_registry_count].domain, domain, sizeof(s_gen_registry[s_gen_registry_count].domain) - 1);
+  s_gen_registry[s_gen_registry_count].handler = handler;
+  if (description) strncpy(s_gen_registry[s_gen_registry_count].description, description, sizeof(s_gen_registry[s_gen_registry_count].description) - 1);
+  s_gen_registry_count++;
+  return 0;
+}
+
+sk_gen_fn sk_gen_lookup(const char *domain) {
+  if (!domain) return NULL;
+  for (int i = 0; i < s_gen_registry_count; i++) {
+    if (strcasecmp(s_gen_registry[i].domain, domain) == 0) {
+      return s_gen_registry[i].handler;
+    }
+  }
+  return NULL;
+}
+
+static int sk_gen_drum_render(skode_t *ctx, const char *domain, const char *instrument, const dsl_params_t *p, float *buf, int total_samples, float rate) {
+  (void)ctx; (void)domain;
+  if (p->preset == DSL_DRUM_SNARE) {
+    sk_drum_snare_t sn;
+    sk_drum_snare_init(&sn, rate);
+    if (p->f1 > 20.0f) sn.f1 = p->f1;
+    if (p->f2 > 20.0f) sn.f2 = p->f2;
+    if (p->snap >= 0.0f) sn.snappy_mix = sk_clampf(p->snap, 0.0f, 1.0f);
+    if (p->decay > 0.01f) sn.body_decay_coeff = expf(-1.0f / (p->decay * rate));
+    if (p->tail > 0.01f) sn.noise_decay_coeff = expf(-1.0f / (p->tail * rate));
+    if (p->freq > 100.0f) sk_biquad_init(&sn.noise_filter, SK_BIQUAD_BANDPASS, p->freq, 1.5f, rate);
+    sk_drum_snare_trigger(&sn, p->velocity > 0.0f ? p->velocity : 1.0f);
+    for (int i = 0; i < total_samples; i++) buf[i] = sk_drum_snare_step(&sn);
+  } else if (p->preset == DSL_DRUM_HAT) {
+    sk_drum_hat_t h;
+    sk_drum_hat_init(&h, rate);
+    sk_drum_hat_trigger(&h, p->velocity > 0.0f ? p->velocity : 1.0f, p->hat_open);
+    if (p->decay > 0.005f) h.amp_decay_coeff = expf(-1.0f / (p->decay * rate));
+    for (int i = 0; i < total_samples; i++) buf[i] = sk_drum_hat_step(&h);
+  } else if (p->preset == DSL_DRUM_CLAP) {
+    sk_drum_clap_t cl;
+    sk_drum_clap_init(&cl, rate);
+    if (p->spread > 1.0f) cl.burst_spacing = (int)(p->spread * 0.001f * rate);
+    if (p->tail > 0.01f) cl.tail_decay_coeff = expf(-1.0f / (p->tail * rate));
+    if (p->freq > 100.0f) sk_biquad_init(&cl.filter, SK_BIQUAD_BANDPASS, p->freq, 1.2f, rate);
+    sk_drum_clap_trigger(&cl, p->velocity > 0.0f ? p->velocity : 1.0f);
+    for (int i = 0; i < total_samples; i++) buf[i] = sk_drum_clap_step(&cl);
+  } else if (p->preset == DSL_DRUM_TOM) {
+    sk_drum_tom_t tm;
+    sk_drum_tom_init(&tm, rate, p->freq > 20.0f ? p->freq : 100.0f);
+    if (p->decay > 0.01f) tm.amp_decay_coeff = expf(-1.0f / (p->decay * rate));
+    if (p->pdecay > 0.001f) tm.pitch_decay_coeff = expf(-1.0f / (p->pdecay * rate));
+    sk_drum_tom_trigger(&tm, p->velocity > 0.0f ? p->velocity : 1.0f);
+    for (int i = 0; i < total_samples; i++) buf[i] = sk_drum_tom_step(&tm);
+  } else if (p->preset == DSL_DRUM_COWBELL) {
+    sk_drum_cowbell_t cb;
+    sk_drum_cowbell_init(&cb, rate);
+    if (p->f1 > 20.0f) cb.inc1 = p->f1 / rate;
+    if (p->f2 > 20.0f) cb.inc2 = p->f2 / rate;
+    if (p->decay > 0.01f) cb.amp_decay_coeff = expf(-1.0f / (p->decay * rate));
+    sk_drum_cowbell_trigger(&cb, p->velocity > 0.0f ? p->velocity : 1.0f);
+    for (int i = 0; i < total_samples; i++) buf[i] = sk_drum_cowbell_step(&cb);
+  } else if (p->preset == DSL_DRUM_MEMBRANE || (instrument && (strstr(instrument, "membrane") || strstr(instrument, "acoustic") || strstr(instrument, "bassdrum")))) {
+    /* Physical 2D Bessel circular membrane with tension drop, strike contact, and air cavity */
+    sk_drum_membrane_t mem;
+    float strike_pos = (p->brightness > 0.0f) ? p->brightness : 0.25f;
+    float tension_drop = (p->drop > 0.0f) ? p->drop : 0.45f;
+    float base_f = (p->freq > 20.0f) ? p->freq : 80.0f;
+    float decay = (p->decay > 0.05f) ? p->decay : 0.80f;
+    sk_drum_membrane_init(&mem, rate, base_f, decay, tension_drop, strike_pos);
+    for (int i = 0; i < total_samples; i++) buf[i] = sk_drum_membrane_step(&mem);
+  } else {
+    /* Kick drum */
+    sk_drum_kick_t k;
+    sk_drum_kick_init(&k, rate);
+    if (p->freq > 20.0f) k.start_freq = p->freq;
+    if (p->end_freq > 10.0f) k.end_freq = p->end_freq;
+    if (p->decay > 0.01f) k.amp_decay_coeff = expf(-1.0f / (p->decay * rate));
+    if (p->pdecay > 0.001f) k.pitch_decay_coeff = expf(-1.0f / (p->pdecay * rate));
+    if (p->click >= 0.0f) k.click_level = sk_clampf(p->click, 0.0f, 1.0f);
+    if (p->drive > 0.0f) k.drive = sk_clampf(p->drive, 0.1f, 10.0f);
+    sk_drum_kick_trigger(&k, p->velocity > 0.0f ? p->velocity : 1.0f);
+    for (int i = 0; i < total_samples; i++) buf[i] = sk_drum_kick_step(&k);
+  }
+  return 0;
+}
+
+static int sk_gen_bell_render(skode_t *ctx, const char *domain, const char *instrument, const dsl_params_t *p, float *buf, int total_samples, float rate) {
+  (void)ctx; (void)domain; (void)instrument;
+  sk_bell_type_t btype = SK_BELL_CHURCH;
+  if (p->preset == DSL_BELL_TUBULAR) btype = SK_BELL_TUBULAR;
+  else if (p->preset == DSL_BELL_VIBE) btype = SK_BELL_VIBE;
+  else if (p->preset == DSL_BELL_TIBETAN) btype = SK_BELL_TIBETAN;
+  else if (p->preset == DSL_BELL_AGOGO) btype = SK_BELL_AGOGO;
+
+  sk_drum_bell_t b;
+  sk_drum_bell_init(&b, rate, btype, p->freq > 20.0f ? p->freq : 440.0f);
+  if (p->decay > 0.05f) {
+    sk_drum_bell_set_preset(&b, btype, p->freq > 20.0f ? p->freq : 440.0f, p->decay);
+  }
+  if (p->mallet >= 0.0f) {
+    float cutoff = p->freq > 100.0f ? p->freq * 4.0f : 3500.0f;
+    if (cutoff > rate * 0.45f) cutoff = rate * 0.45f;
+    sk_biquad_init(&b.strike_filter, SK_BIQUAD_BANDPASS, cutoff, 2.0f, rate);
+  }
+  sk_drum_bell_trigger(&b, p->velocity > 0.0f ? p->velocity : 1.0f);
+  for (int i = 0; i < total_samples; i++) buf[i] = sk_drum_bell_step(&b);
+  return 0;
+}
+
+static int sk_gen_string_render(skode_t *ctx, const char *domain, const char *instrument, const dsl_params_t *p, float *buf, int total_samples, float rate) {
+  (void)ctx; (void)domain; (void)instrument;
+  sk_karplus_t ks;
+  sk_karplus_init(&ks, rate);
+  sk_rng_t rng;
+  sk_rng_init(&rng, 54321ULL);
+  if (p->damping > 0.0f) ks.damping = sk_clampf(p->damping, 0.01f, 0.99f);
+  if (p->feedback > 0.0f) ks.feedback = sk_clampf(p->feedback, 0.85f, 0.999f);
+  sk_karplus_pluck(&ks, p->freq > 20.0f ? p->freq : 440.0f,
+                   p->velocity > 0.0f ? p->velocity : 1.0f,
+                   p->pick > 0.0f ? p->pick : 0.25f,
+                   p->brightness >= 0.0f ? p->brightness : 0.6f,
+                   &rng);
+  for (int i = 0; i < total_samples; i++) buf[i] = sk_karplus_step(&ks);
+
+  /* Acoustic instrument wooden soundbox body coupling */
+  if (p->preset == DSL_STRING_BASS) {
+    sk_soundbox_t box;
+    sk_soundbox_init_upright_bass(&box, rate);
+    for (int i = 0; i < total_samples; i++) buf[i] = sk_soundbox_step(&box, buf[i]);
+  } else if (p->preset == DSL_STRING_PIZZ) {
+    sk_soundbox_t box;
+    sk_soundbox_init_cello(&box, rate);
+    for (int i = 0; i < total_samples; i++) buf[i] = sk_soundbox_step(&box, buf[i]);
+  }
+  return 0;
+}
+
+static int sk_gen_wind_render(skode_t *ctx, const char *domain, const char *instrument, const dsl_params_t *p, float *buf, int total_samples, float rate) {
+  (void)ctx; (void)domain; (void)instrument;
+  sk_flute_t fl;
+  sk_flute_init(&fl, rate);
+  sk_flute_set_freq(&fl, p->freq > 20.0f ? p->freq : 523.25f);
+  if (p->damping > 0.0f) fl.bore_damping = sk_clampf(p->damping, 0.02f, 0.8f);
+  if (p->noise >= 0.0f) fl.noise_gain = sk_clampf(p->noise, 0.0f, 0.5f);
+  sk_flute_set_pressure(&fl, p->pressure > 0.0f ? p->pressure : 0.75f);
+
+  int release_start = total_samples - (int)(rate * 0.25f);
+  if (release_start < (int)(rate * 0.4f)) release_start = (int)(rate * 0.4f);
+  for (int i = 0; i < total_samples; i++) {
+    if (i == release_start) sk_flute_set_pressure(&fl, 0.0f);
+    buf[i] = sk_flute_step(&fl);
+  }
+  return 0;
+}
+
+static int sk_gen_horn_render(skode_t *ctx, const char *domain, const char *instrument, const dsl_params_t *p, float *buf, int total_samples, float rate) {
+  (void)ctx; (void)domain; (void)instrument;
+  sk_brass_t br;
+  sk_brass_init(&br, rate);
+  sk_brass_set_freq(&br, p->freq > 20.0f ? p->freq : 233.08f);
+  if (p->damping > 0.0f) br.bore_damping = sk_clampf(p->damping, 0.02f, 0.8f);
+  if (p->brassiness >= 0.0f) br.brassiness = sk_clampf(p->brassiness, 0.0f, 1.0f);
+  sk_brass_set_pressure(&br, p->pressure > 0.0f ? p->pressure : 0.75f);
+
+  int release_start = total_samples - (int)(rate * 0.25f);
+  if (release_start < (int)(rate * 0.4f)) release_start = (int)(rate * 0.4f);
+  for (int i = 0; i < total_samples; i++) {
+    if (i == release_start) sk_brass_set_pressure(&br, 0.0f);
+    buf[i] = sk_brass_step(&br);
+  }
+  return 0;
+}
+
+static void sk_gen_init_registry(void) {
+  static int inited = 0;
+  if (inited) return;
+  inited = 1;
+  sk_gen_register("drum", sk_gen_drum_render, "Percussion & drum physical models");
+  sk_gen_register("perc", sk_gen_drum_render, "Percussion & drum physical models");
+  sk_gen_register("bell", sk_gen_bell_render, "Modal bells and idiophones");
+  sk_gen_register("metal", sk_gen_bell_render, "Metallic bells and resonant plates");
+  sk_gen_register("string", sk_gen_string_render, "Plucked strings with wooden body cavity");
+  sk_gen_register("pluck", sk_gen_string_render, "Plucked strings with wooden body cavity");
+  sk_gen_register("wind", sk_gen_wind_render, "Blown acoustic pipes and flutes");
+  sk_gen_register("flute", sk_gen_wind_render, "Blown acoustic pipes and flutes");
+  sk_gen_register("horn", sk_gen_horn_render, "Lip-reed brass instruments");
+  sk_gen_register("brass", sk_gen_horn_render, "Lip-reed brass instruments");
 }
 
 int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int argc) {
@@ -2158,6 +2479,8 @@ int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int arg
       char *fam_str = ident;
       char *pre_str = colon ? colon + 1 : ident;
       if (colon) *colon = '\0';
+      strncpy(p.family_str, fam_str, sizeof(p.family_str) - 1);
+      strncpy(p.preset_str, pre_str, sizeof(p.preset_str) - 1);
 
       /* Match family and preset */
       if (strcmp(fam_str, "drum") == 0 || strcmp(fam_str, "perc") == 0 ||
@@ -2165,7 +2488,8 @@ int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int arg
           strcmp(pre_str, "hat") == 0 || strcmp(pre_str, "hihat") == 0 ||
           strcmp(pre_str, "clap") == 0 || strcmp(pre_str, "handclap") == 0 ||
           strcmp(pre_str, "tom") == 0 || strcmp(pre_str, "cowbell") == 0 ||
-          strcmp(pre_str, "membrane") == 0 || strcmp(pre_str, "kdrum") == 0) {
+          strcmp(pre_str, "membrane") == 0 || strcmp(pre_str, "kdrum") == 0 ||
+          strcmp(pre_str, "bassdrum") == 0) {
         p.family = DSL_FAM_DRUM;
         if (strcmp(pre_str, "snare") == 0) {
           p.preset = DSL_DRUM_SNARE;
@@ -2188,11 +2512,15 @@ int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int arg
           p.preset = DSL_DRUM_COWBELL;
           strcpy(p.preset_name, "drum:cowbell");
           p.f1 = 540.0f; p.f2 = 800.0f; p.decay = 0.160f; p.freq = 800.0f;
-        } else if (strcmp(pre_str, "membrane") == 0 || strcmp(pre_str, "kdrum") == 0) {
+        } else if (strcmp(pre_str, "membrane") == 0 || strcmp(pre_str, "kdrum") == 0 || strcmp(pre_str, "bassdrum") == 0) {
           p.preset = DSL_DRUM_MEMBRANE;
           strcpy(p.preset_name, "drum:membrane");
-          p.freq = 80.0f; p.blend = 0.50f; p.damping = 0.55f; p.feedback = 0.988f; p.brightness = 0.50f;
-          p.has_pitch = 1; p.midi_note = sk_ftom(p.freq);
+          p.freq = (strcmp(pre_str, "bassdrum") == 0) ? 55.0f : 80.0f;
+          p.drop = 0.45f;
+          p.decay = 0.80f;
+          p.brightness = 0.25f;
+          p.has_pitch = 1;
+          p.midi_note = sk_ftom(p.freq);
         } else {
           p.preset = DSL_DRUM_KICK;
           strcpy(p.preset_name, "drum:kick");
@@ -2463,153 +2791,20 @@ int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int arg
     return 0;
   }
 
-  /* Synthesis execution */
-  if (p.family == DSL_FAM_DRUM) {
-    switch (p.preset) {
-      case DSL_DRUM_KICK: {
-        sk_drum_kick_t k;
-        sk_drum_kick_init(&k, rate);
-        if (p.freq > 20.0f) k.start_freq = p.freq;
-        if (p.end_freq > 10.0f) k.end_freq = p.end_freq;
-        if (p.decay > 0.01f) k.amp_decay_coeff = expf(-1.0f / (p.decay * rate));
-        if (p.pdecay > 0.001f) k.pitch_decay_coeff = expf(-1.0f / (p.pdecay * rate));
-        if (p.click >= 0.0f) k.click_level = sk_clampf(p.click, 0.0f, 1.0f);
-        if (p.drive > 0.0f) k.drive = sk_clampf(p.drive, 0.1f, 10.0f);
-        sk_drum_kick_trigger(&k, p.velocity > 0.0f ? p.velocity : 1.0f);
-        for (int i = 0; i < total_samples; i++) buf[i] = sk_drum_kick_step(&k);
-        break;
-      }
-      case DSL_DRUM_SNARE: {
-        sk_drum_snare_t sn;
-        sk_drum_snare_init(&sn, rate);
-        if (p.f1 > 20.0f) sn.f1 = p.f1;
-        if (p.f2 > 20.0f) sn.f2 = p.f2;
-        if (p.snap >= 0.0f) sn.snappy_mix = sk_clampf(p.snap, 0.0f, 1.0f);
-        if (p.decay > 0.01f) sn.body_decay_coeff = expf(-1.0f / (p.decay * rate));
-        if (p.tail > 0.01f) sn.noise_decay_coeff = expf(-1.0f / (p.tail * rate));
-        if (p.freq > 100.0f) sk_biquad_init(&sn.noise_filter, SK_BIQUAD_BANDPASS, p.freq, 1.5f, rate);
-        sk_drum_snare_trigger(&sn, p.velocity > 0.0f ? p.velocity : 1.0f);
-        for (int i = 0; i < total_samples; i++) buf[i] = sk_drum_snare_step(&sn);
-        break;
-      }
-      case DSL_DRUM_HAT: {
-        sk_drum_hat_t h;
-        sk_drum_hat_init(&h, rate);
-        sk_drum_hat_trigger(&h, p.velocity > 0.0f ? p.velocity : 1.0f, p.hat_open);
-        if (p.decay > 0.005f) h.amp_decay_coeff = expf(-1.0f / (p.decay * rate));
-        for (int i = 0; i < total_samples; i++) buf[i] = sk_drum_hat_step(&h);
-        break;
-      }
-      case DSL_DRUM_CLAP: {
-        sk_drum_clap_t cl;
-        sk_drum_clap_init(&cl, rate);
-        if (p.spread > 1.0f) cl.burst_spacing = (int)(p.spread * 0.001f * rate);
-        if (p.tail > 0.01f) cl.tail_decay_coeff = expf(-1.0f / (p.tail * rate));
-        if (p.freq > 100.0f) sk_biquad_init(&cl.filter, SK_BIQUAD_BANDPASS, p.freq, 1.2f, rate);
-        sk_drum_clap_trigger(&cl, p.velocity > 0.0f ? p.velocity : 1.0f);
-        for (int i = 0; i < total_samples; i++) buf[i] = sk_drum_clap_step(&cl);
-        break;
-      }
-      case DSL_DRUM_TOM: {
-        sk_drum_tom_t tm;
-        sk_drum_tom_init(&tm, rate, p.freq > 20.0f ? p.freq : 100.0f);
-        if (p.decay > 0.01f) tm.amp_decay_coeff = expf(-1.0f / (p.decay * rate));
-        if (p.pdecay > 0.001f) tm.pitch_decay_coeff = expf(-1.0f / (p.pdecay * rate));
-        sk_drum_tom_trigger(&tm, p.velocity > 0.0f ? p.velocity : 1.0f);
-        for (int i = 0; i < total_samples; i++) buf[i] = sk_drum_tom_step(&tm);
-        break;
-      }
-      case DSL_DRUM_COWBELL: {
-        sk_drum_cowbell_t cb;
-        sk_drum_cowbell_init(&cb, rate);
-        if (p.f1 > 20.0f) cb.inc1 = p.f1 / rate;
-        if (p.f2 > 20.0f) cb.inc2 = p.f2 / rate;
-        if (p.decay > 0.01f) cb.amp_decay_coeff = expf(-1.0f / (p.decay * rate));
-        if (p.freq > 100.0f) sk_biquad_init(&cb.filter, SK_BIQUAD_BANDPASS, p.freq, 2.2f, rate);
-        sk_drum_cowbell_trigger(&cb, p.velocity > 0.0f ? p.velocity : 1.0f);
-        for (int i = 0; i < total_samples; i++) buf[i] = sk_drum_cowbell_step(&cb);
-        break;
-      }
-      case DSL_DRUM_MEMBRANE: {
-        sk_karplus_t ks;
-        sk_karplus_init(&ks, rate);
-        sk_rng_t rng;
-        sk_rng_init(&rng, 12345ULL);
-        if (p.damping > 0.0f) ks.damping = sk_clampf(p.damping, 0.01f, 0.99f);
-        if (p.feedback > 0.0f) ks.feedback = sk_clampf(p.feedback, 0.8f, 0.999f);
-        sk_karplus_strike_drum(&ks, p.freq > 20.0f ? p.freq : 80.0f,
-                               p.velocity > 0.0f ? p.velocity : 1.0f,
-                               p.blend >= 0.0f ? p.blend : 0.5f,
-                               p.brightness >= 0.0f ? p.brightness : 0.5f,
-                               &rng);
-        for (int i = 0; i < total_samples; i++) buf[i] = sk_karplus_step(&ks);
-        break;
-      }
-      default:
-        break;
+  /* Synthesis execution via extensible registry */
+  sk_gen_init_registry();
+  sk_gen_fn gen_handler = sk_gen_lookup(p.family_str);
+  if (!gen_handler) {
+    if (p.family == DSL_FAM_DRUM) gen_handler = sk_gen_drum_render;
+    else if (p.family == DSL_FAM_BELL) gen_handler = sk_gen_bell_render;
+    else if (p.family == DSL_FAM_STRING) gen_handler = sk_gen_string_render;
+    else if (p.family == DSL_FAM_WIND) {
+      if (p.preset == DSL_WIND_FLUTE) gen_handler = sk_gen_wind_render;
+      else gen_handler = sk_gen_horn_render;
     }
-  } else if (p.family == DSL_FAM_BELL) {
-    sk_bell_type_t btype = SK_BELL_CHURCH;
-    if (p.preset == DSL_BELL_TUBULAR) btype = SK_BELL_TUBULAR;
-    else if (p.preset == DSL_BELL_VIBE) btype = SK_BELL_VIBE;
-    else if (p.preset == DSL_BELL_TIBETAN) btype = SK_BELL_TIBETAN;
-    else if (p.preset == DSL_BELL_AGOGO) btype = SK_BELL_AGOGO;
-
-    sk_drum_bell_t b;
-    sk_drum_bell_init(&b, rate, btype, p.freq > 20.0f ? p.freq : 440.0f);
-    if (p.decay > 0.05f) {
-      sk_drum_bell_set_preset(&b, btype, p.freq > 20.0f ? p.freq : 440.0f, p.decay);
-    }
-    if (p.mallet >= 0.0f) {
-      float cutoff = p.freq > 100.0f ? p.freq * 4.0f : 3500.0f;
-      if (cutoff > rate * 0.45f) cutoff = rate * 0.45f;
-      sk_biquad_init(&b.strike_filter, SK_BIQUAD_BANDPASS, cutoff, 2.0f, rate);
-    }
-    sk_drum_bell_trigger(&b, p.velocity > 0.0f ? p.velocity : 1.0f);
-    for (int i = 0; i < total_samples; i++) buf[i] = sk_drum_bell_step(&b);
-  } else if (p.family == DSL_FAM_STRING) {
-    sk_karplus_t ks;
-    sk_karplus_init(&ks, rate);
-    sk_rng_t rng;
-    sk_rng_init(&rng, 54321ULL);
-    if (p.damping > 0.0f) ks.damping = sk_clampf(p.damping, 0.01f, 0.99f);
-    if (p.feedback > 0.0f) ks.feedback = sk_clampf(p.feedback, 0.85f, 0.999f);
-    sk_karplus_pluck(&ks, p.freq > 20.0f ? p.freq : 440.0f,
-                     p.velocity > 0.0f ? p.velocity : 1.0f,
-                     p.pick > 0.0f ? p.pick : 0.25f,
-                     p.brightness >= 0.0f ? p.brightness : 0.6f,
-                     &rng);
-    for (int i = 0; i < total_samples; i++) buf[i] = sk_karplus_step(&ks);
-  } else if (p.family == DSL_FAM_WIND) {
-    if (p.preset == DSL_WIND_FLUTE) {
-      sk_flute_t fl;
-      sk_flute_init(&fl, rate);
-      sk_flute_set_freq(&fl, p.freq > 20.0f ? p.freq : 523.25f);
-      if (p.damping > 0.0f) fl.bore_damping = sk_clampf(p.damping, 0.02f, 0.8f);
-      if (p.noise >= 0.0f) fl.noise_gain = sk_clampf(p.noise, 0.0f, 0.5f);
-      sk_flute_set_pressure(&fl, p.pressure > 0.0f ? p.pressure : 0.75f);
-
-      int release_start = total_samples - (int)(rate * 0.25f);
-      if (release_start < (int)(rate * 0.4f)) release_start = (int)(rate * 0.4f);
-      for (int i = 0; i < total_samples; i++) {
-        if (i == release_start) sk_flute_set_pressure(&fl, 0.0f);
-        buf[i] = sk_flute_step(&fl);
-      }
-    } else {
-      sk_brass_t br;
-      sk_brass_init(&br, rate);
-      sk_brass_set_freq(&br, p.freq > 20.0f ? p.freq : 233.08f);
-      if (p.damping > 0.0f) br.bore_damping = sk_clampf(p.damping, 0.02f, 0.8f);
-      if (p.brassiness >= 0.0f) br.brassiness = sk_clampf(p.brassiness, 0.0f, 1.0f);
-      sk_brass_set_pressure(&br, p.pressure > 0.0f ? p.pressure : 0.75f);
-
-      int release_start = total_samples - (int)(rate * 0.25f);
-      if (release_start < (int)(rate * 0.4f)) release_start = (int)(rate * 0.4f);
-      for (int i = 0; i < total_samples; i++) {
-        if (i == release_start) sk_brass_set_pressure(&br, 0.0f);
-        buf[i] = sk_brass_step(&br);
-      }
-    }
+  }
+  if (gen_handler) {
+    gen_handler(ctx, p.family_str, p.preset_str, &p, buf, total_samples, rate);
   }
 
   /* Smooth 15ms cosine anti-click taper at the very end of the buffer */

@@ -4237,6 +4237,24 @@ static void test_sample_render_physical_modeling_and_loop_metadata(void) {
   }
   expect_int(test, (int)sw.midi_note[307], 60, "guitar w307 midi_note=60 via d>w");
   expect_int(test, sw.one_shot[307], 1, "guitar w307 one_shot=1 via d>w");
+
+  /* 9. Circular Bessel acoustic drum membrane */
+  consume(test, &ctx, "[drum:membrane f:65 drop:0.5 d:0.8] 308 gen!");
+  if (!sw.data[308] || sw.size[308] <= 0) {
+    fail(test, "drum:membrane did not install to w308");
+  }
+  expect_int(test, sw.one_shot[308], 1, "drum:membrane w308 one_shot=1");
+
+  /* 10. Loop finder tool (/findloop) on sustained brass wave slot */
+  consume(test, &ctx, "[horn:brass n58 pr:0.85 dur:1.8] 309 gen!");
+  expect_int(test, sw.one_shot[309], 1, "brass one-shot before findloop");
+  consume(test, &ctx, "309 /findloop");
+  expect_int(test, sw.loop_enabled[309], 1, "309 /findloop enabled loop");
+  expect_int(test, sw.one_shot[309], 0, "309 /findloop set one_shot=0");
+  if (sw.loop_start[309] <= 0 || sw.loop_end[309] <= sw.loop_start[309]) {
+    fail(test, "309 /findloop invalid loop points");
+  }
+  expect_substr(test, ands_string(ctx.parse), "loop:", "/findloop populated parse metadata string");
 }
 
 int main(int argc, char **argv) {

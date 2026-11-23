@@ -496,9 +496,9 @@ static void test_modal_bells(void) {
     float sr = 48000.0f;
     sk_drum_bell_t bell;
 
-    /* 1. Church Bell */
+    /* 1. Church Bell (Doublet Pairs) */
     sk_drum_bell_init(&bell, sr, SK_BELL_CHURCH, 440.0f);
-    TEST_ASSERT(bell.num_modes == 6, "church bell has 6 modes");
+    TEST_ASSERT(bell.num_modes == 10, "church bell has 10 doublet modes");
     sk_drum_bell_trigger(&bell, 0.8f);
     float max_amp = 0.0f;
     for (int i = 0; i < 4800; i++) {

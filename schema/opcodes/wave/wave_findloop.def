@@ -1,0 +1,134 @@
+@name     wave_findloop
+@alias    /findloop
+@group    wave
+@c_name   skode_clause_wave_findloop_slash_0
+@type     immediate
+@arity    0
+@match    ()
+@summary  detect loop points for active voice wavetable slot
+@doc
+Analyzes wavetable slot, detects seamless sustain loop points via autocorrelation, applies them, and returns metadata string.
+Usage: /findloop
+@code
+    return skode_exec_wave_findloop(ctx, s, args, argc);
+@end
+
+@name     wave_findloop
+@alias    /findloop
+@group    wave
+@c_name   skode_clause_wave_findloop_slash_1
+@type     immediate
+@arity    1
+@match    (finite)
+@summary  detect loop points for specified wavetable slot
+@doc
+Analyzes wavetable slot, detects seamless sustain loop points via autocorrelation, applies them, and returns metadata string.
+Usage: slot /findloop
+@code
+    return skode_exec_wave_findloop(ctx, s, args, argc);
+@end
+
+@name     wave_findloop
+@alias    /findloop
+@group    wave
+@c_name   skode_clause_wave_findloop_slash_2
+@type     immediate
+@arity    2
+@match    (finite, finite)
+@summary  detect loop points for specified wavetable slot with pitch hint
+@doc
+Analyzes wavetable slot with pitch hint, detects seamless sustain loop points, applies them, and returns metadata string.
+Usage: slot pitch /findloop
+@code
+    return skode_exec_wave_findloop(ctx, s, args, argc);
+@end
+
+@name     wave_findloop_qmark
+@alias    ?loop
+@group    wave
+@c_name   skode_clause_wave_findloop_qmark_0
+@type     immediate
+@arity    0
+@match    ()
+@summary  detect loop points for active voice wavetable slot
+@doc
+Analyzes wavetable slot, detects seamless sustain loop points via autocorrelation, applies them, and returns metadata string.
+Usage: ?loop
+@code
+    return skode_exec_wave_findloop(ctx, s, args, argc);
+@end
+
+@name     wave_findloop_qmark
+@alias    ?loop
+@group    wave
+@c_name   skode_clause_wave_findloop_qmark_1
+@type     immediate
+@arity    1
+@match    (finite)
+@summary  detect loop points for specified wavetable slot
+@doc
+Analyzes wavetable slot, detects seamless sustain loop points via autocorrelation, applies them, and returns metadata string.
+Usage: slot ?loop
+@code
+    return skode_exec_wave_findloop(ctx, s, args, argc);
+@end
+
+@name     wave_findloop_qmark
+@alias    ?loop
+@group    wave
+@c_name   skode_clause_wave_findloop_qmark_2
+@type     immediate
+@arity    2
+@match    (finite, finite)
+@summary  detect loop points for specified wavetable slot with pitch hint
+@doc
+Analyzes wavetable slot with pitch hint, detects seamless sustain loop points, applies them, and returns metadata string.
+Usage: slot pitch ?loop
+@code
+    return skode_exec_wave_findloop(ctx, s, args, argc);
+@end
+
+@name     wave_findloop_wlq
+@alias    WL?
+@group    wave
+@c_name   skode_clause_wave_findloop_wlq_0
+@type     immediate
+@arity    0
+@match    ()
+@summary  detect loop points for active voice wavetable slot
+@doc
+Analyzes wavetable slot, detects seamless sustain loop points via autocorrelation, applies them, and returns metadata string.
+Usage: WL?
+@code
+    return skode_exec_wave_findloop(ctx, s, args, argc);
+@end
+
+@name     wave_findloop_wlq
+@alias    WL?
+@group    wave
+@c_name   skode_clause_wave_findloop_wlq_1
+@type     immediate
+@arity    1
+@match    (finite)
+@summary  detect loop points for specified wavetable slot
+@doc
+Analyzes wavetable slot, detects seamless sustain loop points via autocorrelation, applies them, and returns metadata string.
+Usage: slot WL?
+@code
+    return skode_exec_wave_findloop(ctx, s, args, argc);
+@end
+
+@name     wave_findloop_wlq
+@alias    WL?
+@group    wave
+@c_name   skode_clause_wave_findloop_wlq_2
+@type     immediate
+@arity    2
+@match    (finite, finite)
+@summary  detect loop points for specified wavetable slot with pitch hint
+@doc
+Analyzes wavetable slot with pitch hint, detects seamless sustain loop points, applies them, and returns metadata string.
+Usage: slot pitch WL?
+@code
+    return skode_exec_wave_findloop(ctx, s, args, argc);
+@end

@@ -9,10 +9,10 @@ Generated automatically by `tools/mkopcodes` from modular opcode definitions in 
 
 ## Architecture & System Overview
 
-- **Total Command Words**: 318
-- **Total Dispatch Clauses**: 653
+- **Total Command Words**: 321
+- **Total Dispatch Clauses**: 662
 - **Real-Time Audio Opcode Handlers**: 159 (audio-thread safe, zero allocation, zero string lookup)
-- **Immediate / Control Plane Clauses**: 494 (REPL / parser / file system / diagnostics)
+- **Immediate / Control Plane Clauses**: 503 (REPL / parser / file system / diagnostics)
 
 ### Functional Command Groups
 
@@ -20,7 +20,7 @@ Generated automatically by `tools/mkopcodes` from modular opcode definitions in 
 |:---|:---|:---:|:---|
 | voice | `voice` | 25 | Core voice selection, levels, panning, and voice diagnostics |
 | osc | `osc` | 20 | Oscillators, waveforms, frequency, tuning, detune, loops |
-| wave | `wave` | 21 | Wavetable slots, visualizers, WAV import and export |
+| wave | `wave` | 24 | Wavetable slots, visualizers, WAV import and export |
 | filter | `filter` | 8 | Filter cutoff frequency, resonance, modes, wavefolding |
 | env | `env` | 15 | Envelopes, ADSR parameters, curve shaping, segment times |
 | mod | `mod` | 14 | Cross-modulation, FM, AM, ring mod, sample & hold, glissando |
@@ -1663,6 +1663,9 @@ Usage: WS wave
 | [`wave_display`](#wave_display) | `W` | 4 | 0..3 | Immediate | render ascii waveform for wave slot |
 | [`wave_expand`](#wave_expand) | `/wex` | 2 | 0..1 | Immediate | dynamically expand wavetable capacity |
 | [`wave_export_wav`](#wave_export_wav) | `w>w` | 2 | 0..1 | Immediate | export wavetable slot to WAV file |
+| [`wave_findloop`](#wave_findloop) | `/findloop` | 3 | 0..2 | Immediate | detect loop points for active voice wavetable slot |
+| [`wave_findloop_qmark`](#wave_findloop_qmark) | `?loop` | 3 | 0..2 | Immediate | detect loop points for active voice wavetable slot |
+| [`wave_findloop_wlq`](#wave_findloop_wlq) | `WL?` | 3 | 0..2 | Immediate | detect loop points for active voice wavetable slot |
 | [`wave_load_file`](#wave_load_file) | `/w` | 3 | 1..3 | Immediate | load wave file by index |
 | [`wave_load_name`](#wave_load_name) | `/ws` | 3 | 0..2 | Immediate | load wave file by name into default slot |
 | [`wave_loop_points`](#wave_loop_points) | `WL` | 4 | 0..3 | Immediate | set wavetable slot loop points |
@@ -2443,6 +2446,147 @@ Usage: [export.wav] 0 w>w
 
 ```text
 Wave export wav no-op.
+```
+
+---
+
+### `wave_findloop`
+
+- **Alias**: `/findloop`
+- **Group**: `wave`
+- **Clause Count**: 3
+
+#### Clause 1: `wave_findloop()`
+
+- **Arity**: `0`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: detect loop points for active voice wavetable slot
+
+**Description & Details**:
+
+```text
+Analyzes wavetable slot, detects seamless sustain loop points via autocorrelation, applies them, and returns metadata string.
+Usage: /findloop
+```
+
+#### Clause 2: `wave_findloop(finite)`
+
+- **Arity**: `1`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: detect loop points for specified wavetable slot
+
+**Description & Details**:
+
+```text
+Analyzes wavetable slot, detects seamless sustain loop points via autocorrelation, applies them, and returns metadata string.
+Usage: slot /findloop
+```
+
+#### Clause 3: `wave_findloop(finite, finite)`
+
+- **Arity**: `2`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: detect loop points for specified wavetable slot with pitch hint
+
+**Description & Details**:
+
+```text
+Analyzes wavetable slot with pitch hint, detects seamless sustain loop points, applies them, and returns metadata string.
+Usage: slot pitch /findloop
+```
+
+---
+
+### `wave_findloop_qmark`
+
+- **Alias**: `?loop`
+- **Group**: `wave`
+- **Clause Count**: 3
+
+#### Clause 1: `wave_findloop_qmark()`
+
+- **Arity**: `0`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: detect loop points for active voice wavetable slot
+
+**Description & Details**:
+
+```text
+Analyzes wavetable slot, detects seamless sustain loop points via autocorrelation, applies them, and returns metadata string.
+Usage: ?loop
+```
+
+#### Clause 2: `wave_findloop_qmark(finite)`
+
+- **Arity**: `1`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: detect loop points for specified wavetable slot
+
+**Description & Details**:
+
+```text
+Analyzes wavetable slot, detects seamless sustain loop points via autocorrelation, applies them, and returns metadata string.
+Usage: slot ?loop
+```
+
+#### Clause 3: `wave_findloop_qmark(finite, finite)`
+
+- **Arity**: `2`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: detect loop points for specified wavetable slot with pitch hint
+
+**Description & Details**:
+
+```text
+Analyzes wavetable slot with pitch hint, detects seamless sustain loop points, applies them, and returns metadata string.
+Usage: slot pitch ?loop
+```
+
+---
+
+### `wave_findloop_wlq`
+
+- **Alias**: `WL?`
+- **Group**: `wave`
+- **Clause Count**: 3
+
+#### Clause 1: `wave_findloop_wlq()`
+
+- **Arity**: `0`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: detect loop points for active voice wavetable slot
+
+**Description & Details**:
+
+```text
+Analyzes wavetable slot, detects seamless sustain loop points via autocorrelation, applies them, and returns metadata string.
+Usage: WL?
+```
+
+#### Clause 2: `wave_findloop_wlq(finite)`
+
+- **Arity**: `1`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: detect loop points for specified wavetable slot
+
+**Description & Details**:
+
+```text
+Analyzes wavetable slot, detects seamless sustain loop points via autocorrelation, applies them, and returns metadata string.
+Usage: slot WL?
+```
+
+#### Clause 3: `wave_findloop_wlq(finite, finite)`
+
+- **Arity**: `2`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: detect loop points for specified wavetable slot with pitch hint
+
+**Description & Details**:
+
+```text
+Analyzes wavetable slot with pitch hint, detects seamless sustain loop points, applies them, and returns metadata string.
+Usage: slot pitch WL?
 ```
 
 ---

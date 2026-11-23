@@ -178,19 +178,19 @@ To create sounds with sustained portions that hold indefinitely:
 [drum:cowbell d:0.18] 111 gen!
 ```
 
-#### `membrane` / `kdrum` (Karplus-Strong 1983 Acoustic Drum)
-* `f`, `n`: Drum fundamental in Hz or MIDI note (default: `80.0`)
-* `blend`: `0.5` = acoustic drum membrane, `1.0` = string, `0.0` = noise (default: `0.50`)
-* `damp`: Loss damping factor (default: `0.55`)
-* `fb`, `decay`: Feedback decay factor (default: `0.988`)
-* `b`, `bright`: Impact strike brightness (default: `0.50`)
+#### `membrane` / `kdrum` / `bassdrum` (2D Bessel Circular Acoustic Drum Membrane)
+Physical modeling of a clamped circular drum skin vibrating across 8 Bessel partials ($1.000$, $1.593$, $2.135$, $2.295$, $2.653$, $2.917$, $3.500$, $3.598$), coupled to a pitch-drop tension relaxation envelope, shell cavity resonance, and mallet impact transient.
+* `f`, `n`: Drum membrane fundamental in Hz or MIDI note (default: `80.0` / E2 for membrane, `55.0` / A1 for bassdrum)
+* `d`, `decay`: Overall membrane decay time in seconds (default: `0.80`)
+* `drop`: Strike impact tension jump ratio (default: `0.45` — pitch drops exponentially over ~28ms)
+* `b`, `bright`: Strike position and hardness (`0.0` = center strike with deep sub boom; `1.0` = rim strike with snappy azimuthal modes)
 
 ```skode
-# Deep acoustic bass drum
-[drum:membrane n36 blend:0.5 damp:0.6 fb:0.985 b:0.4] 112 gen!
+# Resonant acoustic bass drum with deep shell thump
+[drum:membrane f:55 drop:0.55 d:0.85 b:0.20] 112 gen!
 
-# Resonant acoustic bongo / conga
-[drum:membrane n62 blend:0.55 damp:0.3 fb:0.992 b:0.75] 113 gen!
+# Acoustic tom / bongo membrane
+[drum:membrane n62 drop:0.35 d:0.45 b:0.45] 113 gen!
 ```
 
 ---
@@ -200,7 +200,7 @@ To create sounds with sustained portions that hold indefinitely:
 Modal metallic models solve Euler-Bernoulli beam and shell mechanics, producing non-harmonic quadratic modes with mode-dependent damping and zero pitch-glide.
 
 #### Presets
-* `church`: Tuned bronze church bell (Hum, Prime, Tierce, Quint, Nominal, Decim)
+* `church`: Cathedral cast bronze bell with 10 asymmetric doublet pairs producing authentic slow acoustic beating / warble and a heavy iron clapper impact thump
 * `tubular` / `chime`: Orchestral tubular bell / clock chime (Euler-Bernoulli bar flexural modes)
 * `vibe` / `glock` / `marimba`: Vibraphone / glockenspiel tuned bar with mallet impact
 * `tibetan` / `bowl`: Tibetan singing bowl with beating modal doublets
@@ -208,12 +208,12 @@ Modal metallic models solve Euler-Bernoulli beam and shell mechanics, producing 
 
 #### Parameters
 * `f`, `n`: Fundamental strike pitch in Hz or MIDI note (e.g. `n60`, `a4`, `440.0`)
-* `d`, `decay`: T60 decay scale multiplier (e.g. `d:2.5` = 2.5x longer ringing)
+* `d`, `decay`: T60 decay scale multiplier (e.g. `d:2.5` = 2.5x longer ringing; church bell rings naturally for ~5.5s)
 * `m`, `mallet`: Mallet hardness / transient strike click level `0.0`–`1.0` (default: `0.40`)
 * `loop`: `0` for one-shot (default), `1` for sustain loop
 
 ```skode
-# Cathedral bronze bell (rings naturally for ~5.5s)
+# Cathedral cast bronze bell (rings naturally for ~5.5s with doublet warble and clapper thump)
 [metal:church n57 d:1.0 m:0.6] 120 gen!
 
 # Orchestral tubular clock chime
@@ -233,15 +233,15 @@ Modal metallic models solve Euler-Bernoulli beam and shell mechanics, producing 
 
 ### 4.3. Plucked & Struck Strings (`string:` or `pluck:`)
 
-Karplus-Strong physical modeling with fractional allpass interpolation, comb-filter pick positioning, and one-pole loop loss damping.
+Karplus-Strong physical modeling with fractional allpass interpolation, comb-filter pick positioning, one-pole loop loss damping, and **dual-biquad acoustic wooden soundbox body resonance** (Helmholtz air cavity + top/back soundboard wood modes) for upright bass and cello.
 
 #### Presets
 * `guitar`: Acoustic guitar (`pick:0.25`, `damp:0.45`, `fb:0.994`, `bright:0.70`)
-* `bass`: Acoustic/electric bass (`pick:0.35`, `damp:0.55`, `fb:0.995`, `bright:0.50`)
+* `bass`: Upright acoustic double bass with wooden soundbox body resonator (62 Hz air cavity + 98 Hz & 165 Hz wood modes)
+* `pizz` / `cello`: Orchestral cello pizzicato with wooden soundbox body resonator (125 Hz air cavity + 220 Hz & 380 Hz wood modes)
 * `harp`: Concert harp (`pick:0.50`, `damp:0.25`, `fb:0.997`, `bright:0.80`)
 * `koto` / `zither`: Japanese koto (`pick:0.12`, `damp:0.30`, `fb:0.992`, `bright:0.75`)
 * `sitar`: Indian sitar with jawari bridge buzz (`pick:0.15`, `damp:0.65`, `fb:0.990`, `bright:0.85`)
-* `pizz`: Orchestral violin/cello pizzicato (`pick:0.40`, `damp:0.70`, `fb:0.980`, `bright:0.40`)
 * `raw` / `clean`: Unfiltered Karplus-Strong string
 
 #### Parameters
@@ -256,11 +256,14 @@ Karplus-Strong physical modeling with fractional allpass interpolation, comb-fil
 # Spanish acoustic nylon guitar
 [string:guitar n64 p:0.28 damp:0.40 fb:0.994 b:0.75] 130 gen!
 
-# Deep upright acoustic bass
-[pluck:bass n36 p:0.35 damp:0.55 fb:0.996 b:0.45] 131 gen!
+# Deep upright acoustic bass with resonant wooden cavity
+[pluck:bass n28 p:0.25 damp:0.35 fb:0.996 b:0.45] 131 gen!
+
+# Orchestral pizzicato cello
+[string:pizz n48 p:0.30 damp:0.40 fb:0.992 b:0.50] 132 gen!
 
 # Concert harp plucked at center string
-[string:harp n72 p:0.50 damp:0.20 fb:0.998 b:0.85] 132 gen!
+[string:harp n72 p:0.50 damp:0.20 fb:0.998 b:0.85] 133 gen!
 
 # Bright twangy Japanese koto
 [string:koto n67 p:0.10 damp:0.25 fb:0.993 b:0.80] 133 gen!
@@ -322,53 +325,49 @@ Models open cylindrical pipe resonance with dominant odd harmonics (1/n harmonic
 
 ## 5. Wealth of Production Examples
 
-### Example 1: Procedural 808/909 Drum Kit Setup
-Create a full drum kit procedurally across wavetable slots 100–106 and assign voices using canonical Skode commands:
+### Example 1: Procedural Drum Kit & Sequencer Pattern
+Generate procedural percussion across wavetable slots 100–103, assign voices, and drive them with an 8-step sequencer pattern featuring syncopated ghost hits:
 
 ```skode
-# 1. Generate all drum kit instruments with full natural tails
+# 1. Generate drum kit instruments with natural acoustic tails
 [drum:kick p:160 end:45 d:0.42 drive:1.8] 100 gen!
 [drum:snare snap:0.85 d:0.08 tail:0.22] 101 gen!
 [drum:hat open:0 d:0.04] 102 gen!
 [drum:hat open:1 d:0.45] 103 gen!
-[drum:clap bursts:3 spread:11 tail:0.22] 104 gen!
-[drum:tom n42 d:0.32 drop:0.45] 105 gen!
-[drum:cowbell d:0.16] 106 gen!
 
-# 2. Assign voices (assign wave, set 0dB gain, set native sample pitch n69, trigger with l1)
-v0 w100 a0 n69 l1   # Kick on voice 0
-v1 w101 a0 n69 l1   # Snare on voice 1
-v2 w102 a0 n69 l1   # Closed hat on voice 2
-v3 w103 a0 n69 l1   # Open hat on voice 3
+# 2. Assign wave slots, set 0dB gain, and native sample playback pitch (n69)
+v0 w100 a0 n69
+v1 w101 a0 n69
+v2 w102 a0 n69
+v3 w103 a0 n69
+
+# 3. Eight-step sequenced drum beat pattern with swing ghost hit (+.25) on hat
+y0 %2 
+[v0 l1] x0
+[v2 l1] x1
+[v1 l1] x2
+[v2 l1] x3
+[v0 l1] x4
+[v2 l1 +.25 l1] x5
+[v1 l1] x6
+[v3 l1] x7
 ```
 
 ---
 
-### Example 2: Natural Acoustic Wind & Brass Melodic Lines
-Render natural brass and wooden flute notes as expressive one-shot samples with organic attack chiff and natural release tails:
+### Example 2: Natural Acoustic Melodic Phrases
+Render expressive brass and concert flute notes as one-shot physical models and play sequential melodic phrases using canonical single-line syntax with inline `~` timed rests:
 
 ```skode
 # 1. Generate natural acoustic brass and flute notes
 [horn:brass n58 pr:0.85 br:0.70] 110 gen!
 [wind:flute n72 pr:0.75 air:0.04] 111 gen!
 
-# 2. Play trumpet fanfare on voice 0
-v0 w110 a0 n58 l1   # Play Bb3 root
-~0.4
-v0 n62 l1           # D4
-~0.4
-v0 n65 l1           # F4
-~0.8
-v0 n70 l1           # Bb4 lead
+# 2. Play trumpet fanfare on voice 0 with inline timed rests
+v0 w110 a0 n58 l1 ~.4 n62 l1 ~.4 n65 l1 ~.8 n70 l1
 
 # 3. Play expressive concert flute phrase on voice 1
-v1 w111 a0 n72 l1   # Play C5
-~0.5
-v1 n75 l1           # Eb5
-~0.5
-v1 n77 l1           # F5
-~0.75
-v1 n72 l1           # Return to C5
+v1 w111 a0 n72 l1 ~.5 n75 l1 ~.5 n77 l1 ~.75 n72 l1
 ```
 
 ---
@@ -389,11 +388,11 @@ v2 w120 a-6 n60 l1
 ---
 
 ### Example 4: Speech Synthesis with `vox!`
-Combine speech synthesis with acoustic instruments:
+Render spoken word phonemes directly into wavetable slots using the `vox!` opcode:
 
 ```skode
 # Render phonemes into wave slot 150 using vox!
-[h-eh-l-ow w-er-l-d] 150 vox!
+[hh eh l ow w er l d] 150 vox!
 
 # Play speech on voice 2 at native speed
 v2 w150 a0 n69 l1
@@ -420,6 +419,56 @@ v0 w130 a0 n60 l1
 
 ---
 
+### Example 6: Loop Finder Tool (`/findloop`, `?loop`, `WL?`)
+When working with sustained acoustic sounds (brass, flute, bowed strings, or loaded audio samples), finding click-free zero-crossing loop points manually can be tedious. The `/findloop` tool automates this process:
+
+```skode
+# 1. Render a sustained trumpet sample as a natural one-shot
+[horn:brass n58 pr:0.85 dur:1.8] 140 gen!
+
+# 2. Automatically detect optimal click-free sustain loop points
+140 /findloop
+# Output: # findloop: w140 loop points set to 15420..31860 (len=16440 samples, 342.50 ms, corr=0.985)
+
+# 3. The loop points and loop mode are automatically applied to slot 140,
+# while the formatted metadata string is stored in the parse string buffer:
+# [mode:sample loop:15420,31860 one_shot:0 rate:48000 root:58]
+
+# 4. Trigger voice 0 with continuous sustain
+v0 w140 a0 n58 l1
+```
+
+Aliases supported:
+* `slot /findloop` / `/findloop` (uses active voice's wavetable if slot omitted)
+* `slot ?loop` / `?loop`
+* `slot WL?` / `WL?`
+
+---
+
+### Example 7: KSynth Metadata & Array DSP Pipeline Interop
+The parser `data` buffer, `parse` metadata string, wavetable slots `W`, and KSynth array DSP form a unified two-way pipeline:
+
+```skode
+# 1. Generate physical modeling instrument into data buffer
+[drum:snare snap:0.85 d:0.08 tail:0.25] gen!
+
+# 2. Load the generated samples directly into KSynth array variable A
+0 d>k
+
+# 3. Execute array DSP in KSynth (e.g. reverse, filter, zero-crossing detection)
+# Dyadic x finds zero-crossings for splicing:
+# Z: A x 0.001
+
+# 4. Alternatively, transfer an existing wavetable slot 140 into KSynth variable B
+140 1 w>k
+
+# 5. Route KSynth results back into data buffer or wavetable slots:
+# All metadata (loop points, sample rate, root note, one-shot flag) remains
+# intact and synchronized across the execution environment.
+```
+
+---
+
 ## 6. Summary of Default Settings & Aliases
 
 | Preset | Family | Pitch Default | Duration Default | Loop Default | One-Shot Default |
@@ -431,7 +480,7 @@ v0 w130 a0 n60 l1
 | `tom` | `drum` | 100 Hz (G2) | ~0.57s | `0` (off) | `1` (one-shot) |
 | `cowbell` | `drum` | 540 Hz + 800 Hz | ~0.34s | `0` (off) | `1` (one-shot) |
 | `membrane` | `drum` | 80 Hz | 0.80s | `0` (off) | `1` (one-shot) |
-| `church` | `bell` | 220 Hz (A3) | 3.50s | `0` (off) | `1` (one-shot) |
+| `church` | `bell` | 220 Hz (A3) | 5.50s | `0` (off) | `1` (one-shot) |
 | `tubular` | `bell` | 440 Hz (A4) | 3.00s | `0` (off) | `1` (one-shot) |
 | `vibe` | `bell` | 440 Hz (A4) | 2.50s | `0` (off) | `1` (one-shot) |
 | `tibetan` | `bell` | 220 Hz (A3) | 4.00s | `0` (off) | `1` (one-shot) |

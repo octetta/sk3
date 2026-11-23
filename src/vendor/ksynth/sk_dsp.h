@@ -2295,7 +2295,7 @@ static inline float sk_drum_cowbell_step(sk_drum_cowbell_t *c) {
  * independent mode damping and zero pitch-glide.
  */
 
-#define SK_BELL_MAX_MODES 6
+#define SK_BELL_MAX_MODES 12
 
 typedef enum {
     SK_BELL_CHURCH = 0,   /* Tuned bronze church bell (Hum, Prime, Tierce, Quint, Nominal, Decim) */
@@ -2312,8 +2312,11 @@ typedef struct {
     float base_freq;
     float strike_env;
     float strike_decay_coeff;
+    float clapper_env;
+    float clapper_decay_coeff;
     sk_bell_type_t type;
     sk_biquad_t strike_filter;
+    sk_biquad_t clapper_filter;
     sk_rng_t rng;
 } sk_drum_bell_t;
 
@@ -2325,14 +2328,20 @@ static inline void sk_drum_bell_set_preset(sk_drum_bell_t *b, sk_bell_type_t typ
     b->type = type;
     b->base_freq = base_freq;
 
-    /* Mode ratio tables: [ratio, amp, t60_base_sec] */
-    static const double CHURCH[6][3] = {
-        { 0.50, 0.90, 4.5 }, /* Hum (octave below strike pitch) */
-        { 1.00, 1.00, 3.2 }, /* Prime / Fundamental */
-        { 1.19, 0.75, 2.8 }, /* Tierce (minor 3rd) */
-        { 1.50, 0.60, 2.2 }, /* Quint (5th) */
-        { 2.00, 0.70, 1.6 }, /* Nominal (octave above) */
-        { 2.51, 0.40, 1.0 }  /* Decim (major 10th) */
+    /* Mode ratio tables: [ratio, amp, t60_base_sec]
+     * Church bells: cast bronze doublet pairs with slight acoustic detuning create
+     * the majestic beating / warble characteristic of real cathedral bells. */
+    static const double CHURCH[10][3] = {
+        { 0.500, 0.90, 6.5 }, /* Hum doublet 1 */
+        { 0.504, 0.85, 6.5 }, /* Hum doublet 2 (beating ~0.9 Hz) */
+        { 1.000, 1.00, 4.8 }, /* Prime / Strike doublet 1 */
+        { 1.006, 0.95, 4.8 }, /* Prime / Strike doublet 2 (beating ~1.3 Hz) */
+        { 1.183, 0.75, 3.8 }, /* Tierce doublet 1 (minor third) */
+        { 1.192, 0.70, 3.8 }, /* Tierce doublet 2 (beating ~2.0 Hz) */
+        { 1.506, 0.60, 3.0 }, /* Quint doublet 1 (fifth) */
+        { 1.515, 0.55, 3.0 }, /* Quint doublet 2 */
+        { 2.000, 0.65, 2.2 }, /* Nominal doublet 1 (octave) */
+        { 2.012, 0.60, 2.2 }  /* Nominal doublet 2 (beating ~2.6 Hz) */
     };
     static const double TUBULAR[5][3] = {
         {  1.000, 1.00, 3.5 },
@@ -2362,13 +2371,13 @@ static inline void sk_drum_bell_set_preset(sk_drum_bell_t *b, sk_bell_type_t typ
     };
 
     const double (*table)[3] = CHURCH;
-    int count = 6;
+    int count = 10;
     switch (type) {
-        case SK_BELL_CHURCH:  table = CHURCH;  count = 6; break;
-        case SK_BELL_TUBULAR: table = TUBULAR; count = 5; break;
-        case SK_BELL_VIBE:    table = VIBE;    count = 4; break;
-        case SK_BELL_TIBETAN: table = TIBETAN; count = 5; break;
-        case SK_BELL_AGOGO:   table = AGOGO;   count = 4; break;
+        case SK_BELL_CHURCH:  table = CHURCH;  count = 10; break;
+        case SK_BELL_TUBULAR: table = TUBULAR; count = 5;  break;
+        case SK_BELL_VIBE:    table = VIBE;    count = 4;  break;
+        case SK_BELL_TIBETAN: table = TIBETAN; count = 5;  break;
+        case SK_BELL_AGOGO:   table = AGOGO;   count = 4;  break;
     }
     b->num_modes = count;
 
@@ -2387,6 +2396,11 @@ static inline void sk_drum_bell_init(sk_drum_bell_t *b, float sample_rate, sk_be
     b->sample_rate = sample_rate > 1000.0f ? sample_rate : 48000.0f;
     b->strike_decay_coeff = expf(-1.0f / (0.003f * b->sample_rate)); /* 3ms strike transient */
     sk_biquad_init(&b->strike_filter, SK_BIQUAD_BANDPASS, 3500.0f, 2.0f, b->sample_rate);
+
+    /* Heavy iron clapper impact for church bell */
+    sk_biquad_init(&b->clapper_filter, SK_BIQUAD_BANDPASS, 185.0f, 2.2f, b->sample_rate);
+    b->clapper_decay_coeff = expf(-1.0f / (0.022f * b->sample_rate)); /* 22ms clapper thump */
+
     sk_rng_init(&b->rng, 88877711ULL);
 
     sk_drum_bell_set_preset(b, type, base_freq, 1.0f);
@@ -2397,6 +2411,7 @@ static inline void sk_drum_bell_trigger(sk_drum_bell_t *b, float velocity) {
     if (!b) return;
     velocity = sk_clampf(velocity, 0.0f, 1.0f);
     b->strike_env = velocity * 0.40f;
+    b->clapper_env = (b->type == SK_BELL_CHURCH) ? (velocity * 0.65f) : 0.0f;
 
     /* Re-excite each complex mode phasor without discontinuity */
     for (int i = 0; i < b->num_modes; i++) {
@@ -2423,8 +2438,175 @@ static inline float sk_drum_bell_step(sk_drum_bell_t *b) {
         b->strike_env *= b->strike_decay_coeff;
     }
 
-    float out = (float)mode_sum * 0.35f + strike;
+    /* Heavy clapper impact thump for cathedral bells */
+    float clapper = 0.0f;
+    if (b->clapper_env > 1e-4f) {
+        float raw_noise = sk_rng_float(&b->rng);
+        clapper = sk_biquad_step(&b->clapper_filter, raw_noise) * b->clapper_env;
+        b->clapper_env *= b->clapper_decay_coeff;
+    }
+
+    float out = (float)mode_sum * 0.35f + strike + clapper;
     return sk_softclip_cubic(out, 1.0f);
+}
+
+/* =========================================================================
+ * 12b. Circular Acoustic Drum Membrane (Bessel Modes & Tension Pitch-Drop)
+ * ========================================================================= */
+
+typedef struct {
+    float sample_rate;
+    float base_freq;
+    float tension_drop;     /* Initial tension jump ratio (e.g. 0.35 - 0.70) */
+    float tension_decay;    /* Tension drop per-sample decay */
+    float tension_env;      /* Current tension drop envelope */
+    float phases[8];
+    float mode_amps[8];
+    float mode_decays[8];
+    float mode_envs[8];
+    sk_biquad_t air_cavity;    /* Drum shell cavity resonance */
+    sk_biquad_t strike_filter; /* Beater impact filter */
+    float strike_env;
+    float strike_decay;
+    sk_rng_t rng;
+} sk_drum_membrane_t;
+
+static inline void sk_drum_membrane_init(sk_drum_membrane_t *m, float sample_rate, float base_freq, float decay_sec, float tension_drop, float strike_pos) {
+    if (!m) return;
+    memset(m, 0, sizeof(*m));
+    m->sample_rate = sample_rate > 1000.0f ? sample_rate : 48000.0f;
+    m->base_freq = base_freq > 20.0f ? base_freq : 80.0f;
+    m->tension_drop = sk_clampf(tension_drop, 0.0f, 1.5f);
+    m->tension_decay = expf(-1.0f / (0.028f * m->sample_rate)); /* ~28ms tension drop */
+    m->tension_env = 1.0f;
+
+    /* Bessel mode ratios for ideal clamped circular membrane:
+     * (0,1)=1.000, (1,1)=1.593, (2,1)=2.135, (0,2)=2.295,
+     * (3,1)=2.653, (1,2)=2.917, (2,2)=3.500, (0,3)=3.598 */
+    static const float BESSEL_DAMP_SCALE[8] = {
+        1.00f, 0.65f, 0.48f, 0.42f, 0.32f, 0.26f, 0.20f, 0.16f
+    };
+
+    strike_pos = sk_clampf(strike_pos, 0.0f, 1.0f); /* 0=center, 1=rim */
+
+    /* Center strike excites radial symmetric modes (0,1), (0,2), (0,3);
+     * Rim strike excites azimuthal modes (1,1), (2,1), (3,1) */
+    float base_amps[8] = {
+        1.00f * (1.0f - 0.4f * strike_pos),
+        0.55f * (0.3f + 0.7f * strike_pos),
+        0.40f * (0.2f + 0.8f * strike_pos),
+        0.50f * (1.0f - 0.5f * strike_pos),
+        0.30f * (0.2f + 0.8f * strike_pos),
+        0.25f * (0.3f + 0.7f * strike_pos),
+        0.18f * (0.2f + 0.8f * strike_pos),
+        0.15f * (1.0f - 0.6f * strike_pos)
+    };
+
+    if (decay_sec < 0.05f) decay_sec = 0.5f;
+
+    for (int i = 0; i < 8; i++) {
+        m->phases[i] = 0.0f;
+        m->mode_amps[i] = base_amps[i];
+        m->mode_envs[i] = base_amps[i];
+        float t60_m = decay_sec * BESSEL_DAMP_SCALE[i];
+        m->mode_decays[i] = (t60_m > 0.001f) ? expf(-1.0f / (t60_m * m->sample_rate / 3.0f)) : 0.0f;
+    }
+
+    /* Air cavity / shell resonance tuned around fundamental * 0.92 */
+    float cavity_f = m->base_freq * 0.92f;
+    if (cavity_f < 35.0f) cavity_f = 35.0f;
+    if (cavity_f > 300.0f) cavity_f = 300.0f;
+    sk_biquad_init(&m->air_cavity, SK_BIQUAD_BANDPASS, cavity_f, 2.2f, m->sample_rate);
+
+    /* Mallet / beater impact filter */
+    float beater_f = 1200.0f + 1800.0f * (1.0f - strike_pos);
+    if (beater_f > m->sample_rate * 0.45f) beater_f = m->sample_rate * 0.45f;
+    sk_biquad_init(&m->strike_filter, SK_BIQUAD_BANDPASS, beater_f, 1.8f, m->sample_rate);
+    m->strike_env = 0.5f;
+    m->strike_decay = expf(-1.0f / (0.005f * m->sample_rate)); /* 5ms impact click */
+    sk_rng_init(&m->rng, 7712398ULL);
+}
+
+static inline float sk_drum_membrane_step(sk_drum_membrane_t *m) {
+    if (!m) return 0.0f;
+
+    static const float BESSEL_RATIOS[8] = {
+        1.000f, 1.593f, 2.135f, 2.295f, 2.653f, 2.917f, 3.500f, 3.598f
+    };
+
+    /* Pitch drop from tension relaxation */
+    float f_now = m->base_freq * (1.0f + m->tension_drop * m->tension_env);
+    m->tension_env *= m->tension_decay;
+
+    float membrane_sum = 0.0f;
+    float nyquist = 0.48f * m->sample_rate;
+
+    for (int i = 0; i < 8; i++) {
+        if (m->mode_envs[i] < 1e-6f) continue;
+        float fi = f_now * BESSEL_RATIOS[i];
+        if (fi < nyquist) {
+            m->phases[i] += 2.0f * (float)M_PI * fi / m->sample_rate;
+            if (m->phases[i] >= 2.0f * (float)M_PI) m->phases[i] -= 2.0f * (float)M_PI;
+            membrane_sum += sinf(m->phases[i]) * m->mode_envs[i];
+        }
+        m->mode_envs[i] *= m->mode_decays[i];
+    }
+
+    /* Mallet / beater impact transient */
+    float strike = 0.0f;
+    if (m->strike_env > 1e-4f) {
+        float noise = sk_rng_float(&m->rng);
+        strike = sk_biquad_step(&m->strike_filter, noise) * m->strike_env;
+        m->strike_env *= m->strike_decay;
+    }
+
+    /* Air cavity resonance */
+    float cavity = sk_biquad_step(&m->air_cavity, membrane_sum) * 0.45f;
+
+    float out = (membrane_sum * 0.40f + cavity + strike * 0.35f);
+    return sk_softclip_cubic(out, 1.0f);
+}
+
+/* =========================================================================
+ * 12c. Acoustic Instrument Wooden Soundbox Body Resonator (Bass, Cello)
+ * ========================================================================= */
+
+typedef struct {
+    sk_biquad_t air_cavity;    /* Helmholtz cavity resonance */
+    sk_biquad_t wood_mode1;    /* Primary top plate wood mode */
+    sk_biquad_t wood_mode2;    /* Secondary back plate wood mode */
+    float air_gain;
+    float wood_gain;
+    float direct_gain;
+} sk_soundbox_t;
+
+static inline void sk_soundbox_init(sk_soundbox_t *b, float sample_rate, float air_freq, float air_q, float wood1_freq, float wood1_q, float wood2_freq, float wood2_q, float air_gain, float wood_gain, float direct_gain) {
+    if (!b) return;
+    sample_rate = sample_rate > 1000.0f ? sample_rate : 48000.0f;
+    sk_biquad_init(&b->air_cavity, SK_BIQUAD_BANDPASS, air_freq, air_q, sample_rate);
+    sk_biquad_init(&b->wood_mode1, SK_BIQUAD_BANDPASS, wood1_freq, wood1_q, sample_rate);
+    sk_biquad_init(&b->wood_mode2, SK_BIQUAD_BANDPASS, wood2_freq, wood2_q, sample_rate);
+    b->air_gain = air_gain;
+    b->wood_gain = wood_gain;
+    b->direct_gain = direct_gain;
+}
+
+static inline void sk_soundbox_init_upright_bass(sk_soundbox_t *b, float sample_rate) {
+    /* Upright double bass: air ~62 Hz, wood ~98 Hz & ~165 Hz */
+    sk_soundbox_init(b, sample_rate, 62.0f, 3.5f, 98.0f, 4.0f, 165.0f, 3.0f, 0.55f, 0.45f, 0.35f);
+}
+
+static inline void sk_soundbox_init_cello(sk_soundbox_t *b, float sample_rate) {
+    /* Cello: air ~125 Hz, wood ~220 Hz & ~380 Hz */
+    sk_soundbox_init(b, sample_rate, 125.0f, 3.2f, 220.0f, 3.8f, 380.0f, 2.8f, 0.50f, 0.45f, 0.40f);
+}
+
+static inline float sk_soundbox_step(sk_soundbox_t *b, float input) {
+    if (!b) return input;
+    float air = sk_biquad_step(&b->air_cavity, input);
+    float w1 = sk_biquad_step(&b->wood_mode1, input);
+    float w2 = sk_biquad_step(&b->wood_mode2, input);
+    return b->direct_gain * input + b->air_gain * air + b->wood_gain * (w1 + 0.6f * w2);
 }
 
 /* =========================================================================
