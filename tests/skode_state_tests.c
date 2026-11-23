@@ -4179,11 +4179,11 @@ static void test_sample_render_physical_modeling_and_loop_metadata(void) {
     fail(test, "snare tail was cut off too short");
   }
 
-  /* 3. Horn brass: sustain loop calculation and metadata */
-  consume(test, &ctx, "[horn:brass n60 pr:0.8] phz!");
+  /* 3. Horn brass: sustain loop calculation and metadata with loop:1 */
+  consume(test, &ctx, "[horn:brass n60 pr:0.8 loop:1] gen!");
   int brass_len = ands_data_len(ctx.parse);
   if (brass_len <= 0) {
-    fail(test, "[horn:brass] phz! did not populate data array");
+    fail(test, "[horn:brass] gen! did not populate data array");
   }
   expect_substr(test, ands_string(ctx.parse), "mode:sample", "brass metadata mode:sample");
   expect_substr(test, ands_string(ctx.parse), "one_shot:0", "brass metadata one_shot:0 (sustained)");
@@ -4191,9 +4191,9 @@ static void test_sample_render_physical_modeling_and_loop_metadata(void) {
   expect_substr(test, ands_string(ctx.parse), "loop:", "brass metadata has loop points");
 
   /* 4. Horn brass: direct install to w302 with loop points applied to sw */
-  consume(test, &ctx, "[horn:brass n60 pr:0.8] 302 phz!");
+  consume(test, &ctx, "[horn:brass n60 pr:0.8 loop:1] 302 gen!");
   if (!sw.data[302] || sw.size[302] <= 0) {
-    fail(test, "[horn:brass] 302 phz! did not install to w302");
+    fail(test, "[horn:brass] 302 gen! did not install to w302");
   }
   expect_int(test, sw.one_shot[302], 0, "brass w302 sustained mode (one_shot=0)");
   expect_int(test, sw.loop_enabled[302], 1, "brass w302 loop_enabled=1");
@@ -4202,18 +4202,18 @@ static void test_sample_render_physical_modeling_and_loop_metadata(void) {
   }
   expect_int(test, (int)sw.midi_note[302], 60, "brass w302 midi_note=60");
 
-  /* 5. Wind flute using phz!: root 72, loop enabled */
-  consume(test, &ctx, "[wind:flute n72 air:0.15] 303 phz!");
+  /* 5. Wind flute using gen!: root 72, loop enabled via loop:1 */
+  consume(test, &ctx, "[wind:flute n72 air:0.15 loop:1] 303 gen!");
   if (!sw.data[303] || sw.size[303] <= 0) {
-    fail(test, "[wind:flute] 303 phz! did not install to w303");
+    fail(test, "[wind:flute] 303 gen! did not install to w303");
   }
   expect_int(test, sw.loop_enabled[303], 1, "flute w303 loop_enabled=1");
   expect_int(test, (int)sw.midi_note[303], 72, "flute w303 midi_note=72");
 
-  /* 6. Bell church using /phz: root 60, one_shot=1, full 5.5s natural decay */
-  consume(test, &ctx, "[bell:church n60 d:1.0] 304 /phz");
+  /* 6. Bell church using /gen: root 60, one_shot=1, full 5.5s natural decay */
+  consume(test, &ctx, "[bell:church n60 d:1.0] 304 /gen");
   if (!sw.data[304] || sw.size[304] <= 0) {
-    fail(test, "[bell:church] 304 /phz did not install to w304");
+    fail(test, "[bell:church] 304 /gen did not install to w304");
   }
   expect_int(test, sw.one_shot[304], 1, "church w304 one_shot=1");
   expect_int(test, (int)sw.midi_note[304], 60, "church w304 midi_note=60");
@@ -4222,9 +4222,9 @@ static void test_sample_render_physical_modeling_and_loop_metadata(void) {
   }
 
   /* 7. Tibetan singing bowl with loop:1 */
-  consume(test, &ctx, "[bell:bowl n55 loop:1] 306 phz!");
+  consume(test, &ctx, "[bell:bowl n55 loop:1] 306 gen!");
   if (!sw.data[306] || sw.size[306] <= 0) {
-    fail(test, "[bell:bowl] 306 phz! did not install to w306");
+    fail(test, "[bell:bowl] 306 gen! did not install to w306");
   }
   expect_int(test, sw.loop_enabled[306], 1, "bowl w306 loop_enabled=1");
   expect_int(test, (int)sw.midi_note[306], 55, "bowl w306 midi_note=55");

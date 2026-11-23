@@ -2140,7 +2140,7 @@ int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int arg
   p.drive = 1.25f;
   p.mallet = 0.40f;
   p.velocity = 1.0f;
-  p.loop = -1; /* auto */
+  p.loop = 0; /* default to natural one-shot for all physical models */
 
   /* Parse tokens */
   char *tok = strtok(str, " \t,;");
@@ -2220,7 +2220,6 @@ int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int arg
           p.preset = DSL_BELL_TIBETAN;
           strcpy(p.preset_name, "bell:tibetan");
           p.freq = 220.0f; p.midi_note = 57.0f;
-          p.loop = 1; /* Tibetan singing bowl sustains by default */
         } else if (strcmp(pre_str, "agogo") == 0) {
           p.preset = DSL_BELL_AGOGO;
           strcpy(p.preset_name, "bell:agogo");
@@ -2274,13 +2273,13 @@ int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int arg
                  strcmp(pre_str, "recorder") == 0) {
         p.family = DSL_FAM_WIND;
         p.has_pitch = 1;
-        p.duration = 1.2f;
-        p.loop = 1; /* Continuous wind/horn instruments sustain loop by default */
+        p.duration = 1.8f;
+        p.loop = 0; /* Natural acoustic one-shot by default */
         if (strcmp(pre_str, "flute") == 0 || strcmp(pre_str, "pipe") == 0 || strcmp(pre_str, "recorder") == 0 ||
             strcmp(fam_str, "flute") == 0) {
           p.preset = DSL_WIND_FLUTE;
           strcpy(p.preset_name, "wind:flute");
-          p.freq = 523.25f; p.midi_note = 72.0f; p.pressure = 0.70f; p.noise = 0.12f; p.vibrato = 0.03f; p.vibrato_rate = 5.5f; p.damping = 0.35f;
+          p.freq = 523.25f; p.midi_note = 72.0f; p.pressure = 0.75f; p.noise = 0.05f; p.damping = 0.25f;
         } else {
           p.preset = DSL_WIND_BRASS;
           strcpy(p.preset_name, "horn:brass");
@@ -2588,11 +2587,9 @@ int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int arg
       sk_flute_set_freq(&fl, p.freq > 20.0f ? p.freq : 523.25f);
       if (p.damping > 0.0f) fl.bore_damping = sk_clampf(p.damping, 0.02f, 0.8f);
       if (p.noise >= 0.0f) fl.noise_gain = sk_clampf(p.noise, 0.0f, 0.5f);
-      if (p.vibrato >= 0.0f) fl.vibrato_depth = sk_clampf(p.vibrato, 0.0f, 0.2f);
-      if (p.vibrato_rate > 0.1f) fl.vibrato_inc = p.vibrato_rate / rate;
-      sk_flute_set_pressure(&fl, p.pressure > 0.0f ? p.pressure : 0.70f);
+      sk_flute_set_pressure(&fl, p.pressure > 0.0f ? p.pressure : 0.75f);
 
-      int release_start = total_samples - (int)(rate * 0.18f);
+      int release_start = total_samples - (int)(rate * 0.25f);
       if (release_start < (int)(rate * 0.4f)) release_start = (int)(rate * 0.4f);
       for (int i = 0; i < total_samples; i++) {
         if (i == release_start) sk_flute_set_pressure(&fl, 0.0f);
@@ -2606,7 +2603,7 @@ int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int arg
       if (p.brassiness >= 0.0f) br.brassiness = sk_clampf(p.brassiness, 0.0f, 1.0f);
       sk_brass_set_pressure(&br, p.pressure > 0.0f ? p.pressure : 0.75f);
 
-      int release_start = total_samples - (int)(rate * 0.18f);
+      int release_start = total_samples - (int)(rate * 0.25f);
       if (release_start < (int)(rate * 0.4f)) release_start = (int)(rate * 0.4f);
       for (int i = 0; i < total_samples; i++) {
         if (i == release_start) sk_brass_set_pressure(&br, 0.0f);
@@ -2676,10 +2673,10 @@ int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int arg
   ands_string_from_external(ctx->parse, meta_str, (int)strlen(meta_str));
 
   if (has_loop) {
-    ctx->printf(ctx, "# phz: %s [%d samples, %.2fs, loop: %d..%d]\n",
+    ctx->printf(ctx, "# gen: %s [%d samples, %.2fs, loop: %d..%d]\n",
                 p.preset_name, total_samples, (double)total_samples / rate, loop_start, loop_end);
   } else {
-    ctx->printf(ctx, "# phz: %s [%d samples, %.2fs, one-shot]\n",
+    ctx->printf(ctx, "# gen: %s [%d samples, %.2fs, one-shot]\n",
                 p.preset_name, total_samples, (double)total_samples / rate);
   }
 
@@ -2693,7 +2690,7 @@ int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int arg
         if (skode_double_to_int(arg[1], &os)) one_shot = os;
       }
       data_load(ctx, wave_slot, one_shot, rate, 0.0f);
-      ctx->printf(ctx, "# phz: installed to w%d\n", wave_slot);
+      ctx->printf(ctx, "# gen: installed to w%d\n", wave_slot);
     }
   }
 

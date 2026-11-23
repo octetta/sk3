@@ -9,10 +9,10 @@ Generated automatically by `tools/mkopcodes` from modular opcode definitions in 
 
 ## Architecture & System Overview
 
-- **Total Command Words**: 314
-- **Total Dispatch Clauses**: 641
+- **Total Command Words**: 318
+- **Total Dispatch Clauses**: 653
 - **Real-Time Audio Opcode Handlers**: 159 (audio-thread safe, zero allocation, zero string lookup)
-- **Immediate / Control Plane Clauses**: 482 (REPL / parser / file system / diagnostics)
+- **Immediate / Control Plane Clauses**: 494 (REPL / parser / file system / diagnostics)
 
 ### Functional Command Groups
 
@@ -20,7 +20,7 @@ Generated automatically by `tools/mkopcodes` from modular opcode definitions in 
 |:---|:---|:---:|:---|
 | voice | `voice` | 25 | Core voice selection, levels, panning, and voice diagnostics |
 | osc | `osc` | 20 | Oscillators, waveforms, frequency, tuning, detune, loops |
-| wave | `wave` | 17 | Wavetable slots, visualizers, WAV import and export |
+| wave | `wave` | 21 | Wavetable slots, visualizers, WAV import and export |
 | filter | `filter` | 8 | Filter cutoff frequency, resonance, modes, wavefolding |
 | env | `env` | 15 | Envelopes, ADSR parameters, curve shaping, segment times |
 | mod | `mod` | 14 | Cross-modulation, FM, AM, ring mod, sample & hold, glissando |
@@ -1651,9 +1651,13 @@ Usage: WS wave
 | [`data_to_wave`](#data_to_wave) | `d>w` | 4 | 0..3 | Immediate | load active data array into default sample slot as one-shot |
 | [`physical_synth`](#physical_synth) | `phz!` | 3 | 0..2 | Immediate | render physical modeling instrument DSL to data array |
 | [`physical_synth_slash`](#physical_synth_slash) | `/phz` | 3 | 0..2 | Immediate | render physical modeling instrument DSL to data array |
+| [`sample_gen`](#sample_gen) | `gen!` | 3 | 0..2 | Immediate | generate sample from physical modeling instrument DSL to data array |
+| [`sample_gen_slash`](#sample_gen_slash) | `/gen` | 3 | 0..2 | Immediate | generate sample from physical modeling instrument DSL to data array |
 | [`sample_render`](#sample_render) | `/render` | 3 | 0..2 | Immediate | render physical modeling instrument DSL to data array |
 | [`tts_render`](#tts_render) | `tts!` | 4 | 0..3 | Immediate | render bracketed phonetic DSL string to data array |
 | [`voice_wave_display`](#voice_wave_display) | `VW` | 4 | 0..3 | Immediate | render ascii waveform for active voice |
+| [`vox_render`](#vox_render) | `vox!` | 4 | 0..3 | Immediate | render bracketed phonetic DSL string to data array |
+| [`vox_render_slash`](#vox_render_slash) | `/vox` | 2 | 0..1 | Immediate | render bracketed phonetic DSL string to data array |
 | [`wave_bandlimit`](#wave_bandlimit) | `WB` | 2 | 0..1 | Real-Time | bandlimit active voice wavetable |
 | [`wave_default`](#wave_default) | `/` | 2 | 0..1 | Real-Time | reset voice waveform to default sine |
 | [`wave_display`](#wave_display) | `W` | 4 | 0..3 | Immediate | render ascii waveform for wave slot |
@@ -1892,6 +1896,100 @@ Usage: [instrument:preset ...] slot one_shot /phz
 
 ---
 
+### `sample_gen`
+
+- **Alias**: `gen!`
+- **Group**: `wave`
+- **Clause Count**: 3
+
+#### Clause 1: `sample_gen()`
+
+- **Arity**: `0`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: generate sample from physical modeling instrument DSL to data array
+
+**Description & Details**:
+
+```text
+Generates sample from physical modeling instrument DSL string into active data array with metadata. See doc/SAMPLE_SYNTH_DSL.md for full catalog, parameters, and examples.
+Usage: [instrument:preset ...] gen!
+```
+
+#### Clause 2: `sample_gen(finite)`
+
+- **Arity**: `1`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: generate sample from physical modeling instrument DSL to data and wave slot
+
+**Description & Details**:
+
+```text
+Generates sample from physical modeling instrument DSL to data array and installs into wavetable slot with metadata.
+Usage: [instrument:preset ...] slot gen!
+```
+
+#### Clause 3: `sample_gen(finite, finite)`
+
+- **Arity**: `2`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: generate sample from physical modeling instrument DSL to data and wave slot with one_shot override
+
+**Description & Details**:
+
+```text
+Generates sample from physical modeling instrument DSL to data array and wavetable slot with explicit one_shot mode.
+Usage: [instrument:preset ...] slot one_shot gen!
+```
+
+---
+
+### `sample_gen_slash`
+
+- **Alias**: `/gen`
+- **Group**: `wave`
+- **Clause Count**: 3
+
+#### Clause 1: `sample_gen_slash()`
+
+- **Arity**: `0`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: generate sample from physical modeling instrument DSL to data array
+
+**Description & Details**:
+
+```text
+Generates sample from physical modeling instrument DSL string into active data array with metadata.
+Usage: [instrument:preset ...] /gen
+```
+
+#### Clause 2: `sample_gen_slash(finite)`
+
+- **Arity**: `1`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: generate sample from physical modeling instrument DSL to data and wave slot
+
+**Description & Details**:
+
+```text
+Generates sample from physical modeling instrument DSL to data array and installs into wavetable slot with metadata.
+Usage: [instrument:preset ...] slot /gen
+```
+
+#### Clause 3: `sample_gen_slash(finite, finite)`
+
+- **Arity**: `2`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: generate sample from physical modeling instrument DSL to data and wave slot with one_shot override
+
+**Description & Details**:
+
+```text
+Generates sample from physical modeling instrument DSL to data array and wavetable slot with explicit one_shot mode.
+Usage: [instrument:preset ...] slot one_shot /gen
+```
+
+---
+
 ### `sample_render`
 
 - **Alias**: `/render`
@@ -2055,6 +2153,100 @@ Usage: VW width height
 ```text
 Renders ASCII waveform preview for voice with width and height.
 Usage: VW voice width height
+```
+
+---
+
+### `vox_render`
+
+- **Alias**: `vox!`
+- **Group**: `wave`
+- **Clause Count**: 4
+
+#### Clause 1: `vox_render()`
+
+- **Arity**: `0`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: render bracketed phonetic DSL string to data array
+
+**Description & Details**:
+
+```text
+Renders bracketed phonetic DSL string into active data array. See doc/PHONEMES.md for full catalog and syntax.
+Usage: [phonemes] vox!
+```
+
+#### Clause 2: `vox_render(finite)`
+
+- **Arity**: `1`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: render phonemes to data and optional wave slot or voice
+
+**Description & Details**:
+
+```text
+Renders phonemes to data array and optional wave slot or voice persona.
+Usage: [phonemes] slot vox!
+```
+
+#### Clause 3: `vox_render(finite, finite)`
+
+- **Arity**: `2`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: render phonemes to data and wave slot with voice persona
+
+**Description & Details**:
+
+```text
+Renders phonemes to data array and wavetable slot with voice persona (0=Paul, 1=Harry, 2=Betty, 3=SAM, 4=Robot, 5=Elf).
+Usage: [phonemes] slot voice vox!
+```
+
+#### Clause 4: `vox_render(finite, finite, finite)`
+
+- **Arity**: `3`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: render phonemes to wave slot with voice and pitch
+
+**Description & Details**:
+
+```text
+Renders phonemes to data array and wavetable slot with voice persona and base pitch in Hz.
+Usage: [phonemes] slot voice pitch vox!
+```
+
+---
+
+### `vox_render_slash`
+
+- **Alias**: `/vox`
+- **Group**: `wave`
+- **Clause Count**: 2
+
+#### Clause 1: `vox_render_slash()`
+
+- **Arity**: `0`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: render bracketed phonetic DSL string to data array
+
+**Description & Details**:
+
+```text
+Renders bracketed phonetic DSL string into active data array.
+Usage: [phonemes] /vox
+```
+
+#### Clause 2: `vox_render_slash(finite)`
+
+- **Arity**: `1`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: render phonemes to data and optional wave slot
+
+**Description & Details**:
+
+```text
+Renders phonemes to data array and optional wave slot.
+Usage: [phonemes] slot /vox
 ```
 
 ---

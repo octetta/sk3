@@ -1,3 +1,93 @@
+@name     sample_gen
+@alias    gen!
+@group    wave
+@c_name   skode_clause_sample_gen_bang_0
+@type     immediate
+@arity    0
+@match    ()
+@summary  generate sample from physical modeling instrument DSL to data array
+@doc
+Generates sample from physical modeling instrument DSL string into active data array with metadata. See doc/SAMPLE_SYNTH_DSL.md for full catalog, parameters, and examples.
+Usage: [instrument:preset ...] gen!
+@code
+    return skode_exec_sample_render(ctx, s, args, argc);
+@end
+
+@name     sample_gen
+@alias    gen!
+@group    wave
+@c_name   skode_clause_sample_gen_bang_1
+@type     immediate
+@arity    1
+@match    (finite)
+@summary  generate sample from physical modeling instrument DSL to data and wave slot
+@doc
+Generates sample from physical modeling instrument DSL to data array and installs into wavetable slot with metadata.
+Usage: [instrument:preset ...] slot gen!
+@code
+    return skode_exec_sample_render(ctx, s, args, argc);
+@end
+
+@name     sample_gen
+@alias    gen!
+@group    wave
+@c_name   skode_clause_sample_gen_bang_2
+@type     immediate
+@arity    2
+@match    (finite, finite)
+@summary  generate sample from physical modeling instrument DSL to data and wave slot with one_shot override
+@doc
+Generates sample from physical modeling instrument DSL to data array and wavetable slot with explicit one_shot mode.
+Usage: [instrument:preset ...] slot one_shot gen!
+@code
+    return skode_exec_sample_render(ctx, s, args, argc);
+@end
+
+@name     sample_gen_slash
+@alias    /gen
+@group    wave
+@c_name   skode_clause_sample_gen_slash_0
+@type     immediate
+@arity    0
+@match    ()
+@summary  generate sample from physical modeling instrument DSL to data array
+@doc
+Generates sample from physical modeling instrument DSL string into active data array with metadata.
+Usage: [instrument:preset ...] /gen
+@code
+    return skode_exec_sample_render(ctx, s, args, argc);
+@end
+
+@name     sample_gen_slash
+@alias    /gen
+@group    wave
+@c_name   skode_clause_sample_gen_slash_1
+@type     immediate
+@arity    1
+@match    (finite)
+@summary  generate sample from physical modeling instrument DSL to data and wave slot
+@doc
+Generates sample from physical modeling instrument DSL to data array and installs into wavetable slot with metadata.
+Usage: [instrument:preset ...] slot /gen
+@code
+    return skode_exec_sample_render(ctx, s, args, argc);
+@end
+
+@name     sample_gen_slash
+@alias    /gen
+@group    wave
+@c_name   skode_clause_sample_gen_slash_2
+@type     immediate
+@arity    2
+@match    (finite, finite)
+@summary  generate sample from physical modeling instrument DSL to data and wave slot with one_shot override
+@doc
+Generates sample from physical modeling instrument DSL to data array and wavetable slot with explicit one_shot mode.
+Usage: [instrument:preset ...] slot one_shot /gen
+@code
+    return skode_exec_sample_render(ctx, s, args, argc);
+@end
+
 @name     physical_synth
 @alias    phz!
 @group    wave

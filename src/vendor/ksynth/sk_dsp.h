@@ -2467,14 +2467,11 @@ typedef struct {
     float target_pressure;
     float pressure_slew;
     float noise_gain;
-    float vibrato_phase;
-    float vibrato_inc;
-    float vibrato_depth;
     float chiff_env;
     float bore_damping;
-    sk_biquad_t chiff_filter;   /* ~3500 Hz attack chiff */
-    sk_biquad_t body_formant;   /* ~850 Hz warm cylindrical body */
-    sk_biquad_t airy_formant;   /* ~4200 Hz air radiation */
+    sk_biquad_t chiff_filter;   /* ~3200 Hz attack chiff */
+    sk_biquad_t body_formant;   /* ~1100 Hz warm wooden bore resonance */
+    sk_biquad_t air_filter;     /* ~4200 Hz breath lowpass */
     float dc_x, dc_y;
     float sample_rate;
     sk_rng_t rng;
@@ -2487,17 +2484,15 @@ static inline void sk_flute_init(sk_flute_t *fl, float sample_rate) {
     fl->sample_rate = sample_rate > 1000.0f ? sample_rate : 48000.0f;
     fl->freq = 523.25f;
     fl->phase_inc = fl->freq / fl->sample_rate;
-    fl->bore_damping = 0.35f;
-    fl->noise_gain = 0.12f;
-    fl->pressure_slew = 0.004f;
-    fl->vibrato_inc = 5.5f / fl->sample_rate; /* 5.5 Hz natural flute vibrato */
-    fl->vibrato_depth = 0.035f;
+    fl->bore_damping = 0.25f;
+    fl->noise_gain = 0.05f;
+    fl->pressure_slew = 0.003f;
     fl->chiff_env = 1.0f;
     sk_rng_init(&fl->rng, 777123ULL);
 
-    sk_biquad_init(&fl->chiff_filter, SK_BIQUAD_BANDPASS, 3500.0f, 2.0f, fl->sample_rate);
-    sk_biquad_init(&fl->body_formant, SK_BIQUAD_BANDPASS, 850.0f,  3.0f, fl->sample_rate);
-    sk_biquad_init(&fl->airy_formant, SK_BIQUAD_BANDPASS, 4200.0f, 2.5f, fl->sample_rate);
+    sk_biquad_init(&fl->chiff_filter, SK_BIQUAD_BANDPASS, 3200.0f, 2.2f, fl->sample_rate);
+    sk_biquad_init(&fl->body_formant, SK_BIQUAD_BANDPASS, 1100.0f, 2.5f, fl->sample_rate);
+    sk_biquad_init(&fl->air_filter,   SK_BIQUAD_LOWPASS,  4200.0f, 0.707f, fl->sample_rate);
 }
 
 /* Tune flute to target frequency in Hz */
@@ -2521,56 +2516,49 @@ static inline float sk_flute_step(sk_flute_t *fl) {
     fl->breath_pressure += fl->pressure_slew * (fl->target_pressure - fl->breath_pressure);
     if (fl->breath_pressure < 1e-4f && fl->target_pressure < 1e-4f) return 0.0f;
 
-    /* Vibrato modulation on blowing pressure and pitch */
-    fl->vibrato_phase += fl->vibrato_inc;
-    if (fl->vibrato_phase >= 1.0f) fl->vibrato_phase -= 1.0f;
-    float vib = sinf(fl->vibrato_phase * 2.0f * (float)M_PI) * fl->vibrato_depth;
-
-    /* Overblowing when blowing pressure exceeds 0.85 */
+    /* Overblowing when blowing pressure exceeds 0.85 (smooth octave jump) */
     float oct_mult = 1.0f;
     if (fl->breath_pressure > 0.85f) {
         float overblow = (fl->breath_pressure - 0.85f) * 2.85f;
         if (overblow > 1.0f) overblow = 1.0f;
-        oct_mult = 1.0f + overblow; /* smoothly transitions to octave harmonic */
+        oct_mult = 1.0f + overblow;
     }
 
-    float cur_phase_inc = fl->phase_inc * oct_mult * (1.0f + vib);
-    fl->phase += cur_phase_inc;
+    fl->phase += fl->phase_inc * oct_mult;
     if (fl->phase >= 1.0f) fl->phase -= 1.0f;
 
-    /* Aeroacoustic jet labium splitting:
-     * Odd harmonics dominate (open pipe resonance) with warm 2nd harmonic */
-    float s1 = sinf(fl->phase * 2.0f * (float)M_PI);
-    float s2 = sinf(fl->phase * 4.0f * (float)M_PI) * 0.18f;
-    float s3 = sinf(fl->phase * 6.0f * (float)M_PI) * 0.28f;
-    float s5 = sinf(fl->phase * 10.0f * (float)M_PI) * 0.08f;
-    float jet_tone = s1 + s2 + s3 + s5;
+    /* Open cylindrical acoustic pipe harmonic series (1/n roll-off with odd dominance) */
+    float p = fl->phase * 2.0f * (float)M_PI;
+    float h1 = sinf(p);
+    float h2 = sinf(2.0f * p) * 0.10f; /* subtle embouchure asymmetry */
+    float h3 = sinf(3.0f * p) * 0.25f; /* strong odd harmonic */
+    float h4 = sinf(4.0f * p) * 0.04f;
+    float h5 = sinf(5.0f * p) * 0.09f;
+    float h6 = sinf(6.0f * p) * 0.02f;
+    float h7 = sinf(7.0f * p) * 0.035f;
+    float pipe_tone = h1 + h2 + h3 + h4 + h5 + h6 + h7;
 
-    /* Attack chiff transient (~35ms decaying burst) */
+    /* Transient chiff (initial 35ms attack burst) */
     float raw_noise = sk_rng_float(&fl->rng);
-    float chiff = sk_biquad_step(&fl->chiff_filter, raw_noise) * fl->chiff_env * 0.35f;
-    fl->chiff_env *= 0.998f;
+    float chiff = sk_biquad_step(&fl->chiff_filter, raw_noise) * fl->chiff_env * 0.20f;
+    fl->chiff_env *= 0.9985f;
 
-    /* Continuous breath turbulence */
-    float breath_turbulence = raw_noise * fl->noise_gain * fl->breath_pressure;
+    /* Subtle breath air */
+    float filtered_air = sk_biquad_step(&fl->air_filter, raw_noise);
+    float breath_noise = filtered_air * fl->noise_gain * fl->breath_pressure * 0.30f;
 
-    /* Combine excitation */
-    float excited = (jet_tone * 0.85f + breath_turbulence + chiff) * fl->breath_pressure;
+    float excited = (pipe_tone * 0.85f + chiff + breath_noise) * fl->breath_pressure;
 
-    /* Resonances: cylindrical warm body + air radiation */
-    float f_body = sk_biquad_step(&fl->body_formant, excited);
-    float f_air = sk_biquad_step(&fl->airy_formant, excited);
-
-    /* Bore damping attenuates airy high frequencies */
-    float air_gain = 0.15f * (1.0f - sk_clampf(fl->bore_damping, 0.0f, 0.8f));
-    float mixed = excited * 0.55f + f_body * 0.40f + f_air * air_gain;
+    /* Resonate through wooden body */
+    float body = sk_biquad_step(&fl->body_formant, excited);
+    float mixed = excited * 0.70f + body * 0.35f;
 
     /* DC blocker to prevent integration bias */
     float out = mixed - fl->dc_x + 0.995f * fl->dc_y;
     fl->dc_x = mixed;
     fl->dc_y = out;
 
-    return sk_softclip_cubic(out * 1.5f, 1.0f);
+    return sk_softclip_cubic(out * 1.4f, 1.0f);
 }
 
 /* -------------------------------------------------------------------------
@@ -2641,18 +2629,17 @@ static inline float sk_brass_step(sk_brass_t *br) {
     if (br->phase < duty) {
         float p = br->phase / duty;
         raw_lip = sinf(p * (float)M_PI);
-        /* Non-linear shock wave steepening (Burgers' effect in horn):
-         * Higher pressure & brassiness causes wavefront to lean forward and sharpen */
+        /* Non-linear shock wave steepening in horn */
         float steep = 1.0f + br->brassiness * 2.5f * br->mouth_pressure;
         raw_lip = powf(raw_lip, 1.0f / steep);
     } else {
         /* Closed lip phase with subtle mechanical rebound */
         float p = (br->phase - duty) / (1.0f - duty);
-        raw_lip = -0.08f * sinf(p * (float)M_PI) * (1.0f - p);
+        raw_lip = -0.06f * sinf(p * (float)M_PI) * (1.0f - p);
     }
 
     /* Subtle breath turbulence */
-    float breath_noise = sk_rng_float(&br->rng) * 0.025f * br->mouth_pressure;
+    float breath_noise = sk_rng_float(&br->rng) * 0.015f * br->mouth_pressure;
     float excited = (raw_lip + breath_noise) * br->mouth_pressure;
 
     /* Resonate through the acoustic brass horn body formants */
@@ -2662,14 +2649,14 @@ static inline float sk_brass_step(sk_brass_t *br) {
 
     /* Bore damping attenuates high-frequency bell radiation */
     float bell_gain = 0.25f * (1.0f - sk_clampf(br->bore_damping, 0.0f, 0.8f));
-    float mixed = excited * 0.25f + f_body * 0.45f + f_throat * 0.35f + f_bell * bell_gain;
+    float mixed = excited * 0.35f + f_body * 0.40f + f_throat * 0.30f + f_bell * bell_gain;
 
     /* DC blocker */
     float out = mixed - br->dc_x + 0.995f * br->dc_y;
     br->dc_x = mixed;
     br->dc_y = out;
 
-    return sk_softclip_cubic(out * 2.2f, 1.0f);
+    return sk_softclip_cubic(out * 1.8f, 1.0f);
 }
 
 /* =========================================================================
