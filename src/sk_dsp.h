@@ -967,6 +967,47 @@ static inline void sk_karplus_pluck(sk_karplus_t *ks, float freq, float velocity
     ks->dc_x = 0.0f;
     ks->dc_y = 0.0f;
 
+    if (freq < 150.0f) {
+        /* Acoustic Bass / Cello Pizzicato:
+         * Fleshy fingertip displacement wave.
+         * A human finger plucking a heavy wound bass string displaces it into a rounded
+         * asymmetric triangle, followed by a smooth fingertip release rather than
+         * sharp white noise. This eliminates synthetic FM/plastic buzz and gives deep,
+         * warm acoustic body response. */
+        float p_pos = (float)pick_delay;
+        float inv_p = 1.0f / (p_pos + 1e-4f);
+        float inv_tail = 1.0f / ((float)(burst_len - pick_delay) + 1e-4f);
+        float smooth_width = (float)burst_len * 0.12f;
+        if (smooth_width < 4.0f) smooth_width = 4.0f;
+
+        float exc_filter = 0.0f;
+        float exc_coeff = 0.04f + 0.15f * brightness;
+
+        for (int i = 0; i < burst_len; i++) {
+            float fi = (float)i;
+            float tri;
+            if (fi <= p_pos) {
+                tri = fi * inv_p;
+            } else {
+                tri = (float)(burst_len - i) * inv_tail;
+            }
+            /* Smooth rounded crest using cubic hermite blend */
+            float dist_from_peak = fabsf(fi - p_pos);
+            if (dist_from_peak < smooth_width) {
+                float u = dist_from_peak / smooth_width;
+                tri = tri * (0.85f + 0.15f * (3.0f * u * u - 2.0f * u * u * u));
+            }
+            /* Subtle string winding friction texture */
+            float noise = rng ? sk_rng_float(rng) : (((float)rand() / (float)RAND_MAX) * 2.0f - 1.0f);
+            exc_filter = (1.0f - exc_coeff) * exc_filter + exc_coeff * noise;
+            ks->buffer[i] = (tri * 0.90f + exc_filter * 0.10f * brightness) * velocity;
+        }
+        for (int i = burst_len; i < ks->size; i++) {
+            ks->buffer[i] = 0.0f;
+        }
+        return;
+    }
+
     /* Lowpass filter for excitation brightness */
     float exc_filter = 0.0f;
     float exc_coeff = 0.1f + 0.85f * brightness;
@@ -2295,7 +2336,7 @@ static inline float sk_drum_cowbell_step(sk_drum_cowbell_t *c) {
  * independent mode damping and zero pitch-glide.
  */
 
-#define SK_BELL_MAX_MODES 12
+#define SK_BELL_MAX_MODES 16
 
 typedef enum {
     SK_BELL_CHURCH = 0,   /* Tuned bronze church bell (Hum, Prime, Tierce, Quint, Nominal, Decim) */
@@ -2331,17 +2372,22 @@ static inline void sk_drum_bell_set_preset(sk_drum_bell_t *b, sk_bell_type_t typ
     /* Mode ratio tables: [ratio, amp, t60_base_sec]
      * Church bells: cast bronze doublet pairs with slight acoustic detuning create
      * the majestic beating / warble characteristic of real cathedral bells. */
-    static const double CHURCH[10][3] = {
-        { 0.500, 0.90, 6.5 }, /* Hum doublet 1 */
-        { 0.504, 0.85, 6.5 }, /* Hum doublet 2 (beating ~0.9 Hz) */
-        { 1.000, 1.00, 4.8 }, /* Prime / Strike doublet 1 */
-        { 1.006, 0.95, 4.8 }, /* Prime / Strike doublet 2 (beating ~1.3 Hz) */
-        { 1.183, 0.75, 3.8 }, /* Tierce doublet 1 (minor third) */
-        { 1.192, 0.70, 3.8 }, /* Tierce doublet 2 (beating ~2.0 Hz) */
-        { 1.506, 0.60, 3.0 }, /* Quint doublet 1 (fifth) */
-        { 1.515, 0.55, 3.0 }, /* Quint doublet 2 */
-        { 2.000, 0.65, 2.2 }, /* Nominal doublet 1 (octave) */
-        { 2.012, 0.60, 2.2 }  /* Nominal doublet 2 (beating ~2.6 Hz) */
+    static const double CHURCH[14][3] = {
+        { 0.500, 0.90, 6.5 },  /* Hum doublet 1 */
+        { 0.504, 0.85, 6.5 },  /* Hum doublet 2 (beating ~0.9 Hz) */
+        { 1.000, 1.00, 4.8 },  /* Prime / Strike doublet 1 */
+        { 1.006, 0.95, 4.8 },  /* Prime / Strike doublet 2 (beating ~1.3 Hz) */
+        { 1.183, 0.75, 3.8 },  /* Tierce doublet 1 (minor third) */
+        { 1.192, 0.70, 3.8 },  /* Tierce doublet 2 (beating ~2.0 Hz) */
+        { 1.506, 0.60, 3.0 },  /* Quint doublet 1 (fifth) */
+        { 1.515, 0.55, 3.0 },  /* Quint doublet 2 */
+        { 2.000, 0.65, 2.2 },  /* Nominal doublet 1 (octave) */
+        { 2.012, 0.60, 2.2 },  /* Nominal doublet 2 (beating ~2.6 Hz) */
+        /* Bronze rim shear modal cluster (transient inharmonic sparkle) */
+        { 2.684, 0.45, 0.40 }, /* Superquint */
+        { 3.245, 0.35, 0.25 }, /* Octave-tierce */
+        { 4.150, 0.25, 0.15 }, /* Upper rim flexure */
+        { 5.380, 0.18, 0.08 }  /* High rim shear ring */
     };
     static const double TUBULAR[5][3] = {
         {  1.000, 1.00, 3.5 },
@@ -2371,9 +2417,9 @@ static inline void sk_drum_bell_set_preset(sk_drum_bell_t *b, sk_bell_type_t typ
     };
 
     const double (*table)[3] = CHURCH;
-    int count = 10;
+    int count = 14;
     switch (type) {
-        case SK_BELL_CHURCH:  table = CHURCH;  count = 10; break;
+        case SK_BELL_CHURCH:  table = CHURCH;  count = 14; break;
         case SK_BELL_TUBULAR: table = TUBULAR; count = 5;  break;
         case SK_BELL_VIBE:    table = VIBE;    count = 4;  break;
         case SK_BELL_TIBETAN: table = TIBETAN; count = 5;  break;
@@ -2398,8 +2444,8 @@ static inline void sk_drum_bell_init(sk_drum_bell_t *b, float sample_rate, sk_be
     sk_biquad_init(&b->strike_filter, SK_BIQUAD_BANDPASS, 3500.0f, 2.0f, b->sample_rate);
 
     /* Heavy iron clapper impact for church bell */
-    sk_biquad_init(&b->clapper_filter, SK_BIQUAD_BANDPASS, 185.0f, 2.2f, b->sample_rate);
-    b->clapper_decay_coeff = expf(-1.0f / (0.022f * b->sample_rate)); /* 22ms clapper thump */
+    sk_biquad_init(&b->clapper_filter, SK_BIQUAD_BANDPASS, 85.0f, 1.8f, b->sample_rate);
+    b->clapper_decay_coeff = expf(-1.0f / (0.045f * b->sample_rate)); /* 45ms heavy bronze inertia thump */
 
     sk_rng_init(&b->rng, 88877711ULL);
 
@@ -2411,12 +2457,22 @@ static inline void sk_drum_bell_trigger(sk_drum_bell_t *b, float velocity) {
     if (!b) return;
     velocity = sk_clampf(velocity, 0.0f, 1.0f);
     b->strike_env = velocity * 0.40f;
-    b->clapper_env = (b->type == SK_BELL_CHURCH) ? (velocity * 0.65f) : 0.0f;
+    b->clapper_env = (b->type == SK_BELL_CHURCH) ? (velocity * 0.85f) : 0.0f;
 
-    /* Re-excite each complex mode phasor without discontinuity */
+    /* Re-excite mode phasors.
+     * Church bell doublets are orthogonal spatial standing waves on the circular rim:
+     * Mode 2k is initialized at phase 0 (re=1, im=0), while doublet partner 2k+1
+     * is excited in phase quadrature (re=0, im=1) with non-zero spatial offset.
+     * This eliminates synthetic FM-like sinusoidal cancellation tremolo and produces
+     * the rich spatial acoustic swirl of real bronze bells. */
     for (int i = 0; i < b->num_modes; i++) {
-        b->modes[i].re = 1.0;
-        b->modes[i].im = 0.0;
+        if (b->type == SK_BELL_CHURCH && (i < 10) && (i % 2 == 1)) {
+            b->modes[i].re = 0.0;
+            b->modes[i].im = 1.0;
+        } else {
+            b->modes[i].re = 1.0;
+            b->modes[i].im = 0.0;
+        }
     }
 }
 
@@ -2592,8 +2648,8 @@ static inline void sk_soundbox_init(sk_soundbox_t *b, float sample_rate, float a
 }
 
 static inline void sk_soundbox_init_upright_bass(sk_soundbox_t *b, float sample_rate) {
-    /* Upright double bass: air ~62 Hz, wood ~98 Hz & ~165 Hz */
-    sk_soundbox_init(b, sample_rate, 62.0f, 3.5f, 98.0f, 4.0f, 165.0f, 3.0f, 0.55f, 0.45f, 0.35f);
+    /* Upright double bass: air cavity ~62 Hz (warm acoustic boom), wood ~98 Hz & ~165 Hz (soundboard resonances) */
+    sk_soundbox_init(b, sample_rate, 62.0f, 3.8f, 98.0f, 4.2f, 165.0f, 3.2f, 0.65f, 0.50f, 0.40f);
 }
 
 static inline void sk_soundbox_init_cello(sk_soundbox_t *b, float sample_rate) {

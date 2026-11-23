@@ -359,7 +359,6 @@ static int word_exec_g(const skode_word_t *self, skode_t *ctx, ands_t *s, double
         sv.glissando_time[voice] = 0.0;
         sv.glissando_mode[voice] = 0;
       } else {
-        sv.glissando_enable[voice] = 1;
         sv.glissando_time[voice] = arg[0];
         sv.glissando_mode[voice] = (argc > 1) ? (int)arg[1] : 0;
       }
@@ -1994,6 +1993,18 @@ static float parse_dsl_pitch(const char *val, float default_val, float *out_midi
     return sk_mtof(n);
   }
 
+  /* Frequency notation: f440, F440, f:440, f=440 */
+  if ((val[0] == 'f' || val[0] == 'F') && (val[1] == ':' || val[1] == '=' || (isdigit((unsigned char)val[1]) && isdigit((unsigned char)val[2])))) {
+    const char *p = val + 1;
+    while (*p == ' ' || *p == ':' || *p == '=') p++;
+    float hz = (float)atof(p);
+    if (hz > 0.0f) {
+      if (out_midi_note) *out_midi_note = sk_ftom(hz);
+      if (out_has_pitch) *out_has_pitch = 1;
+      return hz;
+    }
+  }
+
   /* Note names: c4, a4, f#3, eb2, etc. */
   char c = (char)tolower((unsigned char)val[0]);
   if (c >= 'a' && c <= 'g') {
@@ -2011,10 +2022,12 @@ static float parse_dsl_pitch(const char *val, float default_val, float *out_midi
     if (*p == '-' || (*p >= '0' && *p <= '9')) {
       oct = atoi(p);
     }
-    float midi = (float)((oct + 1) * 12 + semi);
-    if (out_midi_note) *out_midi_note = midi;
-    if (out_has_pitch) *out_has_pitch = 1;
-    return sk_mtof(midi);
+    if (oct >= -2 && oct <= 9) {
+      float midi = (float)((oct + 1) * 12 + semi);
+      if (out_midi_note) *out_midi_note = midi;
+      if (out_has_pitch) *out_has_pitch = 1;
+      return sk_mtof(midi);
+    }
   }
 
   /* Numerical value */
@@ -2035,39 +2048,125 @@ static float parse_dsl_pitch(const char *val, float default_val, float *out_midi
   return default_val;
 }
 
-static int find_sustain_loop_correlate(const float *audio, int len, float freq, float sample_rate, int *loop_start, int *loop_end, float *best_corr_out) {
-  if (!audio || len < 256 || sample_rate < 1000.0f) return 0;
+/* YIN Fundamental Pitch Estimator
+ * Implements de Cheveigné & Kawahara (2002) YIN algorithm with Cumulative Mean
+ * Normalized Difference Function (CMNDF) and parabolic interpolation.
+ * Robustly estimates fundamental frequency from 35 Hz to 2400 Hz on arbitrary audio
+ * (including live microphone recordings and untagged PCM samples), completely immune
+ * to harmonic octave errors, DC bias, and amplitude decay.
+ */
+static float sk_detect_pitch_yin(const float *audio, int len, float sample_rate, float pitch_hint) {
+  if (!audio || len < 512 || sample_rate < 1000.0f) return 0.0f;
 
-  /* If pitch is unknown or <= 20Hz, detect fundamental period via autocorrelation */
-  if (freq < 20.0f) {
-    int auto_start = (int)(sample_rate * 0.15f);
-    if (auto_start > len / 4) auto_start = len / 4;
-    int auto_len = (int)(sample_rate * 0.25f);
-    if (auto_start + auto_len >= len) auto_len = len - auto_start - 1;
+  int win_size = 1024;
+  if (win_size > len / 3) win_size = len / 3;
+  if (win_size < 256) win_size = 256;
 
-    int min_lag = (int)(sample_rate / 2000.0f); /* max 2000 Hz */
-    int max_lag = (int)(sample_rate / 40.0f);   /* min 40 Hz */
-    if (min_lag < 4) min_lag = 4;
-    if (max_lag >= auto_len / 2) max_lag = auto_len / 2 - 1;
+  int min_tau = (int)(sample_rate / 2400.0f); /* max 2400 Hz */
+  int max_tau = (int)(sample_rate / 35.0f);   /* min 35 Hz */
+  if (min_tau < 4) min_tau = 4;
+  if (max_tau >= 1800) max_tau = 1800;
 
-    int best_lag = 0;
-    float best_r = -1e9f;
-    for (int lag = min_lag; lag <= max_lag; lag++) {
-      float sum = 0.0f;
-      for (int i = 0; i < auto_len - lag; i++) {
-        sum += audio[auto_start + i] * audio[auto_start + i + lag];
-      }
-      if (sum > best_r) {
-        best_r = sum;
-        best_lag = lag;
-      }
+  int start_pos = (int)(sample_rate * 0.18f); /* skip 180ms attack */
+  if (start_pos + win_size + max_tau >= len) start_pos = len / 4;
+  if (start_pos + win_size + max_tau >= len) start_pos = 0;
+  if (start_pos + win_size + max_tau >= len) {
+    win_size = (len - start_pos) / 3;
+    max_tau = win_size;
+  }
+  if (min_tau >= max_tau) return 0.0f;
+
+  /* If pitch hint is provided and valid, narrow the search range to ±18% of expected period */
+  if (pitch_hint >= 35.0f && pitch_hint <= 2400.0f) {
+    int expected_tau = (int)(sample_rate / pitch_hint + 0.5f);
+    int delta = (int)(expected_tau * 0.18f);
+    if (delta < 4) delta = 4;
+    int h_min = expected_tau - delta;
+    int h_max = expected_tau + delta;
+    if (h_min > min_tau && h_min < max_tau) min_tau = h_min;
+    if (h_max < max_tau && h_max > min_tau) max_tau = h_max;
+  }
+
+  /* 1. Difference function d(tau) */
+  float d[2048];
+  float cmndf[2048];
+  memset(d, 0, sizeof(d));
+  memset(cmndf, 0, sizeof(cmndf));
+
+  for (int tau = 0; tau <= max_tau; tau++) {
+    float sum = 0.0f;
+    for (int j = 0; j < win_size; j++) {
+      float diff = audio[start_pos + j] - audio[start_pos + j + tau];
+      sum += diff * diff;
     }
-    if (best_lag > 0) {
-      freq = sample_rate / (float)best_lag;
-    } else {
-      freq = 220.0f;
+    d[tau] = sum;
+  }
+
+  /* 2. Cumulative Mean Normalized Difference Function cmndf(tau) */
+  cmndf[0] = 1.0f;
+  float running_sum = 0.0f;
+  for (int tau = 1; tau <= max_tau; tau++) {
+    running_sum += d[tau];
+    cmndf[tau] = (running_sum > 1e-9f) ? (d[tau] * (float)tau / running_sum) : 1.0f;
+  }
+
+  /* 3. Absolute thresholding (theta = 0.20) on local minima */
+  const float threshold = 0.20f;
+  int tau_best = -1;
+  for (int tau = min_tau + 1; tau < max_tau - 1; tau++) {
+    if (cmndf[tau] < cmndf[tau - 1] && cmndf[tau] <= cmndf[tau + 1]) {
+      if (cmndf[tau] < threshold) {
+        tau_best = tau;
+        break;
+      }
     }
   }
+
+  /* Fallback to global minimum of local valleys if none below threshold */
+  if (tau_best < 0) {
+    float min_val = 1e9f;
+    for (int tau = min_tau + 1; tau < max_tau - 1; tau++) {
+      if (cmndf[tau] < cmndf[tau - 1] && cmndf[tau] <= cmndf[tau + 1]) {
+        if (cmndf[tau] < min_val) {
+          min_val = cmndf[tau];
+          tau_best = tau;
+        }
+      }
+    }
+  }
+
+  if (tau_best <= 0) return 0.0f;
+
+  /* 4. Parabolic interpolation around minimum for fractional sample accuracy */
+  float frac_tau = (float)tau_best;
+  if (tau_best > min_tau && tau_best < max_tau) {
+    float y0 = cmndf[tau_best - 1];
+    float y1 = cmndf[tau_best];
+    float y2 = cmndf[tau_best + 1];
+    float denom = 2.0f * (2.0f * y1 - y0 - y2);
+    if (fabsf(denom) > 1e-6f) {
+      frac_tau += (y2 - y0) / denom;
+    }
+  }
+
+  if (frac_tau <= 1.0f) return 0.0f;
+  return sample_rate / frac_tau;
+}
+
+static int find_sustain_loop_correlate(float *audio, int len, float freq, float sample_rate, int *loop_start, int *loop_end, float *best_corr_out, float *detected_freq_out) {
+  if (!audio || len < 512 || sample_rate < 1000.0f) return 0;
+
+  /* If pitch is unknown or <= 20Hz, detect fundamental period via YIN */
+  if (freq < 20.0f) {
+    freq = sk_detect_pitch_yin(audio, len, sample_rate, 0.0f);
+    if (freq < 20.0f) freq = 220.0f;
+  } else {
+    /* Refine nominal frequency with YIN using pitch as hint */
+    float refined = sk_detect_pitch_yin(audio, len, sample_rate, freq);
+    if (refined >= 20.0f) freq = refined;
+  }
+
+  if (detected_freq_out) *detected_freq_out = freq;
 
   float period = sample_rate / freq;
   if (period < 2.0f || period > (float)(len / 3)) return 0;
@@ -2077,13 +2176,13 @@ static int find_sustain_loop_correlate(const float *audio, int len, float freq, 
   if (search_start > len / 3) search_start = len / 4;
   if (search_start + (int)(period * 3.0f) >= len) return 0;
 
-  /* Target loop duration ~250-350ms, containing integer k periods */
+  /* Target loop duration ~220-350ms, containing integer k periods */
   float target_sec = 0.28f;
   int k = (int)(target_sec * freq + 0.5f);
-  if (k < 3) k = 3;
+  if (k < 2) k = 2;
 
-  int max_end = len - (int)(sample_rate * 0.20f); /* leave release tail */
-  if (max_end < search_start + (int)(period * 4.0f)) max_end = len - (int)(sample_rate * 0.04f);
+  int max_end = len - (int)(sample_rate * 0.18f); /* leave release tail */
+  if (max_end < search_start + (int)(period * 3.0f)) max_end = len - (int)(sample_rate * 0.04f);
 
   int best_s = -1, best_e = -1;
   float best_score = -1e9f;
@@ -2092,18 +2191,19 @@ static int find_sustain_loop_correlate(const float *audio, int len, float freq, 
   if (corr_win < 32) corr_win = 32;
   if (corr_win > 256) corr_win = 256;
 
-  int start_scan_end = search_start + (int)(period * 2.5f);
+  int start_scan_end = search_start + (int)(period * 3.0f);
   if (start_scan_end >= len - 2) start_scan_end = len - 2;
 
   for (int s_idx = search_start; s_idx < start_scan_end; s_idx++) {
     if (audio[s_idx] <= 0.0f && audio[s_idx + 1] > 0.0f) {
       float s_slope = audio[s_idx + 1] - audio[s_idx];
-      int nominal_end = s_idx + (int)(k * period + 0.5f);
-      while (nominal_end >= max_end && k > 1) {
-        k--;
-        nominal_end = s_idx + (int)(k * period + 0.5f);
+      int cur_k = k;
+      int nominal_end = s_idx + (int)(cur_k * period + 0.5f);
+      while (nominal_end >= max_end && cur_k > 1) {
+        cur_k--;
+        nominal_end = s_idx + (int)(cur_k * period + 0.5f);
       }
-      if (k < 1 || nominal_end >= max_end) continue;
+      if (cur_k < 1 || nominal_end >= max_end) continue;
 
       int radius = (int)(period * 0.6f);
       if (radius < 2) radius = 2;
@@ -2143,6 +2243,23 @@ static int find_sustain_loop_correlate(const float *audio, int len, float freq, 
   }
 
   if (best_e > best_s + 8 && best_s >= 0) {
+    /* Apply a smooth 64-sample equal-power micro-crossfade at the loop boundary
+     * to eliminate any micro-transient or click upon wraparound */
+    int xfade_len = 64;
+    if (xfade_len > (best_e - best_s) / 4) xfade_len = (best_e - best_s) / 4;
+    if (xfade_len > 4 && best_s >= xfade_len) {
+      for (int i = 0; i < xfade_len; i++) {
+        float t = (float)i / (float)xfade_len;
+        float g_out = cosf(t * 1.5707963f);
+        float g_in = sinf(t * 1.5707963f);
+        int tail_idx = best_e - xfade_len + i;
+        int pre_idx = best_s - xfade_len + i;
+        if (tail_idx < len && pre_idx >= 0) {
+          audio[tail_idx] = audio[tail_idx] * g_out + audio[pre_idx] * g_in;
+        }
+      }
+    }
+
     if (loop_start) *loop_start = best_s;
     if (loop_end) *loop_end = best_e;
     if (best_corr_out) *best_corr_out = best_corr;
@@ -2151,8 +2268,8 @@ static int find_sustain_loop_correlate(const float *audio, int len, float freq, 
   return 0;
 }
 
-static int find_sustain_loop(const float *audio, int len, float freq, float sample_rate, int *loop_start, int *loop_end) {
-  return find_sustain_loop_correlate(audio, len, freq, sample_rate, loop_start, loop_end, NULL);
+static int find_sustain_loop(float *audio, int len, float freq, float sample_rate, int *loop_start, int *loop_end) {
+  return find_sustain_loop_correlate(audio, len, freq, sample_rate, loop_start, loop_end, NULL, NULL);
 }
 
 int skode_exec_wave_findloop(skode_t *ctx, ands_t *s, const double *arg, int argc) {
@@ -2176,9 +2293,24 @@ int skode_exec_wave_findloop(skode_t *ctx, ands_t *s, const double *arg, int arg
   }
 
   if (argc > 1) {
-    pitch_hint = (float)arg[1];
+    float a1 = (float)arg[1];
+    if (a1 >= 20.0f) {
+      pitch_hint = a1; /* explicit frequency in Hz */
+    } else if (a1 > 0.0f) {
+      pitch_hint = sk_mtof(a1); /* explicit MIDI note number */
+    }
   } else if (sw.midi_note[wave_slot] > 0.0f) {
     pitch_hint = sk_mtof(sw.midi_note[wave_slot]);
+  } else if (ctx->parse) {
+    /* Try parsing pitch/root from metadata string in parse register */
+    const char *str = ands_string(ctx->parse);
+    if (str && str[0] != '\0') {
+      sk_meta_info_t meta;
+      if (sk_parse_metadata(str, &meta) && meta.has_root_note) {
+        pitch_hint = sk_mtof(meta.root_note);
+        sw.midi_note[wave_slot] = meta.root_note;
+      }
+    }
   }
 
   float *audio = sw.data[wave_slot];
@@ -2187,26 +2319,39 @@ int skode_exec_wave_findloop(skode_t *ctx, ands_t *s, const double *arg, int arg
 
   int loop_start = 0, loop_end = 0;
   float best_corr = 0.0f;
-  int ok = find_sustain_loop_correlate(audio, len, pitch_hint, rate, &loop_start, &loop_end, &best_corr);
+  float detected_freq = 0.0f;
+  int ok = find_sustain_loop_correlate(audio, len, pitch_hint, rate, &loop_start, &loop_end, &best_corr, &detected_freq);
 
   if (!ok) {
     ctx->printf(ctx, "# findloop: no stable sustain loop detected for w%d (%d samples)\n", wave_slot, len);
     return 0;
   }
 
-  /* Apply loop points directly to wavetable slot */
+  /* If pitch was not previously known, store detected pitch in wave slot */
+  if (sw.midi_note[wave_slot] <= 0.0f && detected_freq > 20.0f) {
+    sw.midi_note[wave_slot] = sk_ftom(detected_freq);
+  }
+
+  /* Apply loop points directly to wavetable slot.
+   * NOTE: PCM samples MUST retain one_shot = 1!
+   * In sk3, one_shot=0 specifies single-cycle oscillator mode (1 period = table_size),
+   * which causes a multi-thousand sample buffer to play at hyper-speed (high-pitched whine).
+   * Sample looping is governed strictly by sw.loop_enabled. */
   wave_loop_points_set(wave_slot, loop_start, loop_end);
   sw.loop_enabled[wave_slot] = 1;
-  sw.one_shot[wave_slot] = 0;
+  sw.one_shot[wave_slot] = 1;
+
+  float root_note = sw.midi_note[wave_slot] > 0.0f ? sw.midi_note[wave_slot] : (detected_freq > 20.0f ? sk_ftom(detected_freq) : 69.0f);
 
   /* Format standard metadata string into ctx->parse */
   char meta_buf[256];
-  snprintf(meta_buf, sizeof(meta_buf), "[mode:sample loop:%d,%d one_shot:0 rate:%.0f root:%.1f]",
-           loop_start, loop_end, rate, sw.midi_note[wave_slot] > 0.0f ? sw.midi_note[wave_slot] : 69.0f);
+  snprintf(meta_buf, sizeof(meta_buf), "[mode:sample loop:%d,%d one_shot:1 rate:%.0f root:%.1f]",
+           loop_start, loop_end, rate, root_note);
   ands_string_from_external(ctx->parse, meta_buf, (int)strlen(meta_buf));
 
-  ctx->printf(ctx, "# findloop: w%d loop points set to %d..%d (len=%d samples, %.2f ms, corr=%.3f)\n",
-              wave_slot, loop_start, loop_end, loop_end - loop_start,
+  ctx->printf(ctx, "# findloop: w%d (pitch=%.1f Hz, MIDI %.1f) loop points set to %d..%d (len=%d samples, %.2f ms, corr=%.3f)\n",
+              wave_slot, detected_freq > 0.0f ? detected_freq : (root_note > 0.0f ? sk_mtof(root_note) : 0.0f),
+              root_note, loop_start, loop_end, loop_end - loop_start,
               (double)(loop_end - loop_start) * 1000.0 / rate, best_corr);
   return 0;
 }

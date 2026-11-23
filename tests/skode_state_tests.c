@@ -3925,6 +3925,7 @@ static void test_voice_format_pitch_mode(void) {
   expect_substr(test, out, " g0.05", "voice shows g0.05 with default mode");
 
   consume(test, &ctx, "v0 g0.05 1");
+  expect_int(test, sv.glissando_enable[0], 0, "setting g does not prematurely activate glissando");
   voice_format(0, out, sizeof(out), 0);
   expect_substr(test, out, " g0.05,1", "voice shows g0.05,1 with non-default mode");
 
@@ -4250,11 +4251,21 @@ static void test_sample_render_physical_modeling_and_loop_metadata(void) {
   expect_int(test, sw.one_shot[309], 1, "brass one-shot before findloop");
   consume(test, &ctx, "309 /findloop");
   expect_int(test, sw.loop_enabled[309], 1, "309 /findloop enabled loop");
-  expect_int(test, sw.one_shot[309], 0, "309 /findloop set one_shot=0");
+  expect_int(test, sw.one_shot[309], 1, "309 /findloop retains one_shot=1 for PCM sample playback");
   if (sw.loop_start[309] <= 0 || sw.loop_end[309] <= sw.loop_start[309]) {
     fail(test, "309 /findloop invalid loop points");
   }
   expect_substr(test, ands_string(ctx.parse), "loop:", "/findloop populated parse metadata string");
+  expect_substr(test, ands_string(ctx.parse), "one_shot:1", "/findloop parse string retains one_shot:1");
+
+  /* 11. Untagged wave pitch detection via YIN */
+  consume(test, &ctx, "[horn:brass f300 pr:0.85 dur:1.8] gen!");
+  consume(test, &ctx, "310 d>w 1");
+  sw.midi_note[310] = 0.0f; /* strip metadata to simulate raw live recording */
+  consume(test, &ctx, "310 /findloop");
+  expect_int(test, sw.loop_enabled[310], 1, "untagged wave loop enabled");
+  expect_float(test, sw.midi_note[310], 62.0f, 0.5f, "YIN detected ~300 Hz (MIDI 62)");
+  expect_substr(test, ands_string(ctx.parse), "root:62", "parse metadata populated with detected root");
 }
 
 int main(int argc, char **argv) {

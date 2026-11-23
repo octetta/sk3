@@ -372,7 +372,6 @@ int skode_execute_voice_opcode(const opcode_event_t *opcode, int voice) {
         sv.glissando_time[voice] = 0;
         sv.glissando_mode[voice] = 0;
       } else {
-        sv.glissando_enable[voice] = 1;
         sv.glissando_time[voice] = opcode->arg[0];
         sv.glissando_mode[voice] = (opcode->argc > 1) ? (int)opcode->arg[1] : 0;
       }
