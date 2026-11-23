@@ -505,6 +505,8 @@ void wave_table_init(int flag) {
     for (int lvl = 0; lvl < WAVETABLE_MIP_LEVELS; lvl++) {
       if (sw.mip_data[lvl]) sw.mip_data[lvl][i] = NULL;
     }
+    if (sw.data_right) sw.data_right[i] = NULL;
+    if (sw.channels) sw.channels[i] = 1;
     if (sw.eval_ms) sw.eval_ms[i] = 0.0f;
     if (sw.source) sw.source[i] = NULL;
     if (sw.source_is_heap) sw.source_is_heap[i] = 0;
@@ -533,12 +535,12 @@ void wave_table_init(int flag) {
       case WAVE_TABLE_NOISE_ALT: name = "noise-alt"; break; // not used, here for laziness in experiment
       case WAVE_TABLE_CAP_1: name = "input-1-left"; break;
       case WAVE_TABLE_CAP_2: name = "input-1-right"; break;
-      case WAVE_TABLE_CAP_3: name = "input-2-left"; break;
-      case WAVE_TABLE_CAP_4: name = "input-2-right"; break;
-      case WAVE_TABLE_CAP_5: name = "input-3-left"; break;
-      case WAVE_TABLE_CAP_6: name = "input-3-right"; break;
-      case WAVE_TABLE_CAP_7: name = "input-4-left"; break;
-      case WAVE_TABLE_CAP_8: name = "input-4-right"; break;
+      case WAVE_TABLE_SILENCE: name = "silence"; break;
+      case WAVE_TABLE_UNITY: name = "unity"; break;
+      case WAVE_TABLE_IMPULSE: name = "impulse"; break;
+      case WAVE_TABLE_METRO: name = "metro"; break;
+      case WAVE_TABLE_DELAY_TAP: name = "delay-tap"; break;
+      case WAVE_TABLE_CONTROL: name = "control"; break;
       case WAVE_TABLE_KRG17: name = "krg-17"; size = 2048; break;
       case WAVE_TABLE_KRG18: name = "krg-18"; size = 2048; break;
       case WAVE_TABLE_KRG19: name = "krg-19"; size = 2048; break;
@@ -558,6 +560,13 @@ void wave_table_init(int flag) {
       default: name = "?"; break;
     }
     strncpy(sw.name[w], name, WAVE_NAME_MAX);
+    if ((w >= WAVE_TABLE_CAP_1 && w <= WAVE_TABLE_CONTROL) || w == WAVE_TABLE_NOISE || w == WAVE_TABLE_NOISE_ALT) {
+      sw.data[w] = NULL;
+      sw.size[w] = 0;
+      sw.rate[w] = MAIN_SAMPLE_RATE;
+      sw.readonly[w] = 1;
+      continue;
+    }
     sw.data[w] = (float *)malloc(size * sizeof(float));
     if (!sw.data[w]) {
       sw.size[w] = 0;
@@ -618,7 +627,7 @@ void wave_table_init(int flag) {
   for (int w = WAVE_TABLE_SINE; w <= WAVE_TABLE_KRG32; w++) {
     if (wave_invalid(w)) continue;
     if (w == WAVE_TABLE_NOISE || w == WAVE_TABLE_NOISE_ALT) continue;
-    if (w >= WAVE_TABLE_CAP_1 && w <= WAVE_TABLE_CAP_8) continue;
+    if (w >= WAVE_TABLE_CAP_1 && w <= WAVE_TABLE_CONTROL) continue;
     if (sw.data[w] && sw.size[w] > 0 && (!sw.mip_levels || sw.mip_levels[w] <= 0)) {
       wave_generate_mipmaps_fft(w);
     }
@@ -645,6 +654,13 @@ void wave_free_one(int i) {
     sw.size[i] = 0;
     sw.refcount[i] = 0;
   }
+  if (sw.data_right && sw.data_right[i]) {
+    if (sw.is_heap[i]) {
+      free(sw.data_right[i]);
+    }
+    sw.data_right[i] = NULL;
+  }
+  if (sw.channels) sw.channels[i] = 1;
   if (sw.cues && sw.cues[i]) {
     free(sw.cues[i]);
     sw.cues[i] = NULL;

@@ -22,7 +22,7 @@ typedef struct {
     uint16_t  BitsPerSample;
     char      DataSubchunkID[4];
     uint32_t  DataSubchunkSize;
-    // double* Data; 
+    float    *data_right;
 } wav_t;
 
 
@@ -190,6 +190,8 @@ void global_status_show(skode_t *ctx, int full);
 int skode_asset_read(const char *path, skode_asset_kind_t kind,
     void **data, size_t *size, char *resolved, size_t resolved_size);
 void wave_install_memory(int wave_slot, float *table, int len,
+    float rate, int one_shot, const char *name, float midi_note, float offset_hz);
+void wave_install_memory_stereo(int wave_slot, float *table_left, float *table_right, int len,
     float rate, int one_shot, const char *name, float midi_note, float offset_hz);
 extern synth_sample_t sampling;
 int skode_sample_alloc(int frames);

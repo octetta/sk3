@@ -46,6 +46,8 @@ typedef struct {
   float hp_state[2];
   float hp_prev[2];
   float quant_levels;    // cached: (2^(effective_bits-1))-1, only used when !native
+  float last_out_l;
+  float last_out_r;
 } delay_bus_t;
 
 extern delay_bus_t delay_bus[DELAY_BUS_COUNT];
@@ -62,7 +64,7 @@ float quantize_bits_curve(float v, int bits, int curve, uint64_t *rng);
 float mmf_process(skred_engine_t *engine, int n, float input);
 float amp_envelope_step(int v, uint64_t current_sample);
 int delay_voice_can_send(skred_engine_t *engine, int voice);
-void delay_process(skred_engine_t *engine, delay_bus_t *bus, float input, float *left, float *right);
+void delay_process(skred_engine_t *engine, delay_bus_t *bus, float in_left, float in_right, float *left, float *right);
 
 int voice_invalid(int voice);
 int wave_invalid(int wave);

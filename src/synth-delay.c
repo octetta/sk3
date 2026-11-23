@@ -99,7 +99,7 @@ static float delay_filter_feedback(skred_engine_t *engine, delay_bus_t *bus, int
   return y;
 }
 
-void delay_process(skred_engine_t *engine, delay_bus_t *bus, float input, float *left, float *right) {
+void delay_process(skred_engine_t *engine, delay_bus_t *bus, float in_left, float in_right, float *left, float *right) {
   float lfo = 0.0f;
   float mod_frames;
   float delayed_left;
@@ -130,14 +130,15 @@ void delay_process(skred_engine_t *engine, delay_bus_t *bus, float input, float 
   if (bus->pingpong) fb_right = delay_filter_feedback(engine, bus, 1, fb_right);
 
   float fb_gain = bus->freeze ? 1.0f : bus->feedback_gain;
-  float feed = bus->freeze ? 0.0f : input;
-  float write_left = delay_quantize(bus, feed + fb_left * fb_gain);
+  float feed_l = bus->freeze ? 0.0f : in_left;
+  float feed_r = bus->freeze ? 0.0f : in_right;
+  float write_left = delay_quantize(bus, feed_l + fb_left * fb_gain);
   bus->buffer[bus->write] = write_left;
   bus->write++;
   if (bus->write >= DELAY_MAX_FRAMES) bus->write = 0;
 
   if (bus->pingpong) {
-    float write_right = delay_quantize(bus, feed + fb_right * fb_gain);
+    float write_right = delay_quantize(bus, feed_r + fb_right * fb_gain);
     bus->buffer_r[bus->write_r] = write_right;
     bus->write_r++;
     if (bus->write_r >= DELAY_MAX_FRAMES) bus->write_r = 0;
@@ -145,8 +146,10 @@ void delay_process(skred_engine_t *engine, delay_bus_t *bus, float input, float 
 
   if (left) *left = delayed_left * bus->wet;
   if (right) *right = delayed_right * bus->wet;
+  bus->last_out_l = left ? *left : 0.0f;
+  bus->last_out_r = right ? *right : 0.0f;
 
-  if (fabsf(input) + fabsf(delayed_left) + fabsf(delayed_right) +
+  if (fabsf(in_left) + fabsf(in_right) + fabsf(delayed_left) + fabsf(delayed_right) +
       fabsf(write_left) > 0.0000001f) {
     bus->active = 1;
     bus->idle_frames = 0;
@@ -159,8 +162,6 @@ void delay_process(skred_engine_t *engine, delay_bus_t *bus, float input, float 
 
 int delay_voice_can_send(skred_engine_t *engine, int voice) {
   if (voice_invalid(voice)) return 0;
-  if (fabsf(sv.pan[voice]) > 0.0001f) return 0;
-  if (sv.pan_mod_osc[voice] >= 0) return 0;
   return 1;
 }
 

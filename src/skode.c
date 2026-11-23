@@ -990,7 +990,7 @@ int skode_sample_go(int frames, int source, int voice) {
   if (!skode_sample_alloc(frames)) return 0;
   sampling.source = source;
   sampling.source_voice = voice;
-  sampling.channels = source == SAMPLE_SOURCE_MASTER ? 2 : 1;
+  sampling.channels = 2;
   atomic_store_int(&sampling.frames, frames);
   atomic_store_int(&sampling.state, SAMPLE_STATE_ARMED);
   return 1;

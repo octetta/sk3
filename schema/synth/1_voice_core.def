@@ -17,7 +17,15 @@
 @opcode     w
 @copy       true
 @reset      0
-@doc        Wavetable index (0..6 basic/noise, 7..14 live capture, 15..46 korg, 50..81 esq1, 82..99 drums, 300+ sample)
+@doc        Wavetable index (0: Sine, 1..4: PolyBLEP pulse/saw/tri, 5..6: Noise, 7..14: Capture, 15..46: DWG, 50..81: ESQ1, 82..99: Drums, 300+: Samples)
+
+@field      source_type
+@type       int
+@default    1
+@range      0 .. 5
+@copy       true
+@reset      1
+@doc        Oscillator generator source type (0: PolyBLEP, 1: Wavetable, 2: Sample, 3: Noise, 4: Capture, 5: Utility)
 
 @field      freq
 @type       float

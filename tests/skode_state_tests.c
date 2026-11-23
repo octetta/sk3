@@ -1291,7 +1291,7 @@ static void test_record_voice_selection(void) {
              "default records dry mix");
   expect_int(test, atomic_load_int(&sampling.state), SAMPLE_STATE_ARMED,
              "default recording armed");
-  expect_int(test, sampling.channels, 1, "dry recording is mono");
+  expect_int(test, sampling.channels, 2, "dry recording is stereo");
 
   atomic_store_int(&sampling.state, SAMPLE_STATE_IDLE);
   consume(test, &ctx, "<r .001,1,3");
@@ -1327,6 +1327,56 @@ static void test_record_voice_selection(void) {
              "invalid voice not armed");
   expect_substr(test, ctx.log, "usage: <r seconds,1,voice",
                 "invalid voice reports usage");
+}
+
+static void test_utility_procedural_waveforms(void) {
+  const char *test = "utility procedural waveforms";
+  skode_t ctx = new_ctx();
+  float output[64 * AUDIO_CHANNELS];
+
+  /* Verify zero heap allocations and correct names */
+  expect_int(test, sw.data[WAVE_TABLE_SILENCE] == NULL, 1, "silence has no heap table");
+  expect_int(test, sw.data[WAVE_TABLE_UNITY] == NULL, 1, "unity has no heap table");
+  expect_int(test, sw.data[WAVE_TABLE_IMPULSE] == NULL, 1, "impulse has no heap table");
+  expect_int(test, sw.data[WAVE_TABLE_METRO] == NULL, 1, "metro has no heap table");
+  expect_int(test, sw.data[WAVE_TABLE_DELAY_TAP] == NULL, 1, "delay-tap has no heap table");
+  expect_int(test, sw.data[WAVE_TABLE_CONTROL] == NULL, 1, "control has no heap table");
+  expect_substr(test, sw.name[WAVE_TABLE_SILENCE], "silence", "silence name");
+  expect_substr(test, sw.name[WAVE_TABLE_UNITY], "unity", "unity name");
+  expect_substr(test, sw.name[WAVE_TABLE_IMPULSE], "impulse", "impulse name");
+  expect_substr(test, sw.name[WAVE_TABLE_METRO], "metro", "metro name");
+
+  /* Test 1: w9 (silence) outputs pure zero */
+  voice_init();
+  consume(test, &ctx, "v0 w9 a1 s0");
+  expect_int(test, sv.source_type[0], OSC_SOURCE_UTILITY, "silence source_type is UTILITY");
+  memset(output, 0, sizeof(output));
+  synth(&skred_global_engine, output, NULL, 64, AUDIO_CHANNELS, NULL);
+  int non_zero = 0;
+  for (int i = 0; i < 64 * AUDIO_CHANNELS; i++) {
+    if (fabsf(output[i]) > 1e-6f) non_zero++;
+  }
+  expect_int(test, non_zero, 0, "silence produces zero output");
+
+  /* Test 2: w10 (unity) outputs steady DC level */
+  voice_init();
+  volume_final = 1.0f;
+  volume_smoother_gain = 1.0f;
+  consume(test, &ctx, "v0 w10 a0.5 s0 p0");
+  expect_int(test, sv.source_type[0], OSC_SOURCE_UTILITY, "unity source_type is UTILITY");
+  sv.use_amp_envelope[0] = 0;
+  memset(output, 0, sizeof(output));
+  synth(&skred_global_engine, output, NULL, 64, AUDIO_CHANNELS, NULL);
+  int dc_count = 0;
+  for (int i = 0; i < 64; i++) {
+    if (fabsf(output[i * 2] - output[0]) < 1e-4f && fabsf(output[0]) > 0.01f) dc_count++;
+  }
+  expect_int(test, dc_count > 50, 1, "unity produces steady DC level");
+
+  /* Test 3: w11 (impulse) */
+  voice_init();
+  consume(test, &ctx, "v0 w11 a1 s0 f100");
+  expect_int(test, sv.source_type[0], OSC_SOURCE_UTILITY, "impulse source_type is UTILITY");
 }
 
 static void test_multichannel_capture_waves(void) {
@@ -4310,6 +4360,7 @@ int main(int argc, char **argv) {
   test_wave_load_smpl_loop();
   test_record_find_trim_command();
   test_record_voice_selection();
+  test_utility_procedural_waveforms();
   test_bounded_loop_preserves_tail_envelopes();
   test_one_shot_asr_mode();
   test_opcode_events();

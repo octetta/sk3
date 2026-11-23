@@ -275,10 +275,44 @@ static inline float osc_sample_at_phase(skred_engine_t *engine, int voice, doubl
       if (final_phase < (double)wave_range_start) final_phase += span;
     }
 
+    if (sv.source_type && sv.source_type[voice] == OSC_SOURCE_POLYBLEP && table_size > 0) {
+        int w = sv.wave_table_index[voice];
+        if (w == WAVE_TABLE_SQR || w == WAVE_TABLE_SAW_DOWN || w == WAVE_TABLE_SAW_UP ||
+            w == WAVE_TABLE_TRI || w == WAVE_TABLE_CENTERED_PULSE) {
+            float p = (float)(final_phase / (double)table_size);
+            while (p >= 1.0f) p -= 1.0f;
+            while (p < 0.0f) p += 1.0f;
+            float dt = fabsf(sv.phase_inc[voice]) / (float)table_size;
+            if (dt <= 0.0f) dt = 1e-6f;
+            float s = 0.0f;
+            switch (w) {
+                case WAVE_TABLE_SQR:
+                case WAVE_TABLE_CENTERED_PULSE:
+                    s = sk_polyblep_pulse(p, dt, 0.5f);
+                    break;
+                case WAVE_TABLE_SAW_DOWN:
+                    s = -sk_polyblep_saw(p, dt);
+                    break;
+                case WAVE_TABLE_SAW_UP:
+                    s = sk_polyblep_saw(p, dt);
+                    break;
+                case WAVE_TABLE_TRI:
+                    s = 2.0f * fabsf(2.0f * p - 1.0f) - 1.0f;
+                    break;
+                default:
+                    break;
+            }
+            if (sv.sample_r) sv.sample_r[voice] = s;
+            return s;
+        }
+    }
+
     int idx = (int)final_phase;
     if (idx >= (int)wave_range_end) idx = (int)wave_range_end - 1;
     if (idx < (int)wave_range_start) idx = (int)wave_range_start;
 
+    float s_left;
+    float s_right;
     if (sv.interpolate[voice]) {
         float frac = (float)(final_phase - (double)idx);
         int next_idx = idx + 1;
@@ -287,9 +321,24 @@ static inline float osc_sample_at_phase(skred_engine_t *engine, int voice, doubl
                 (int)wave_range_start;
         float sample1 = sv.table[voice][idx];
         float sample2 = sv.table[voice][next_idx];
-        return sample1 + frac * (sample2 - sample1);
+        s_left = sample1 + frac * (sample2 - sample1);
+        if (sv.table_right && sv.table_right[voice]) {
+            float r1 = sv.table_right[voice][idx];
+            float r2 = sv.table_right[voice][next_idx];
+            s_right = r1 + frac * (r2 - r1);
+        } else {
+            s_right = s_left;
+        }
+    } else {
+        s_left = sv.table[voice][idx];
+        if (sv.table_right && sv.table_right[voice]) {
+            s_right = sv.table_right[voice][idx];
+        } else {
+            s_right = s_left;
+        }
     }
-    return sv.table[voice][idx];
+    if (sv.sample_r) sv.sample_r[voice] = s_right;
+    return s_left;
 }
 
 float osc_next_at(skred_engine_t *engine, int voice, float phase_inc, float phase_offset,
@@ -308,6 +357,7 @@ float osc_next_at(skred_engine_t *engine, int voice, float phase_inc, float phas
             0.0f, (float)sv.table_size[voice]);
         if (sv.sync_blep[voice] != 0.0f) {
             s += sv.sync_blep[voice];
+            if (sv.sample_r) sv.sample_r[voice] += sv.sync_blep[voice];
             sv.sync_blep[voice] = 0.0f;
         }
         return s;
@@ -494,6 +544,7 @@ float osc_next_at(skred_engine_t *engine, int voice, float phase_inc, float phas
         (float)loop_start, (float)loop_end);
     if (sv.sync_blep[voice] != 0.0f) {
         s += sv.sync_blep[voice];
+        if (sv.sample_r) sv.sample_r[voice] += sv.sync_blep[voice];
         sv.sync_blep[voice] = 0.0f;
     }
     return s;
@@ -509,11 +560,46 @@ void osc_set_wave_table_index(skred_engine_t *engine, int voice, int wave) {
   // old == -1 means voice was never assigned a wave table yet (e.g. first
   // call from voice_reset).  Guard before indexing to avoid sw.readonly[-1].
   if (old != wave) {
-    if (old >= 0) sw.refcount[old]--;
-    if (wave >= 0) sw.refcount[wave]++;
+    if (old >= 0 && sw.refcount) sw.refcount[old]--;
+    if (wave >= 0 && sw.refcount) sw.refcount[wave]++;
   }
+
+  if (wave >= WAVE_TABLE_CAP_1 && wave <= WAVE_TABLE_CAP_2) {
+    sv.wave_table_index[voice] = wave;
+    if (sv.source_type) sv.source_type[voice] = OSC_SOURCE_CAPTURE;
+    sv.finished[voice] = 0;
+    sv.table[voice] = NULL;
+    if (sv.table_right) sv.table_right[voice] = NULL;
+    return;
+  }
+  if (wave >= WAVE_TABLE_SILENCE && wave <= WAVE_TABLE_CONTROL) {
+    sv.wave_table_index[voice] = wave;
+    if (sv.source_type) sv.source_type[voice] = OSC_SOURCE_UTILITY;
+    sv.finished[voice] = 0;
+    sv.table[voice] = NULL;
+    if (sv.table_right) sv.table_right[voice] = NULL;
+    return;
+  }
+  if (wave == WAVE_TABLE_NOISE || wave == WAVE_TABLE_NOISE_ALT) {
+    sv.wave_table_index[voice] = wave;
+    if (sv.source_type) sv.source_type[voice] = OSC_SOURCE_NOISE;
+    sv.finished[voice] = 0;
+    sv.table[voice] = NULL;
+    if (sv.table_right) sv.table_right[voice] = NULL;
+    return;
+  }
+
   if (sw.data[wave] && sw.size[wave] && sw.rate[wave] > 0.0) {
     sv.wave_table_index[voice] = wave;
+    if (sv.source_type) {
+      if ((wave >= WAVE_TABLE_SQR && wave <= WAVE_TABLE_TRI) || wave == WAVE_TABLE_CENTERED_PULSE) {
+        sv.source_type[voice] = OSC_SOURCE_POLYBLEP;
+      } else if (sw.one_shot[wave] || (wave >= WAVE_TABLE_DRUM_01 && wave <= WAVE_TABLE_DRUM_18) || wave >= EXT_SAMPLE_000) {
+        sv.source_type[voice] = OSC_SOURCE_SAMPLE;
+      } else {
+        sv.source_type[voice] = OSC_SOURCE_WAVETABLE;
+      }
+    }
     int update_freq = 0;
     if (sw.one_shot[wave]) sv.finished[voice] = 1;
     else sv.finished[voice] = 0;
@@ -525,6 +611,9 @@ void osc_set_wave_table_index(skred_engine_t *engine, int voice, int wave) {
     sv.table_size[voice] = sw.size[wave];
     sv.table_size_rate[voice] = (float)sv.table_size[voice] / MAIN_SAMPLE_RATE;
     sv.table[voice] = sw.data[wave];
+    if (sv.table_right) {
+      sv.table_right[voice] = (sw.data_right && sw.channels && sw.channels[wave] == 2) ? sw.data_right[wave] : NULL;
+    }
     sv.one_shot[voice] = sw.one_shot[wave];
     sv.loop_override[voice] = 0;
     sv.wave_range_override[voice] = 0;

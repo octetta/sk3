@@ -86,7 +86,26 @@ static float *mw_decode(ma_decoder *decoder, const char *label,
       decoder->outputChannels,
       decoder->outputSampleRate);
   }
+  w->data_right = NULL;
+  (void)label;
+  w->SamplesRate = decoder->outputSampleRate;
+  *frames_out = (int)frameCount;
+
+  if (ch == -1 && decoder->outputChannels == 2) {
+    float *pRight = (float *)malloc(frameCount * sizeof(float));
+    if (pRight) {
+      for (ma_uint64 i = 0; i < frameCount; i++) {
+        pSamples[i] = pSamples[i * 2];
+        pRight[i] = pSamples[i * 2 + 1];
+      }
+      w->data_right = pRight;
+      w->Channels = 2;
+      return pSamples;
+    }
+  }
+
   if (ch >= (int)decoder->outputChannels) ch = (int)decoder->outputChannels - 1;
+  w->Channels = decoder->outputChannels;
   for (ma_uint64 i = 0; i < frameCount * decoder->outputChannels; i += decoder->outputChannels) {
     if (ch == -1) {
       float a = 0;
@@ -97,10 +116,6 @@ static float *mw_decode(ma_decoder *decoder, const char *label,
     }
     j++;
   }
-  (void)label;
-  w->SamplesRate = decoder->outputSampleRate;
-  w->Channels = decoder->outputChannels;
-  *frames_out = (int)frameCount;
   return pSamples;
 }
 
@@ -554,12 +569,14 @@ int skode_load(skode_t *ctx, int voice, int n, int verbose) {
 
 extern synth_sample_t sampling;
 
-void wave_install_memory(int wave_slot, float *table, int len,
+void wave_install_memory_stereo(int wave_slot, float *table_left, float *table_right, int len,
                                 float rate, int one_shot, const char *name,
                                 float midi_note, float offset_hz) {
   skode_copy_string(sw.name[wave_slot], WAVE_NAME_MAX, name ? name : "data");
   sw.is_heap[wave_slot] = 1;
-  sw.data[wave_slot] = table;
+  sw.data[wave_slot] = table_left;
+  if (sw.data_right) sw.data_right[wave_slot] = table_right;
+  if (sw.channels) sw.channels[wave_slot] = table_right ? 2 : 1;
   sw.size[wave_slot] = len;
   sw.rate[wave_slot] = rate;
   sw.one_shot[wave_slot] = one_shot != 0;
@@ -569,6 +586,12 @@ void wave_install_memory(int wave_slot, float *table, int len,
   sw.direction[wave_slot] = 0.0f;
   sw.midi_note[wave_slot] = midi_note;
   sw.offset_hz[wave_slot] = offset_hz;
+}
+
+void wave_install_memory(int wave_slot, float *table, int len,
+                         float rate, int one_shot, const char *name,
+                         float midi_note, float offset_hz) {
+  wave_install_memory_stereo(wave_slot, table, NULL, len, rate, one_shot, name, midi_note, offset_hz);
 }
 
 int rec_load(skode_t *ctx, int wave_slot, int one_shot, int channel, int verbose) {
@@ -612,25 +635,33 @@ int rec_load(skode_t *ctx, int wave_slot, int one_shot, int channel, int verbose
     ctx->printf(ctx, "# allocation failed\n");
     return -1;
   }
+  float *table_r = NULL;
+  if (channels == 2 && channel == -1) {
+    table_r = calloc(data_len, sizeof(float));
+  }
   for (int i=0; i<data_len; i++) {
     size_t frame = (size_t)(sampling.offset + i) * (size_t)channels;
     if (channels == 1) {
       table[i] = sampling.where[frame];
     } else if (channel >= 0) {
       table[i] = sampling.where[frame + (size_t)channel];
+    } else if (table_r) {
+      table[i] = sampling.where[frame];
+      table_r[i] = sampling.where[frame + 1];
     } else {
       table[i] = 0.5f * (sampling.where[frame] + sampling.where[frame + 1]);
     }
   }
   normalize_preserve_zero(table, data_len);
+  if (table_r) normalize_preserve_zero(table_r, data_len);
   int len = data_len;
-    char wave_name[WAVE_NAME_MAX];
-    snprintf(wave_name, sizeof(wave_name), "data[%d]", data_len);
-    wave_install_memory(wave_slot, table, len, (float)MAIN_SAMPLE_RATE,
-      one_shot, wave_name, one_shot ? 69.0f : 0.0f, 0.0f);
-    char *name = "data";
-    if (verbose) ctx->printf(ctx, "# read %d frames from %s to %d (ch:1)\n",
-                data_len, name, wave_slot);
+  char wave_name[WAVE_NAME_MAX];
+  snprintf(wave_name, sizeof(wave_name), "data[%d]", data_len);
+  wave_install_memory_stereo(wave_slot, table, table_r, len, (float)MAIN_SAMPLE_RATE,
+    one_shot, wave_name, one_shot ? 69.0f : 0.0f, 0.0f);
+  char *name = "data";
+  if (verbose) ctx->printf(ctx, "# read %d frames from %s to %d (ch:%d)\n",
+              data_len, name, wave_slot, table_r ? 2 : 1);
   return 0;
 }
 
@@ -989,8 +1020,14 @@ int wave_load_string(skode_t *ctx, char *name, int wave_index, int ch, int norma
     skred_vfs_free_file(data);
     return SK_ERR_IO;
   } else {
-    wave_install_memory(wave_index, table, len, (float)wav.SamplesRate, 1,
-      resolved, 69.0f, (float)len / (float)wav.SamplesRate * 440.0f);
+    if (wav.Channels == 2 && wav.data_right) {
+      wave_install_memory_stereo(wave_index, table, wav.data_right, len, (float)wav.SamplesRate, 1,
+        resolved, 69.0f, (float)len / (float)wav.SamplesRate * 440.0f);
+      normalize_preserve_zero(wav.data_right, len);
+    } else {
+      wave_install_memory(wave_index, table, len, (float)wav.SamplesRate, 1,
+        resolved, 69.0f, (float)len / (float)wav.SamplesRate * 440.0f);
+    }
     wave_load_apply_metadata(ctx, resolved, data, data_size, wave_index, len, (float)wav.SamplesRate);
     if (0) ctx->printf(ctx, "# read %d frames from %s to %d (ch:%d sr:%d)\n",
       len, resolved, wave_index, wav.Channels, wav.SamplesRate);
@@ -1081,8 +1118,14 @@ int wave_load(skode_t *ctx, int file_num, int wave_index, int ch, int normalize)
     skred_vfs_free_file(data);
     return SK_ERR_IO;
   } else {
-    wave_install_memory(wave_index, table, len, (float)wav.SamplesRate, 1,
-      resolved, 69.0f, (float)len / (float)wav.SamplesRate * 440.0f);
+    if (wav.Channels == 2 && wav.data_right) {
+      wave_install_memory_stereo(wave_index, table, wav.data_right, len, (float)wav.SamplesRate, 1,
+        resolved, 69.0f, (float)len / (float)wav.SamplesRate * 440.0f);
+      normalize_preserve_zero(wav.data_right, len);
+    } else {
+      wave_install_memory(wave_index, table, len, (float)wav.SamplesRate, 1,
+        resolved, 69.0f, (float)len / (float)wav.SamplesRate * 440.0f);
+    }
     wave_load_apply_metadata(ctx, resolved, data, data_size, wave_index, len, (float)wav.SamplesRate);
     if (0) ctx->printf(ctx, "# read %d frames from %s to %d (ch:%d sr:%d)\n",
       len, resolved, wave_index, wav.Channels, wav.SamplesRate);

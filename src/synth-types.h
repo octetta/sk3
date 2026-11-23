@@ -32,6 +32,15 @@ typedef struct {
 } static_wave_meta_t;
 
 typedef enum {
+  OSC_SOURCE_POLYBLEP = 0, /* Analytic Bandlimited (Saw, Pulse/PWM, Tri) */
+  OSC_SOURCE_WAVETABLE = 1,/* Single-cycle periodic tables (DWG, ESQ-1, Sine, ksynth) */
+  OSC_SOURCE_SAMPLE = 2,   /* Multi-sample PCM (Drums, external audio files) */
+  OSC_SOURCE_NOISE = 3,    /* Procedural noise (clocked LFSR, white noise) */
+  OSC_SOURCE_CAPTURE = 4,  /* Real-time audio line-in / ADC stream */
+  OSC_SOURCE_UTILITY = 5   /* Procedural utility (silence, unity, impulse, metro, delay tap, control) */
+} osc_source_type_t;
+
+typedef enum {
   OSC_PLAYBACK_GENERAL = 0,
   OSC_PLAYBACK_CYCLE_SIMPLE = 1
 } osc_playback_class_t;
@@ -43,22 +52,22 @@ typedef enum {
 
 enum {
   WAVE_TABLE_SINE,     // 0
-  WAVE_TABLE_SQR,      // 1
-  WAVE_TABLE_SAW_DOWN, // 2
-  WAVE_TABLE_SAW_UP,   // 3
-  WAVE_TABLE_TRI,      // 4
-  WAVE_TABLE_NOISE,    // 5
-  WAVE_TABLE_NOISE_ALT,// 6
-  WAVE_TABLE_CAP_1, // 7: input pair 1 left
-  WAVE_TABLE_CAP_2, // 8: input pair 1 right
-  WAVE_TABLE_CAP_3, // 9: input pair 2 left
-  WAVE_TABLE_CAP_4, // 10: input pair 2 right
-  WAVE_TABLE_CAP_5, // 11: input pair 3 left
-  WAVE_TABLE_CAP_6, // 12: input pair 3 right
-  WAVE_TABLE_CAP_7, // 13: input pair 4 left
-  WAVE_TABLE_CAP_8, // 14: input pair 4 right
+  WAVE_TABLE_SQR,      // 1 (PolyBLEP Pulse/PWM)
+  WAVE_TABLE_SAW_DOWN, // 2 (PolyBLEP Saw Down)
+  WAVE_TABLE_SAW_UP,   // 3 (PolyBLEP Saw Up)
+  WAVE_TABLE_TRI,      // 4 (PolyBLEP Triangle)
+  WAVE_TABLE_NOISE,    // 5 (Clocked LFSR Noise)
+  WAVE_TABLE_NOISE_ALT,// 6 (White Noise)
+  WAVE_TABLE_CAP_1,    // 7: input left / stereo
+  WAVE_TABLE_CAP_2,    // 8: input right
+  WAVE_TABLE_SILENCE,  // 9: DC 0.0 (Mute / zero reference)
+  WAVE_TABLE_UNITY,    // 10: DC +1.0 (CV / envelope generator)
+  WAVE_TABLE_IMPULSE,  // 11: Dirac delta click (filter ping / KS pluck)
+  WAVE_TABLE_METRO,    // 12: BPM clock / metronome pulse
+  WAVE_TABLE_DELAY_TAP,// 13: Delay return tap (feedback loop)
+  WAVE_TABLE_CONTROL,  // 14: MIDI CC / control plane stream
 
-  WAVE_TABLE_KRG1 = 15, // was 10
+  WAVE_TABLE_KRG1 = 15,
   WAVE_TABLE_KRG2,  // 16
   WAVE_TABLE_KRG3,  // 17
   WAVE_TABLE_KRG4,  // 18
@@ -74,7 +83,6 @@ enum {
   WAVE_TABLE_KRG14, // 28
   WAVE_TABLE_KRG15, // 29
   WAVE_TABLE_KRG16, // 30
-
   WAVE_TABLE_KRG17, // 31
   WAVE_TABLE_KRG18, // 32
   WAVE_TABLE_KRG19, // 33
@@ -91,6 +99,9 @@ enum {
   WAVE_TABLE_KRG30, // 44
   WAVE_TABLE_KRG31, // 45
   WAVE_TABLE_KRG32, // 46
+  WAVE_TABLE_COSINE = 47,
+  WAVE_TABLE_CENTERED_PULSE = 48,
+  WAVE_TABLE_KRG2_CENTERED = 49,
 
   WAVE_TABLE_ESQ1_01 = 50,
   WAVE_TABLE_ESQ1_02, WAVE_TABLE_ESQ1_03, WAVE_TABLE_ESQ1_04, WAVE_TABLE_ESQ1_05,
@@ -108,28 +119,31 @@ enum {
   WAVE_TABLE_DRUM_10, WAVE_TABLE_DRUM_11, WAVE_TABLE_DRUM_12, WAVE_TABLE_DRUM_13,
   WAVE_TABLE_DRUM_14, WAVE_TABLE_DRUM_15, WAVE_TABLE_DRUM_16, WAVE_TABLE_DRUM_17,
   WAVE_TABLE_DRUM_18, // 99
-  WAVE_TABLE_COSINE = 47, // 47
-  WAVE_TABLE_CENTERED_PULSE = 48,
-  WAVE_TABLE_KRG2_CENTERED = 49,
 
-  EW_00 = 50,
-  EW_01,
-  EW_02,
-  EW_03,
-  EW_04,
-  EW_05,
-  EW_99 = 50+99,
-
-  EXT_SAMPLE_000 = 300,        // was 200
-  EXT_SAMPLE_999 = 300 + 999,  // 999
+  EXT_SAMPLE_000 = 300,        // 300
+  EXT_SAMPLE_999 = 300 + 999,  // 1299
   WAVE_TABLE_MAX
 };
 
 #define WAVE_TABLE_CAPTURE_FIRST WAVE_TABLE_CAP_1
-#define WAVE_TABLE_CAPTURE_LAST WAVE_TABLE_CAP_8
-#define WAVE_TABLE_CAPTURE_CHANNELS 8
+#define WAVE_TABLE_CAPTURE_LAST WAVE_TABLE_CAP_2
+#define WAVE_TABLE_CAPTURE_CHANNELS 2
 #define WAVE_TABLE_CAP_LEFT WAVE_TABLE_CAP_1
 #define WAVE_TABLE_CAP_RIGHT WAVE_TABLE_CAP_2
+
+#define WAVE_TABLE_RESERVED_9  WAVE_TABLE_SILENCE
+#define WAVE_TABLE_RESERVED_10 WAVE_TABLE_UNITY
+#define WAVE_TABLE_RESERVED_11 WAVE_TABLE_IMPULSE
+#define WAVE_TABLE_RESERVED_12 WAVE_TABLE_METRO
+#define WAVE_TABLE_RESERVED_13 WAVE_TABLE_DELAY_TAP
+#define WAVE_TABLE_RESERVED_14 WAVE_TABLE_CONTROL
+
+#define WAVE_TABLE_CAP_3 WAVE_TABLE_SILENCE
+#define WAVE_TABLE_CAP_4 WAVE_TABLE_UNITY
+#define WAVE_TABLE_CAP_5 WAVE_TABLE_IMPULSE
+#define WAVE_TABLE_CAP_6 WAVE_TABLE_METRO
+#define WAVE_TABLE_CAP_7 WAVE_TABLE_DELAY_TAP
+#define WAVE_TABLE_CAP_8 WAVE_TABLE_CONTROL
 
 enum {
   FILTER_LOWPASS = 1,
@@ -205,7 +219,8 @@ enum {
 enum {
   SAMPLE_SOURCE_DRY = 0,
   SAMPLE_SOURCE_VOICE,
-  SAMPLE_SOURCE_MASTER
+  SAMPLE_SOURCE_MASTER,
+  SAMPLE_SOURCE_INPUT
 };
 
 typedef struct {

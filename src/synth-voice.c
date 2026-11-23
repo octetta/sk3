@@ -779,6 +779,9 @@ int voice_copy(int v, int n) {
   voice_copy_gen(n, v);
 #endif
   wave_set(n, sv.wave_table_index[v]);
+  sv.source_type[n] = sv.source_type[v];
+  sv.table_right[n] = sv.table_right[v];
+  sv.sample_r[n] = sv.sample_r[v];
   sv.noise_type[n] = sv.noise_type[v];
   sv.noise_bits[n] = sv.noise_bits[v];
   sv.noise_tap[n] = sv.noise_tap[v];
@@ -957,6 +960,9 @@ void voice_reset(int i) {
   sv.loop_ended[i] = 0;
   sv.loop_override[i] = 0;
   sv.playback_class[i] = OSC_PLAYBACK_GENERAL;
+  sv.source_type[i] = OSC_SOURCE_WAVETABLE;
+  sv.table_right[i] = NULL;
+  sv.sample_r[i] = 0.0f;
   sv.amp_envelope_mode[i] = 0; // exp
   sv.amp_envelope[i].is_active = 0;
   envelope_init(i, 0.0f, 0.0f, 1.0f, 0.0f);

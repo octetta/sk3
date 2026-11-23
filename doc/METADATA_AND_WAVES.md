@@ -124,3 +124,21 @@ The built-in runtime patches in `waves/` have been updated with `META:` declarat
 - **Drums** (`waves/drums/*.ks`): Declare `META: "mode:sample one_shot:1"`.
 - **DW-8000** (`waves/dwg/*.ks`): Declare `META: "mode:osc"`.
 - **ESQ-1** (`waves/esq1/*.ks`): Declare `META: "mode:osc loop:$L,$E"`.
+
+---
+
+## 8. Wave Source Classification & Modular Utilities (v2.0)
+
+In `sk3` v2.0, wave slots are classified into six distinct source types:
+- **`OSC_SOURCE_POLYBLEP`** (`w1`..`w4`, `w47`, `w48`): Closed-form continuous analytic bandlimited generation (Square/Pulse with PWM, Saw down/up, Triangle). Zero table memory.
+- **`OSC_SOURCE_NOISE`** (`w5`, `w6`): Procedural noise generators (`w5` clocked LFSR chiptune noise, `w6` 64-bit continuous xorshift white noise). Zero table memory.
+- **`OSC_SOURCE_CAPTURE`** (`w7`, `w8`): Live audio line-in stream (`w7` left/stereo, `w8` right).
+- **`OSC_SOURCE_UTILITY`** (`w9`..`w14`): Procedural modular CV, timing, and feedback utilities:
+  - `w9` (`silence`): DC 0.0 (Mute / zero reference)
+  - `w10` (`unity`): DC +1.0 (Turns voice into a pure ADSR Envelope Generator / CV source)
+  - `w11` (`impulse`): Single-sample Dirac click at phase reset (Filter pinging & string pluck)
+  - `w12` (`metro`): BPM clock pulse / metronome tick locked to sequencer tempo
+  - `w13` (`delay-tap`): Delay line audio return tap for recursive filtering and dub feedback
+  - `w14` (`control`): Live MIDI CC / control plane stream
+- **`OSC_SOURCE_WAVETABLE`** (`w0`, `w15`..`w46`, `w50`..`w81`): Static single-cycle periodic tables with 8-level harmonic mipmapping.
+- **`OSC_SOURCE_SAMPLE`** (`w82`..`w99`, `w300`+): Planar mono and stereo PCM samples (`sw.data` left, `sw.data_right` right, `sw.channels = 2`). Stereo WAV and FLAC files de-interleave directly into planar Left/Right buffers without channel squashing.

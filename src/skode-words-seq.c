@@ -788,11 +788,11 @@ static int word_exec__ltr(const skode_word_t *self, skode_t *ctx, ands_t *s, dou
         int source = SAMPLE_SOURCE_DRY;
         int sample_voice = -1;
         if (argc > 1 && !skode_double_to_int(arg[1], &source)) {
-          ctx->printf(ctx, "# <r source must be 0=dry, 1=voice, or 2=master\n");
+          ctx->printf(ctx, "# <r source must be 0=dry, 1=voice, 2=master, or 3=input\n");
           return 0;
         }
-        if (source < SAMPLE_SOURCE_DRY || source > SAMPLE_SOURCE_MASTER) {
-          ctx->printf(ctx, "# <r source must be 0=dry, 1=voice, or 2=master\n");
+        if (source < SAMPLE_SOURCE_DRY || source > SAMPLE_SOURCE_INPUT) {
+          ctx->printf(ctx, "# <r source must be 0=dry, 1=voice, 2=master, or 3=input\n");
           return 0;
         }
         if (source == SAMPLE_SOURCE_VOICE) {

@@ -105,11 +105,14 @@ void synth_alloc_voices(int voice_max) {
     VALLOC(phase,            double);
     VALLOC(phase_inc,        float);
     VALLOC(table,            float *);
+    VALLOC(table_right,      float *);
+    VALLOC(source_type,      int);
     VALLOC(mip_level,        int);
     VALLOC(table_size,       int);
     VALLOC(table_rate,       float);
     VALLOC(table_size_rate,  float);
     VALLOC(playback_class,   int);
+    VALLOC(sample_r,         float);
     VALLOC(latency_timestamp_ns, uint64_t);
     VALLOC(noise_type,       int);
     VALLOC(noise_bits,       int);
@@ -265,6 +268,7 @@ void synth_alloc_voices(int voice_max) {
 
 void synth_free_voices(void) {
     VFREE(phase);            VFREE(phase_inc);       VFREE(table);
+    VFREE(table_right);      VFREE(source_type);     VFREE(sample_r);
     VFREE(mip_level);
     VFREE(table_size);       VFREE(table_rate);      VFREE(table_size_rate);
     VFREE(playback_class);   VFREE(one_shot);        VFREE(latency_timestamp_ns);
@@ -344,6 +348,8 @@ void synth_alloc_waves(int wave_table_max) {
     int w = wave_table_max;
 
     WALLOC(data,         float *);
+    WALLOC(data_right,   float *);
+    WALLOC(channels,     int);
     for (int lvl = 0; lvl < WAVETABLE_MIP_LEVELS; lvl++) {
         sw.mip_data[lvl] = synth_alloc(w, sizeof(float *), "mip_data");
     }
@@ -404,9 +410,16 @@ void synth_free_waves(void) {
         free(sw.harmonics);
         sw.harmonics = NULL;
     }
+    for (int i = 0; i < synth_config.wave_table_max; i++) {
+        if (sw.data_right && sw.data_right[i]) {
+            free(sw.data_right[i]);
+            sw.data_right[i] = NULL;
+        }
+    }
     WFREE(num_harmonics);
     WFREE(mip_levels);
-    WFREE(data);         WFREE(size);         WFREE(rate);
+    WFREE(data);         WFREE(data_right);   WFREE(channels);
+    WFREE(size);         WFREE(rate);
     WFREE(one_shot);     WFREE(loop_enabled); WFREE(loop_start);
     WFREE(loop_end);     WFREE(midi_note);    WFREE(offset_hz);
     WFREE(direction);    WFREE(is_heap);      WFREE(refcount);

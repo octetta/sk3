@@ -55,11 +55,14 @@ typedef struct {
     double * restrict phase;
     float  * restrict phase_inc;
     float ** restrict table;        /* per-voice pointer to wave data */
+    float ** restrict table_right;  /* per-voice pointer to right channel (NULL if mono) */
+    int    * restrict source_type;  /* osc_source_type_t */
     int    * restrict mip_level;    /* active mip level (0..7) or -1 */
     int    * restrict table_size;
     float  * restrict table_rate;
     float  * restrict table_size_rate;
     int    * restrict playback_class;
+    float  * restrict sample_r;     /* voice right channel sample for stereo */
 
     /* Diagnostics */
     uint64_t * restrict latency_timestamp_ns;
@@ -225,6 +228,8 @@ typedef struct {
 typedef struct {
 
     float      ** restrict data;
+    float      ** restrict data_right;  /* Planar right channel (NULL for mono) */
+    int         * restrict channels;    /* 1 = mono, 2 = stereo */
     float      ** restrict mip_data[WAVETABLE_MIP_LEVELS];
     int         * restrict mip_levels;
     double     ** restrict harmonics;

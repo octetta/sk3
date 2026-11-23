@@ -14,11 +14,15 @@
 
 `sk3` (formerly skred) is a lightweight, high-performance polyphonic synthesizer, deterministic audio engine, and embedded Forth-inspired domain specific language (`skode`) for generative sound design and sequencing.
 
-Version: `1.5.0`
+Version: `2.0.0`
 
 ## Features
 
 - **Polyphonic Synthesizer Engine**: Multi-voice allocation with dynamic voice pooling and voice groups.
+- **PolyBLEP Analytic Oscillators**: Continuous, closed-form anti-aliased generation of Saw (`w2`, `w3`), Pulse/PWM (`w1`), and Triangle (`w4`) waveforms directly in CPU registers without table memory lookups or cache line pressure.
+- **Modular Utility & CV Waveforms**: Built-in zero-allocation procedural sources for silence (`w9`), DC unity/envelope generation (`w10`), Dirac delta clicks (`w11`), tempo-synced BPM clock/metronome (`w12`), recursive delay return taps (`w13`), and control-plane/MIDI streaming (`w14`).
+- **Native Planar Stereo Samples & 2-Channel Capture**: First-class stereo sample playback (`sw.data` left, `sw.data_right` right) and dedicated hardware stereo input (`w7` in-left/stereo, `w8` in-right) without requiring voice pairing or channel squashing.
+- **Stereo Delay Sends & Inherently Stereo Recording**: Panned voices send to delay buses with full stereo spatialization (eliminating legacy center-pan constraints), and all recording sources (master, voice, dry, input) capture native 2-channel stereo.
 - **Embedded DSP & Physical Modeling Toolkit**: Comprehensive single-file C DSP library (`sk_dsp.h`) providing physical plucked strings, acoustic flute and brass waveguides, anti-aliased PolyBLEP oscillators, 5-pole formant speech synthesis with historic DECtalk/SAM personas, analog 808/909 percussion, Euler-Bernoulli modal bells, and pure C Levinson-Durbin LPC speech-to-phoneme analysis (see [DSP Toolkit Reference](doc/DSP_TOOLKIT.md) and [DSP Expansion Plan](doc/dsp_expansion_plan.md)).
 - **Virtual Stream Generators & Dynamic Sequence Streams**: Zero-allocation parameter sweeps and generator curves via `/SG`, dynamic expandable stream buffers via `/SS`, step slice ranges via `X:`, and live pattern parameter sourcing via `&<stream_id>` (see [Reference](doc/REFERENCE.md)).
 - **Ephemeral Public Clipboard State Sharing**: Zero-friction instant code sharing and loading across CLI, GUI, and Web (`/share`, `/load`, and web `[CLIP]`) without logins, accounts, or cryptography.

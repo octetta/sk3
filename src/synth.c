@@ -20,6 +20,7 @@
 #include "portable_atomic.h"
 #include "control-events.h"
 #include "sk_dsp.h"
+#include "seq.h"
 
 #define SAMPLE_COUNT_PUT(n) atomic_store_uint64(&synth_sample_count, n)
 #define SAMPLE_COUNT_GET() atomic_load_uint64(&synth_sample_count)
@@ -319,7 +320,8 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
     uint64_t current_sample = callback_sample + (uint64_t)i;
     float sample_left = 0.0f;
     float sample_right = 0.0f;
-    float delay_input[DELAY_BUS_COUNT] = {0};
+    float delay_input_left[DELAY_BUS_COUNT] = {0};
+    float delay_input_right[DELAY_BUS_COUNT] = {0};
     float record_left[RECORD_TRACK_COUNT] = {0};
     float record_right[RECORD_TRACK_COUNT] = {0};
     
@@ -332,8 +334,10 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
       atomic_store_int(&sampling.state, SAMPLE_STATE_RECORDING);
       sample_state = SAMPLE_STATE_RECORDING;
     }
-    float record_mono = 0.0f;
-    float record_voice = 0.0f;
+    float record_dry_left = 0.0f;
+    float record_dry_right = 0.0f;
+    float record_voice_left = 0.0f;
+    float record_voice_right = 0.0f;
     
     float f = 0.0f;
     uint64_t noise_raw = audio_rng_next(&synth_random);
@@ -365,48 +369,115 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
       }
       int was_finished = sv.finished[n];
       char is_capture = 0;
-      int capture_channel = sv.wave_table_index[n] - WAVE_TABLE_CAPTURE_FIRST;
-      if (capture_channel >= 0 &&
-          capture_channel < WAVE_TABLE_CAPTURE_CHANNELS) {
-        f = capture_channel < this_capture_channels
-          ? this_capture[(size_t)i * this_capture_channels + capture_channel]
-          : 0.0f;
+      switch (sv.source_type[n]) {
+      case OSC_SOURCE_CAPTURE: {
+        int capture_channel = sv.wave_table_index[n] - WAVE_TABLE_CAPTURE_FIRST;
+        if (capture_channel == 0) {
+          f = (this_capture_channels > 0) ? this_capture[(size_t)i * this_capture_channels + 0] : 0.0f;
+          if (sv.sample_r) {
+            sv.sample_r[n] = (this_capture_channels >= 2)
+              ? this_capture[(size_t)i * this_capture_channels + 1]
+              : f;
+          }
+        } else if (capture_channel == 1) {
+          f = (this_capture_channels >= 2)
+            ? this_capture[(size_t)i * this_capture_channels + 1]
+            : (this_capture_channels > 0 ? this_capture[(size_t)i * this_capture_channels + 0] : 0.0f);
+          if (sv.sample_r) sv.sample_r[n] = f;
+        } else {
+          f = 0.0f;
+        }
         is_capture = 1;
+        break;
       }
-      else if (sv.wave_table_index[n] == WAVE_TABLE_NOISE_ALT) {
-        if (!whiteish_ready) {
-          whiteish = audio_rng_raw_float(noise_raw);
-          whiteish_ready = 1;
-        }
-        f = whiteish;
-      }
-      else if (sv.wave_table_index[n] == WAVE_TABLE_NOISE) {
-        float phase_inc = sv.phase_inc[n];
-        if (sv.use_freq_envelope[n]) {
-            float freq_env_val = envelope_step_e(&sv.freq_envelope[n], current_sample);
-            phase_inc *= exp2f(freq_env_val * sv.freq_env_depth[n]);
-        }
-        if (sv.freq_mod_osc[n] >= 0 && sv.freq_mod_osc[n] != n) {
-            int mod = sv.freq_mod_osc[n];
-            float g = sv.sample[mod] * sv.freq_mod_depth[n] + sv.freq_mod_adder[n];
-            if (sv.freq_mod_mode[n] == 1) {
-                phase_inc = (g * sv.table_size_rate[n]);
-            } else if (sv.freq_mod_mode[n] == 0) {
-                phase_inc += (sv.phase_inc[mod] * sv.freq_scale[n] * g);
+      case OSC_SOURCE_UTILITY: {
+        int util = sv.wave_table_index[n];
+        switch (util) {
+          case WAVE_TABLE_SILENCE:
+            f = 0.0f;
+            if (sv.sample_r) sv.sample_r[n] = 0.0f;
+            break;
+          case WAVE_TABLE_UNITY:
+            f = 1.0f;
+            if (sv.sample_r) sv.sample_r[n] = 1.0f;
+            break;
+          case WAVE_TABLE_IMPULSE: {
+            double sinc = (double)fabsf(sv.phase_inc[n]);
+            if (sinc < 1.0) sinc = 1.0;
+            f = (sv.phase[n] < sinc) ? 1.0f : 0.0f;
+            if (sv.sample_r) sv.sample_r[n] = f;
+            sv.phase[n] += sinc;
+            double table_sz = sv.table_size[n] > 0 ? (double)sv.table_size[n] : 4096.0;
+            if (sv.phase[n] >= table_sz) sv.phase[n] -= table_sz;
+            break;
+          }
+          case WAVE_TABLE_METRO: {
+            float bpm = tempo_bpm_get();
+            if (bpm <= 0.0f) bpm = 120.0f;
+            uint64_t samples_per_beat = (uint64_t)((60.0f / bpm) * (float)MAIN_SAMPLE_RATE);
+            if (samples_per_beat < 1) samples_per_beat = 1;
+            uint64_t beat_phase = current_sample % samples_per_beat;
+            if (beat_phase < 48) {
+              f = 1.0f - ((float)beat_phase / 48.0f);
+            } else {
+              f = 0.0f;
             }
+            if (sv.sample_r) sv.sample_r[n] = f;
+            break;
+          }
+          case WAVE_TABLE_DELAY_TAP: {
+            f = delay_bus[0].last_out_l;
+            if (sv.sample_r) sv.sample_r[n] = delay_bus[0].last_out_r;
+            break;
+          }
+          case WAVE_TABLE_CONTROL: {
+            f = sv.freq_bend ? sv.freq_bend[n] : 0.0f;
+            if (sv.sample_r) sv.sample_r[n] = f;
+            break;
+          }
+          default:
+            f = 0.0f;
+            if (sv.sample_r) sv.sample_r[n] = 0.0f;
+            break;
         }
-        double table_sz = sv.table_size[n] > 0 ? (double)sv.table_size[n] : 1024.0;
-        double phase = sv.phase[n] + (double)fabsf(phase_inc);
-        while (phase >= table_sz) {
-            phase -= table_sz;
-            double d = (phase_inc > 0.0f) ? (phase / (double)phase_inc) : 0.0;
-            osc_hard_sync_fire(n, d);
-            osc_noise_step(n);
-        }
-        sv.phase[n] = phase;
-        f = sv.noise_sample[n];
+        break;
       }
-      else {
+      case OSC_SOURCE_NOISE: {
+        if (sv.wave_table_index[n] == WAVE_TABLE_NOISE_ALT) {
+          if (!whiteish_ready) {
+            whiteish = audio_rng_raw_float(noise_raw);
+            whiteish_ready = 1;
+          }
+          f = whiteish;
+        } else {
+          float phase_inc = sv.phase_inc[n];
+          if (sv.use_freq_envelope[n]) {
+              float freq_env_val = envelope_step_e(&sv.freq_envelope[n], current_sample);
+              phase_inc *= exp2f(freq_env_val * sv.freq_env_depth[n]);
+          }
+          if (sv.freq_mod_osc[n] >= 0 && sv.freq_mod_osc[n] != n) {
+              int mod = sv.freq_mod_osc[n];
+              float g = sv.sample[mod] * sv.freq_mod_depth[n] + sv.freq_mod_adder[n];
+              if (sv.freq_mod_mode[n] == 1) {
+                  phase_inc = (g * sv.table_size_rate[n]);
+              } else if (sv.freq_mod_mode[n] == 0) {
+                  phase_inc += (sv.phase_inc[mod] * sv.freq_scale[n] * g);
+              }
+          }
+          double table_sz = sv.table_size[n] > 0 ? (double)sv.table_size[n] : 1024.0;
+          double phase = sv.phase[n] + (double)fabsf(phase_inc);
+          while (phase >= table_sz) {
+              phase -= table_sz;
+              double d = (phase_inc > 0.0f) ? (phase / (double)phase_inc) : 0.0;
+              osc_hard_sync_fire(n, d);
+              osc_noise_step(n);
+          }
+          sv.phase[n] = phase;
+          f = sv.noise_sample[n];
+        }
+        break;
+      }
+      default: {
         float phase_inc = sv.phase_inc[n];
         if (sv.use_freq_envelope[n]) {
             float freq_env_val = envelope_step_e(&sv.freq_envelope[n], current_sample);
@@ -440,6 +511,9 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
         } else {
           f = osc_next_at(engine, n, phase_inc, 0.0f, current_sample);
         }
+        break;
+      }
+      }
       if (sv.loop_ended[n]) {
         int release_tail = sv.one_shot[n] && sv.loop_release_tail[n];
         sv.loop_ended[n] = 0;
@@ -462,7 +536,6 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
         if (sv.ring_osc[n] >= 0.0) {
           f *= sv.sample[sv.ring_osc[n]];
         }
-      }
       if (sv.sample_hold_ratio[n] > 0.0f) {
         float f_hz = sv.freq[n] > 0.0f ? sv.freq[n] : 440.0f;
         int sah_period = (int)(((float)MAIN_SAMPLE_RATE / f_hz) * sv.sample_hold_ratio[n]);
@@ -585,19 +658,8 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
         sv.freq_mod_feedback_z1[n] = sv.sample[n];
       }
 
-      if (sample_state == SAMPLE_STATE_RECORDING &&
-          sampling.source == SAMPLE_SOURCE_VOICE &&
-          sampling.source_voice == n) {
-        record_voice = sv.sample[n];
-      }
-      if (sample_state == SAMPLE_STATE_RECORDING &&
-          sampling.source == SAMPLE_SOURCE_DRY &&
-          (sv.disconnect[n] == 0 || is_capture)) {
-        record_mono += sv.sample[n];
-      }
-
       float left  = sv.sample[n];
-      float right = sv.sample[n];
+      float right = (sv.sample_r && (is_capture || (sv.table_right && sv.table_right[n]) || (sv.source_type && sv.source_type[n] == OSC_SOURCE_UTILITY))) ? sv.sample_r[n] : left;
       if (sv.pan_mod_osc[n] >= 0) {
         float q = sv.sample[sv.pan_mod_osc[n]] * sv.pan_mod_depth[n] +
           sv.pan_mod_adder[n];
@@ -606,6 +668,19 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
       }
       left  *= sv.pan_left[n];
       right *= sv.pan_right[n];
+
+      if (sample_state == SAMPLE_STATE_RECORDING &&
+          sampling.source == SAMPLE_SOURCE_VOICE &&
+          sampling.source_voice == n) {
+        record_voice_left = left;
+        record_voice_right = right;
+      }
+      if (sample_state == SAMPLE_STATE_RECORDING &&
+          sampling.source == SAMPLE_SOURCE_DRY &&
+          (sv.disconnect[n] == 0 || is_capture)) {
+        record_dry_left += left;
+        record_dry_right += right;
+      }
 
       int track = sv.record[n];
       if (track >= 1 && track <= RECORD_TRACK_MAX) {
@@ -618,8 +693,16 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
           int bus = -1;
           if (track >= 1 && track <= RECORD_TRACK_MAX)
             bus = track - 1;
-          if (bus >= 0 && bus < DELAY_BUS_COUNT)
-            delay_input[bus] += sv.sample[n] * sv.delay_send[n];
+          if (bus >= 0 && bus < DELAY_BUS_COUNT) {
+            float send = sv.delay_send[n];
+            float pan = sv.pan ? sv.pan[n] : 0.0f;
+            float pan_l = (1.0f - pan) * 0.5f;
+            float pan_r = (1.0f + pan) * 0.5f;
+            float v_l = sv.sample[n];
+            float v_r = (sv.sample_r && (is_capture || (sv.table_right && sv.table_right[n]) || (sv.source_type && sv.source_type[n] == OSC_SOURCE_UTILITY))) ? sv.sample_r[n] : v_l;
+            delay_input_left[bus]  += v_l * pan_l * send;
+            delay_input_right[bus] += v_r * pan_r * send;
+          }
         }
         sample_left  += left;
         sample_right += right;
@@ -628,11 +711,11 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
     } // end block
 
     for (int bus = 0; bus < DELAY_BUS_COUNT; bus++) {
-      if (delay_input[bus] != 0.0f) delay_bus[bus].active = 1;
+      if (delay_input_left[bus] != 0.0f || delay_input_right[bus] != 0.0f) delay_bus[bus].active = 1;
       if (!delay_bus[bus].active) continue;
       float delay_left = 0.0f;
       float delay_right = 0.0f;
-      delay_process(engine, &delay_bus[bus], delay_input[bus], &delay_left, &delay_right);
+      delay_process(engine, &delay_bus[bus], delay_input_left[bus], delay_input_right[bus], &delay_left, &delay_right);
       if (delay_bus[bus].level > 0) {
         sample_left += delay_left;
         sample_right += delay_right;
@@ -653,14 +736,25 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
 
     if (sample_state == SAMPLE_STATE_RECORDING &&
         atomic_load_int(&sampling.frames) > 0) {
+      size_t frame = (size_t)sampling.ptr * 2;
+      float rec_l = 0.0f, rec_r = 0.0f;
       if (sampling.source == SAMPLE_SOURCE_MASTER) {
-        size_t frame = (size_t)sampling.ptr * 2;
-        sampling.where[frame] = sample_left;
-        sampling.where[frame + 1] = sample_right;
-      } else {
-        sampling.where[sampling.ptr] =
-          sampling.source == SAMPLE_SOURCE_VOICE ? record_voice : record_mono;
+        rec_l = sample_left;
+        rec_r = sample_right;
+      } else if (sampling.source == SAMPLE_SOURCE_VOICE) {
+        rec_l = record_voice_left;
+        rec_r = record_voice_right;
+      } else if (sampling.source == SAMPLE_SOURCE_DRY) {
+        rec_l = record_dry_left;
+        rec_r = record_dry_right;
+      } else if (sampling.source == SAMPLE_SOURCE_INPUT) {
+        if (this_capture && this_capture_channels > 0) {
+          rec_l = this_capture[(size_t)i * this_capture_channels + 0];
+          rec_r = (this_capture_channels >= 2) ? this_capture[(size_t)i * this_capture_channels + 1] : rec_l;
+        }
       }
+      sampling.where[frame]     = rec_l;
+      sampling.where[frame + 1] = rec_r;
       sampling.ptr++;
       int remaining = atomic_fetch_add_int(&sampling.frames, -1) - 1;
       if (remaining == 0) {
