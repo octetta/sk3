@@ -454,6 +454,110 @@ int main(void) {
     expect(log && strstr(log, test_path) != NULL, "ands query_string ?s outputs set path");
   }
 
+  // Verify ca (cue add), cc (cue clear), and w>w RIFF metadata export & /ws reload
+  {
+    skode_t sk;
+    skode_init(&sk);
+    synth_init(8);
+    wave_table_init(0);
+    voice_init();
+
+    int len = 1000;
+    float *buf = (float *)calloc(len, sizeof(float));
+    for (int i = 0; i < len; i++) buf[i] = sinf((float)i * 0.1f);
+    wave_install_memory(104, buf, len, 48000.0f, 1, "test-cues", 60.0f, 440.0f);
+    expect(sw.size[104] == 1000, "wave 104 installed with 1000 samples");
+
+    // Set active voice wave slot to 104
+    consume_skode(&sk, "v0 w104");
+
+    // Cue add on active voice wave slot
+    consume_skode(&sk, "50 120 ca");
+    expect(sw.num_cues && sw.num_cues[104] == 1, "active wave 50 120 ca added 1 cue");
+    if (sw.num_cues && sw.num_cues[104] == 1 && sw.cues && sw.cues[104]) {
+      expect(sw.cues[104][0].start == 50 && sw.cues[104][0].end == 120, "cue 0 range is 50..120");
+    }
+
+    // 1-arg ca (start only, end defaults to start for point cue)
+    consume_skode(&sk, "300 ca");
+    expect(sw.num_cues && sw.num_cues[104] == 2, "300 ca added second cue");
+    if (sw.num_cues && sw.num_cues[104] == 2 && sw.cues && sw.cues[104]) {
+      expect(sw.cues[104][1].start == 300 && sw.cues[104][1].end == 300, "cue 1 range is 300..300");
+    }
+
+    // Clear cues
+    consume_skode(&sk, "cc");
+    expect(sw.num_cues && sw.num_cues[104] == 0, "cc cleared cues on active wave");
+
+    // Explicit slot ca
+    consume_skode(&sk, "104 60 180 ca");
+    consume_skode(&sk, "104 250 450 ca");
+    expect(sw.num_cues[104] == 2, "104 ca added 2 cues");
+    expect(sw.cues[104][0].start == 60 && sw.cues[104][0].end == 180, "explicit slot cue 0 range");
+    expect(sw.cues[104][1].start == 250 && sw.cues[104][1].end == 450, "explicit slot cue 1 range");
+
+    // Enable loop on wave 104
+    sw.loop_enabled[104] = 1;
+    sw.loop_start[104] = 40;
+    sw.loop_end[104] = 800;
+
+    // Export wave 104 to WAV with RIFF cue and smpl chunks
+    const char *export_file = "/tmp/skode_test_cue_roundtrip.wav";
+    char export_cmd[256];
+    snprintf(export_cmd, sizeof(export_cmd), "[%s] 104 w>w", export_file);
+    consume_skode(&sk, export_cmd);
+
+    // Reload exported file into wave 105 via /ws
+    char load_cmd[256];
+    snprintf(load_cmd, sizeof(load_cmd), "[%s] 105 /ws", export_file);
+    consume_skode(&sk, load_cmd);
+
+    // Verify metadata was fully preserved across round-trip (loop0 from smpl + 2 cue slices)
+    expect(sw.num_cues && sw.num_cues[105] == 3, "reloaded wave 105 has 3 cues (loop0 + 2 cue slices)");
+    if (sw.num_cues && sw.num_cues[105] == 3) {
+      expect(sw.cues[105][0].start == 40 && sw.cues[105][0].end == 800, "reloaded cue 0 (loop0) is 40..800");
+      expect(sw.cues[105][1].start == 60 && sw.cues[105][1].end == 180, "reloaded cue 1 is 60..180");
+      expect(sw.cues[105][2].start == 250 && sw.cues[105][2].end == 450, "reloaded cue 2 is 250..450");
+    }
+    expect(sw.loop_enabled[105] == 1, "reloaded wave 105 has loop enabled");
+    expect(sw.loop_start[105] == 40 && sw.loop_end[105] == 800, "reloaded wave 105 loop points 40..800");
+
+    remove(export_file);
+
+    // Verify Realtime opcode jc (jump to cue)
+    consume_skode(&sk, "v0 w104");
+    sv.phase[0] = 0.0;
+    event_program_t prog_jc;
+    memset(&prog_jc, 0, sizeof(prog_jc));
+    expect(skode_compile_program("1 jc", &prog_jc) == SKODE_COMPILE_OK, "compile '1 jc' ok");
+    expect(prog_jc.count == 1 && prog_jc.op[0].opcode.code == SKODE_OP_JUMP_TO_CUE, "prog_jc compiled to SKODE_OP_JUMP_TO_CUE");
+    skode_execute_voice_opcode(&prog_jc.op[0].opcode, 0);
+    expect(sv.phase[0] == 250.0, "realtime '1 jc' jumped phase to cue 1 start (250)");
+    expect(sv.cue_cursor && sv.cue_cursor[0] == 1, "realtime '1 jc' set cue_cursor to 1");
+
+    memset(&prog_jc, 0, sizeof(prog_jc));
+    expect(skode_compile_program("0 0 jc", &prog_jc) == SKODE_COMPILE_OK, "compile '0 0 jc' (voice cue jc) ok");
+    skode_execute_voice_opcode(&prog_jc.op[0].opcode, 0);
+    expect(sv.phase[0] == 60.0, "realtime '0 0 jc' jumped phase to cue 0 start (60)");
+    expect(sv.cue_cursor && sv.cue_cursor[0] == 0, "realtime '0 0 jc' set cue_cursor to 0");
+
+    // Verify Realtime opcode l. (pause/resume toggle via NaN tie sentinel)
+    expect(sv.paused[0] == 0, "voice 0 initially unpaused");
+    event_program_t prog_pause;
+    memset(&prog_pause, 0, sizeof(prog_pause));
+    expect(skode_compile_program("l.", &prog_pause) == SKODE_COMPILE_OK, "compile 'l.' ok");
+    expect(prog_pause.count == 1 && prog_pause.op[0].opcode.code == SKODE_OP_VELOCITY, "prog_pause compiled to SKODE_OP_VELOCITY");
+    expect(isnan(prog_pause.op[0].opcode.arg[0]), "prog_pause arg[0] is NaN tie sentinel");
+    skode_execute_voice_opcode(&prog_pause.op[0].opcode, 0);
+    expect(sv.paused[0] == 1, "realtime 'l.' paused voice 0");
+    skode_execute_voice_opcode(&prog_pause.op[0].opcode, 0);
+    expect(sv.paused[0] == 0, "realtime 'l.' unpaused voice 0");
+
+    skode_free(&sk);
+    wave_free();
+    synth_free();
+  }
+
   if (failures) {
     fprintf(stderr, "%d audio command test failure(s)\n", failures);
     return 1;

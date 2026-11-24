@@ -144,6 +144,7 @@ int skode_opcode_supported(skode_opcode_t opcode) {
     case SKODE_OP_WAVE_RANGE_SET:
     case SKODE_OP_WAVE_LOOP_SET:
     case SKODE_OP_VOICE_CUE_SET:
+    case SKODE_OP_JUMP_TO_CUE:
     case SKODE_OP_POLY_NOTE:
     case SKODE_OP_POLY_RELEASE:
     case SKODE_OP_POLY_BEND:
@@ -207,7 +208,9 @@ int skode_execute_voice_opcode(const opcode_event_t *opcode, int voice) {
     (opcode->code >= SKODE_OP_DISCRETE_BASE) ? (uint8_t)opcode->mode :
     (opcode->code == SKODE_OP_MIDI_NOTE ||
      opcode->code == SKODE_OP_INST_NOTE ||
-     opcode->code == SKODE_OP_MIDI_DETUNE ? 1U :
+     opcode->code == SKODE_OP_MIDI_DETUNE ||
+     opcode->code == SKODE_OP_VELOCITY ||
+     opcode->code == SKODE_OP_ENVELOPE_VELOCITY ? 1U :
      opcode->code == SKODE_OP_DELAY_PARAMS ? 0x7eU : 0U);
   if (((uint8_t)opcode->mode & ~default_mask) != 0) return -1;
   for (int i = 0; i < opcode->argc; i++) {
@@ -428,21 +431,8 @@ int skode_execute_voice_opcode(const opcode_event_t *opcode, int voice) {
       return opcode->argc == 1 ?
         envelope_velocity(voice, opcode->arg[0]) : -1;
     case SKODE_OP_VELOCITY:
-    #if 1
       return opcode->argc == 1 ?
-        skode_linked_velocity(voice, ands_is_tie(opcode->arg[0]) ? skode_double_to_float_note(opcode->arg[0]) : (float)opcode->arg[0], SAMPLE_COUNT_GET()) : -1;
-    #else
-      if (opcode->argc != 1) return -1;
-      {
-        uint64_t now = SAMPLE_COUNT_GET();
-        skode_envelope_velocity(voice, opcode->arg[0], now);
-        for (int i = 0; i < SYNTH_VOICE_LINKS_MAX; i++) {
-          if (sv.link_velo[i][voice] >= 0)
-            skode_envelope_velocity(sv.link_velo[i][voice], opcode->arg[0], now);
-        }
-        return 0;
-      }
-    #endif
+        skode_linked_velocity(voice, opcode->arg[0], SAMPLE_COUNT_GET()) : -1;
     case SKODE_OP_MUTE:
       return x_valid ? wave_mute(voice, x) : -1;
     case SKODE_OP_MIDI_NOTE:
@@ -678,6 +668,20 @@ int skode_execute_voice_opcode(const opcode_event_t *opcode, int voice) {
         return 0;
       }
       return -1;
+    }
+    case SKODE_OP_JUMP_TO_CUE: {
+      int target_voice = voice;
+      int cue_idx = 0;
+      if (opcode->argc >= 2) {
+        target_voice = (int)opcode->arg[0];
+        cue_idx = (int)opcode->arg[1];
+      } else if (opcode->argc == 1) {
+        cue_idx = (int)opcode->arg[0];
+      } else {
+        return -1;
+      }
+      if (!skode_voice_valid(target_voice)) return -1;
+      return voice_jump_to_cue(target_voice, cue_idx);
     }
     case SKODE_OP_TEMPO:
       if (opcode->argc >= 1) {

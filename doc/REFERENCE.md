@@ -9,10 +9,10 @@ Generated automatically by `tools/mkopcodes` from modular opcode definitions in 
 
 ## Architecture & System Overview
 
-- **Total Command Words**: 323
-- **Total Dispatch Clauses**: 665
-- **Real-Time Audio Opcode Handlers**: 161 (audio-thread safe, zero allocation, zero string lookup)
-- **Immediate / Control Plane Clauses**: 504 (REPL / parser / file system / diagnostics)
+- **Total Command Words**: 325
+- **Total Dispatch Clauses**: 671
+- **Real-Time Audio Opcode Handlers**: 162 (audio-thread safe, zero allocation, zero string lookup)
+- **Immediate / Control Plane Clauses**: 509 (REPL / parser / file system / diagnostics)
 
 ### Functional Command Groups
 
@@ -20,7 +20,7 @@ Generated automatically by `tools/mkopcodes` from modular opcode definitions in 
 |:---|:---|:---:|:---|
 | voice | `voice` | 27 | Core voice selection, levels, panning, and voice diagnostics |
 | osc | `osc` | 20 | Oscillators, waveforms, frequency, tuning, detune, loops |
-| wave | `wave` | 24 | Wavetable slots, visualizers, WAV import and export |
+| wave | `wave` | 26 | Wavetable slots, visualizers, WAV import and export |
 | filter | `filter` | 8 | Filter cutoff frequency, resonance, modes, wavefolding |
 | env | `env` | 15 | Envelopes, ADSR parameters, curve shaping, segment times |
 | mod | `mod` | 14 | Cross-modulation, FM, AM, ring mod, sample & hold, glissando |
@@ -53,7 +53,7 @@ Generated automatically by `tools/mkopcodes` from modular opcode definitions in 
 | [`gate_off`](#gate_off) | `off` | 2 | 0..1 | Immediate | turn active voice gate off |
 | [`gate_on`](#gate_on) | `on` | 2 | 0..1 | Immediate | turn active voice gate on |
 | [`inst_note`](#inst_note) | `i` | 3 | 1..3 | Real-Time | trigger instrument note |
-| [`jump_to_cue`](#jump_to_cue) | `jc` | 2 | 0..1 | Hybrid | jump voice playback phase to cue point by index |
+| [`jump_to_cue`](#jump_to_cue) | `jc` | 3 | 0..2 | Hybrid | jump specific voice playback phase to cue point by index |
 | [`master_volume`](#master_volume) | `V` | 2 | 0..1 | Immediate | set master output volume |
 | [`mute`](#mute) | `m` | 2 | 0..1 | Real-Time | mute or unmute voice audio output (0 = unmute, 1 = mute) |
 | [`pan`](#pan) | `p` | 2 | 1 | Real-Time | set voice stereo pan position (-1.0 left to +1.0 right) |
@@ -342,13 +342,27 @@ Usage: i note velocity cents
 
 - **Alias**: `jc`
 - **Group**: `voice`
-- **Clause Count**: 2
+- **Clause Count**: 3
 
-#### Clause 1: `jump_to_cue(finite)`
+#### Clause 1: `jump_to_cue(finite, finite)`
+
+- **Arity**: `2`
+- **Execution Model**: `realtime (audio thread safe)`
+- **Discrete Opcode ID**: `284` (`skode_clause_jump_to_cue_2`)
+- **Summary**: jump specific voice playback phase to cue point by index
+
+**Description & Details**:
+
+```text
+Seeks target voice playback phase directly to the specified cue point index.
+Usage: jc voice index (or voice index jc)
+```
+
+#### Clause 2: `jump_to_cue(finite)`
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `284` (`skode_clause_jump_to_cue_1`)
+- **Discrete Opcode ID**: `285` (`skode_clause_jump_to_cue_1`)
 - **Summary**: jump voice playback phase to cue point by index
 
 **Description & Details**:
@@ -358,7 +372,7 @@ Seeks voice playback phase directly to the specified cue point index.
 Usage: jc index (or jump_to_cue index)
 ```
 
-#### Clause 2: `jump_to_cue()`
+#### Clause 3: `jump_to_cue()`
 
 - **Arity**: `0`
 - **Execution Model**: `immediate (control plane)`
@@ -1707,6 +1721,8 @@ Usage: WS wave
 
 | Command | Alias | Clauses | Arity | Execution | Summary |
 |:---|:---|:---:|:---:|:---:|:---|
+| [`cue_add`](#cue_add) | `ca` | 3 | 1..3 | Immediate | add cue or slice to specific wave slot |
+| [`cue_clear`](#cue_clear) | `cc` | 2 | 0..1 | Immediate | clear all cues for wave slot |
 | [`data_to_sample`](#data_to_sample) | `/d` | 5 | 0..4 | Immediate | load data array into default sample slot |
 | [`data_to_wave`](#data_to_wave) | `d>w` | 4 | 0..3 | Immediate | load active data array into default sample slot as one-shot |
 | [`physical_synth`](#physical_synth) | `phz!` | 3 | 0..2 | Immediate | render physical modeling instrument DSL to data array |
@@ -1731,6 +1747,87 @@ Usage: WS wave
 | [`wave_loop_points`](#wave_loop_points) | `WL` | 4 | 0..3 | Immediate | set wavetable slot loop points |
 | [`wave_to_data`](#wave_to_data) | `w>d` | 2 | 0..1 | Immediate | copy wavetable slot samples to data array |
 | [`wave_to_rec`](#wave_to_rec) | `w>r` | 2 | 0..1 | Immediate | copy wavetable slot into recording buffer |
+
+### `cue_add`
+
+- **Alias**: `ca`
+- **Group**: `wave`
+- **Clause Count**: 3
+
+#### Clause 1: `cue_add(finite, finite, finite)`
+
+- **Arity**: `3`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: add cue or slice to specific wave slot
+
+**Description & Details**:
+
+```text
+Adds a cue point or slice region to the specified wave slot.
+Usage: [label] slot start end ca
+```
+
+#### Clause 2: `cue_add(finite, finite)`
+
+- **Arity**: `2`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: add slice to active voice wave slot
+
+**Description & Details**:
+
+```text
+Adds a slice region (start..end) to the active voice's wave slot.
+Usage: [label] start end ca
+```
+
+#### Clause 3: `cue_add(finite)`
+
+- **Arity**: `1`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: add cue point to active voice wave slot
+
+**Description & Details**:
+
+```text
+Adds a cue point at sample start to the active voice's wave slot.
+Usage: [label] start ca
+```
+
+---
+
+### `cue_clear`
+
+- **Alias**: `cc`
+- **Group**: `wave`
+- **Clause Count**: 2
+
+#### Clause 1: `cue_clear(finite)`
+
+- **Arity**: `1`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: clear all cues for wave slot
+
+**Description & Details**:
+
+```text
+Clears all cue points and slices for specified wave slot.
+Usage: slot cc
+```
+
+#### Clause 2: `cue_clear()`
+
+- **Arity**: `0`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: clear all cues for active voice wave slot
+
+**Description & Details**:
+
+```text
+Clears all cue points and slices for the active voice's wave slot.
+Usage: cc
+```
+
+---
 
 ### `data_to_sample`
 
@@ -2324,7 +2421,7 @@ Usage: [phonemes] slot /vox
 
 - **Arity**: `0`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `287` (`skode_clause_wave_bandlimit_0`)
+- **Discrete Opcode ID**: `288` (`skode_clause_wave_bandlimit_0`)
 - **Summary**: bandlimit active voice wavetable
 
 **Description & Details**:
@@ -2338,7 +2435,7 @@ Usage: WB (or wave_bandlimit)
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `288` (`skode_clause_wave_bandlimit_1`)
+- **Discrete Opcode ID**: `289` (`skode_clause_wave_bandlimit_1`)
 - **Summary**: bandlimit specified wavetable slot
 
 **Description & Details**:
@@ -2360,7 +2457,7 @@ Usage: WB <slot> (or wave_bandlimit <slot>)
 
 - **Arity**: `0`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `285` (`skode_clause_wave_default_0`)
+- **Discrete Opcode ID**: `286` (`skode_clause_wave_default_0`)
 - **Summary**: reset voice waveform to default sine
 
 **Description & Details**:
@@ -2374,7 +2471,7 @@ Usage: /
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `286` (`skode_clause_wave_default_1`)
+- **Discrete Opcode ID**: `287` (`skode_clause_wave_default_1`)
 - **Summary**: reset voice waveform to default sine with argument
 
 **Description & Details**:

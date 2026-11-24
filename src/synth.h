@@ -132,6 +132,8 @@ int voice_channel_pair_set(int voice, int pair);
 int voice_channel_pair_get(int voice);
 int voice_jump_to_cue(int voice, int cue_idx);
 int voice_jump_to_cue_label(int voice, const char *label);
+int wave_cue_add(int wave_slot, uint32_t start, uint32_t end, const char *label, int type);
+int wave_cue_clear(int wave_slot);
 double midi2hz(float midi_note, double cents);
 
 void wave_table_init(int flag);

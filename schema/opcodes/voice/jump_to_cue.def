@@ -1,6 +1,23 @@
 @name     jump_to_cue
 @alias    jc
 @group    voice
+@c_name   skode_clause_jump_to_cue_2
+@type     realtime
+@arity    2
+@match    (finite, finite)
+@summary  jump specific voice playback phase to cue point by index
+@doc
+Seeks target voice playback phase directly to the specified cue point index.
+Usage: jc voice index (or voice index jc)
+@code
+    int target_voice = (int)args[0];
+    if (target_voice < 0 || target_voice >= synth_config.voice_max) return -1;
+    return voice_jump_to_cue(target_voice, (int)args[1]);
+@end
+
+@name     jump_to_cue
+@alias    jc
+@group    voice
 @c_name   skode_clause_jump_to_cue_1
 @type     realtime
 @arity    1

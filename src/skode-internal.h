@@ -282,6 +282,10 @@ void pattern_show(skode_t *ctx, int pattern_pointer, int verbose);
 // Audio export prototypes
 void normalize_buffer(float* pSamples, ma_uint32 frameCount, ma_uint32 channels);
 int skode_write_wav(skode_t *ctx, const char *filename, const float *samples, int frames, uint32_t channels, uint32_t sample_rate, int normalize);
+int skode_write_wav_riff(skode_t *ctx, const char *filename, const float *samples, int frames, uint32_t channels, uint32_t sample_rate, int normalize, int has_loop, int loop_start, int loop_end, float root_note, const sk_cue_t *cues, int num_cues);
+int skode_export_wave_wav(skode_t *ctx, const char *filename, int wave_slot);
+int skode_exec_ca(skode_t *ctx, ands_t *s, const double *arg, int argc);
+int skode_exec_cc(skode_t *ctx, ands_t *s, const double *arg, int argc);
 void record_find_trim(int argc, float arg0, float arg1, int margin);
 
 #define RECORD_TRIM_DEFAULT_THRESHOLD 0.001f

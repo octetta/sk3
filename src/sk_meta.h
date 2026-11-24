@@ -161,6 +161,33 @@ static inline int sk_parse_metadata(const char *str, sk_meta_info_t *out) {
                     count++;
                 }
             }
+        } else if (strcmp(key, "cues") == 0) {
+            char *token = val;
+            while (token && *token) {
+                char *next_token = strchr(token, ',');
+                if (next_token) {
+                    *next_token = '\0';
+                    next_token++;
+                }
+                if (out->num_cues < SK_MAX_CUES && *token) {
+                    sk_cue_t *c = &out->cues[out->num_cues];
+                    char *range = strstr(token, "..");
+                    if (range) {
+                        *range = '\0';
+                        c->start = (uint32_t)atoi(token);
+                        c->end = (uint32_t)atoi(range + 2);
+                        c->type = SK_CUE_SLICE;
+                    } else {
+                        c->start = (uint32_t)atoi(token);
+                        c->end = c->start;
+                        c->type = SK_CUE_POINT;
+                    }
+                    snprintf(c->label, sizeof(c->label), "cue%d", out->num_cues);
+                    out->num_cues++;
+                    count++;
+                }
+                token = next_token;
+            }
         }
     }
     return count;

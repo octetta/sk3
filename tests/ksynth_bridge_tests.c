@@ -727,6 +727,42 @@ static void test_voice_cue_opcode(void) {
   wave_free();
   synth_free();
 }
+
+static void test_ksynth_cues_metadata_output(void) {
+  const char *test = "ksynth cues metadata output";
+  skode_t ctx = SKODE_EMPTY();
+  synth_init(8);
+  wave_table_init(0);
+  voice_init();
+  skode_init(&ctx);
+
+  /* Test 1: CUES vector defined in Ksynth */
+  consume(test, &ctx, "[CUES: 50 150 250; 300#!1] ks kw>");
+  consume(test, &ctx, "k>w308");
+  if (!sw.num_cues || sw.num_cues[308] != 3) {
+    fail(test, "wave 308 expected 3 cues from CUES vector");
+  } else {
+    if (sw.cues[308][0].start != 50 || sw.cues[308][1].start != 150 || sw.cues[308][2].start != 250) {
+      fail(test, "wave 308 cue start points mismatch");
+    }
+  }
+
+  /* Test 2: META string with cues:start..end (clearing previous CUES variable) */
+  consume(test, &ctx, "[CUES: 0#0; META: \"cues:10..40,100..200\"; 300#!1] ks kw>");
+  consume(test, &ctx, "k>w309");
+  if (!sw.num_cues || sw.num_cues[309] != 2) {
+    fail(test, "wave 309 expected 2 cues from META cues string");
+  } else {
+    if (sw.cues[309][0].start != 10 || sw.cues[309][0].end != 40 ||
+        sw.cues[309][1].start != 100 || sw.cues[309][1].end != 200) {
+      fail(test, "wave 309 cue start/end ranges mismatch");
+    }
+  }
+
+  skode_free(&ctx);
+  wave_free();
+  synth_free();
+}
 #endif
 
 int main(void) {
@@ -743,6 +779,7 @@ int main(void) {
   test_metadata_wave_installation_osc_and_sample();
   test_tts_word_markers_and_cues();
   test_voice_cue_opcode();
+  test_ksynth_cues_metadata_output();
 #endif
 
   if (failures) {

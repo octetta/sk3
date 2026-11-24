@@ -490,7 +490,8 @@ int skode_compile_word(ands_t *parser, uint32_t atom, double *arg, int argc,
       if (out_compile_result) *out_compile_result = SKODE_COMPILE_INVALID;
       return 1;
     }
-    int rc = skode_program_push(program, SKODE_OP_VELOCITY, parser, arg, 1, 0, 0);
+    uint8_t default_mask = isnan(arg[0]) ? 1U : 0U;
+    int rc = skode_program_push(program, SKODE_OP_VELOCITY, parser, arg, 1, (char)default_mask, default_mask);
     if (out_compile_result)
       *out_compile_result = (rc == 0) ? SKODE_COMPILE_OK : SKODE_COMPILE_TOO_LARGE;
     return 1;
@@ -573,6 +574,16 @@ int skode_compile_word(ands_t *parser, uint32_t atom, double *arg, int argc,
       return 1;
     }
     int rc = skode_program_push(program, SKODE_OP_VOICE_CUE_SET, parser, arg, argc, 0, 0);
+    if (out_compile_result)
+      *out_compile_result = (rc == 0) ? SKODE_COMPILE_OK : SKODE_COMPILE_TOO_LARGE;
+    return 1;
+  }
+  if (strcmp(name, "jc") == 0 || strcmp(name, "jump_to_cue") == 0) {
+    if (argc < 1 || argc > 2) {
+      if (out_compile_result) *out_compile_result = SKODE_COMPILE_INVALID;
+      return 1;
+    }
+    int rc = skode_program_push(program, SKODE_OP_JUMP_TO_CUE, parser, arg, argc, 0, 0);
     if (out_compile_result)
       *out_compile_result = (rc == 0) ? SKODE_COMPILE_OK : SKODE_COMPILE_TOO_LARGE;
     return 1;

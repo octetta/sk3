@@ -325,10 +325,13 @@ static void synth_eval_and_register_ks_wave(int w, const char *name, const char 
 
       K k_meta = k_get_var_str(ctx, "META");
       if (!k_meta) k_meta = k_get_var_str(ctx, "M");
+      K k_cues = k_get_var_str(ctx, "CUES");
+      if (!k_cues) k_cues = k_get_var_str(ctx, "CUE");
       int is_sample = 0;
       int is_osc = 0;
+      sk_meta_info_t meta;
+      sk_meta_init(&meta);
       if (k_meta && k_is_string(k_meta)) {
-        sk_meta_info_t meta;
         sk_parse_metadata((const char *)k_meta->f, &meta);
         if (meta.has_rate && meta.rate > 0) sw.rate[w] = meta.rate;
         if (meta.has_loop) {
@@ -340,14 +343,32 @@ static void synth_eval_and_register_ks_wave(int w, const char *name, const char 
         if (meta.has_root_note) sw.midi_note[w] = meta.root_note;
         if (meta.mode == SK_WAVE_MODE_SAMPLE) is_sample = 1;
         else if (meta.mode == SK_WAVE_MODE_OSC) is_osc = 1;
-
-        if (meta.num_cues > 0 && sw.cues && sw.num_cues) {
-          if (sw.cues[w]) free(sw.cues[w]);
-          sw.cues[w] = (sk_cue_t *)malloc(meta.num_cues * sizeof(sk_cue_t));
-          if (sw.cues[w]) {
-            memcpy(sw.cues[w], meta.cues, meta.num_cues * sizeof(sk_cue_t));
-            sw.num_cues[w] = meta.num_cues;
+      }
+      if (k_cues) {
+        if (k_is_string(k_cues)) {
+          sk_meta_info_t c_meta;
+          if (sk_parse_metadata((const char *)k_cues->f, &c_meta)) {
+            for (int ci = 0; ci < c_meta.num_cues && meta.num_cues < SK_MAX_CUES; ci++) {
+              meta.cues[meta.num_cues++] = c_meta.cues[ci];
+            }
           }
+        } else if (k_cues->n > 0) {
+          for (int ci = 0; ci < (int)k_cues->n && meta.num_cues < SK_MAX_CUES; ci++) {
+            sk_cue_t *c = &meta.cues[meta.num_cues++];
+            c->start = (uint32_t)(k_cues->f[ci] < 0 ? 0 : k_cues->f[ci]);
+            c->end = c->start;
+            c->type = SK_CUE_POINT;
+            snprintf(c->label, sizeof(c->label), "cue%d", meta.num_cues - 1);
+          }
+        }
+      }
+
+      if (meta.num_cues > 0 && sw.cues && sw.num_cues) {
+        if (sw.cues[w]) free(sw.cues[w]);
+        sw.cues[w] = (sk_cue_t *)malloc(meta.num_cues * sizeof(sk_cue_t));
+        if (sw.cues[w]) {
+          memcpy(sw.cues[w], meta.cues, meta.num_cues * sizeof(sk_cue_t));
+          sw.num_cues[w] = meta.num_cues;
         }
       }
 
@@ -632,3 +653,45 @@ void wave_free_one(int i) {
 void wave_free(void) {
   for (int i = 0; i < synth_config.wave_table_max; i++) wave_free_one(i);
 }
+
+int wave_cue_add(int wave_slot, uint32_t start, uint32_t end, const char *label, int type) {
+  if (wave_invalid(wave_slot) || sw.readonly[wave_slot]) return -1;
+  int size = sw.size[wave_slot];
+  if (size <= 0) return -1;
+  if (start >= (uint32_t)size) start = (uint32_t)(size > 0 ? size - 1 : 0);
+  if (end < start) end = start;
+  if (end > (uint32_t)size) end = (uint32_t)size;
+
+  if (!sw.cues || !sw.num_cues) return -1;
+  int idx = sw.num_cues[wave_slot];
+  if (idx >= SK_MAX_CUES) return -1;
+
+  sk_cue_t *new_cues = (sk_cue_t *)realloc(sw.cues[wave_slot], (idx + 1) * sizeof(sk_cue_t));
+  if (!new_cues) return -1;
+  sw.cues[wave_slot] = new_cues;
+
+  sk_cue_t *c = &sw.cues[wave_slot][idx];
+  memset(c, 0, sizeof(*c));
+  c->start = start;
+  c->end = end;
+  c->type = type;
+  if (label && label[0]) {
+    snprintf(c->label, sizeof(c->label), "%s", label);
+  } else {
+    snprintf(c->label, sizeof(c->label), "cue%d", idx);
+  }
+  sw.num_cues[wave_slot] = idx + 1;
+  return idx;
+}
+
+int wave_cue_clear(int wave_slot) {
+  if (wave_invalid(wave_slot) || sw.readonly[wave_slot]) return -1;
+  if (!sw.num_cues) return -1;
+  sw.num_cues[wave_slot] = 0;
+  if (sw.cues && sw.cues[wave_slot]) {
+    free(sw.cues[wave_slot]);
+    sw.cues[wave_slot] = NULL;
+  }
+  return 0;
+}
+

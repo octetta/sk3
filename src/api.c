@@ -2101,6 +2101,9 @@ int skred_execute_opcode(int voice, int opcode, int argc, const double *args) {
   
   for (int i = 0; i < event.argc; i++) {
     event.arg[i] = (float)args[i];
+    if (isnan(event.arg[i])) {
+      event.mode |= (char)(1U << i);
+    }
   }
   
   return skode_execute_voice_opcode(&event, voice);
@@ -2125,6 +2128,9 @@ int skred_dispatch_opcode(int voice, uint16_t opcode, const float *args, int arg
 
   for (int i = 0; i < argc; i++) {
     event.arg[i] = args ? args[i] : 0.0f;
+    if (isnan(event.arg[i])) {
+      event.mode |= (char)(1U << i);
+    }
   }
 
   if (voice < 0) {

@@ -101,6 +101,7 @@ enum {
   SKODE_OP_TEMPO,
   SKODE_OP_INST_NOTE,
   SKODE_OP_VOICE_CUE_SET,
+  SKODE_OP_JUMP_TO_CUE,
 };
 
 typedef uint16_t skode_opcode_t;

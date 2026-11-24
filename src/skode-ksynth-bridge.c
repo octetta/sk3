@@ -63,6 +63,36 @@ int skode_ks_eval(skode_t *ctx, char *cmd, int len) {
         ands_string_from_external(ctx->parse, (char *)s, (int)strlen(s));
       }
     }
+    K k_cues = k_get_var_str(ks, "CUES");
+    if (!k_cues) k_cues = k_get_var_str(ks, "CUE");
+    if (k_cues) {
+      char cue_buf[512];
+      cue_buf[0] = '\0';
+      if (k_is_string(k_cues)) {
+        const char *cs = (const char *)k_cues->f;
+        if (cs && cs[0]) {
+          snprintf(cue_buf, sizeof(cue_buf), " %s", cs);
+        }
+      } else if (k_cues->n > 0) {
+        size_t cpos = 0;
+        for (int i = 0; i < (int)k_cues->n && cpos < sizeof(cue_buf) - 32; i++) {
+          int offset = (int)k_cues->f[i];
+          if (offset < 0) offset = 0;
+          cpos += snprintf(cue_buf + cpos, sizeof(cue_buf) - cpos, " cue:%d,cue%d", offset, i);
+        }
+      }
+      if (cue_buf[0]) {
+        const char *cur = ands_string(ctx->parse);
+        if (cur && cur[0]) {
+          char merged[1024];
+          snprintf(merged, sizeof(merged), "%s%s", cur, cue_buf);
+          ands_string_from_external(ctx->parse, merged, (int)strlen(merged));
+        } else {
+          const char *trimmed = cue_buf + (cue_buf[0] == ' ' ? 1 : 0);
+          ands_string_from_external(ctx->parse, (char *)trimmed, (int)strlen(trimmed));
+        }
+      }
+    }
   }
 
   return next != NULL;

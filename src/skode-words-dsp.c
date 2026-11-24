@@ -1094,6 +1094,83 @@ static int word_exec_VC(const skode_word_t *self, skode_t *ctx, ands_t *s, doubl
   return 0;
 }
 
+static int word_exec_ca(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  (void)self;
+  (void)s;
+  int voice = ctx->voice;
+  int slot = -1;
+  int start = 0;
+  int end = 0;
+
+  if (argc >= 3) {
+    if (!skode_double_to_int(arg[0], &slot) ||
+        !skode_double_to_int(arg[1], &start) ||
+        !skode_double_to_int(arg[2], &end)) {
+      return 0;
+    }
+  } else if (argc == 2) {
+    slot = sv.wave_table_index[voice];
+    if (!skode_double_to_int(arg[0], &start) ||
+        !skode_double_to_int(arg[1], &end)) {
+      return 0;
+    }
+  } else if (argc == 1) {
+    slot = sv.wave_table_index[voice];
+    if (!skode_double_to_int(arg[0], &start)) return 0;
+    end = start;
+  } else {
+    return 0;
+  }
+
+  if (!skode_wave_valid(slot) || !sw.data[slot] || sw.size[slot] <= 0) {
+    ctx->printf(ctx, "# invalid wavetable slot %d for ca\n", slot);
+    return 0;
+  }
+
+  const char *label = NULL;
+  if (ands_string_fresh(ctx->parse) && ands_string(ctx->parse)[0]) {
+    label = ands_string(ctx->parse);
+  }
+
+  int type = (end > start) ? SK_CUE_SLICE : SK_CUE_POINT;
+  int idx = wave_cue_add(slot, (uint32_t)(start < 0 ? 0 : start),
+                         (uint32_t)(end < 0 ? 0 : end), label, type);
+  if (idx < 0) {
+    ctx->printf(ctx, "# failed to add cue to w%d\n", slot);
+    return 0;
+  }
+
+  const char *lbl = sw.cues[slot][idx].label;
+  if (end > start) {
+    ctx->printf(ctx, "# cue %d added to w%d: %s@%u..%u (slice)\n",
+                idx, slot, lbl, sw.cues[slot][idx].start, sw.cues[slot][idx].end);
+  } else {
+    ctx->printf(ctx, "# cue %d added to w%d: %s@%u\n",
+                idx, slot, lbl, sw.cues[slot][idx].start);
+  }
+  return 0;
+}
+
+static int word_exec_cc(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
+  (void)self;
+  (void)s;
+  int voice = ctx->voice;
+  int slot = sv.wave_table_index[voice];
+
+  if (argc >= 1) {
+    if (!skode_double_to_int(arg[0], &slot)) return 0;
+  }
+
+  if (!skode_wave_valid(slot)) {
+    ctx->printf(ctx, "# invalid wavetable slot %d for cc\n", slot);
+    return 0;
+  }
+
+  wave_cue_clear(slot);
+  ctx->printf(ctx, "# cleared cues on w%d\n", slot);
+  return 0;
+}
+
 static int word_exec_VW(const skode_word_t *self, skode_t *ctx, ands_t *s, double *arg, int argc) {
   uint32_t atom = ands_atom_num(s);
   int voice = ctx->voice;
@@ -1212,21 +1289,13 @@ static int word_exec_w_gtw(const skode_word_t *self, skode_t *ctx, ands_t *s, do
   (void)x_valid;
   (void)voice;
   (void)self; (void)atom; (void)voice; (void)x; (void)x_valid;
-      if (!ands_string_fresh(ctx->parse) ||
-          !ands_string(ctx->parse)[0]) {
+      if (!ands_string(ctx->parse) || !ands_string(ctx->parse)[0]) {
         ctx->printf(ctx, "# w>w requires [filename]\n");
       } else if (!x_valid || !skode_wave_valid(x) ||
                  !sw.data[x] || sw.size[x] <= 0) {
         ctx->printf(ctx, "# invalid wavetable for w>w\n");
       } else {
-        double stored_rate = sw.rate[x];
-        ma_uint32 sample_rate = MAIN_SAMPLE_RATE;
-        if (isfinite(stored_rate) && stored_rate >= 1.0 &&
-            stored_rate <= (double)UINT32_MAX - 0.5) {
-          sample_rate = (ma_uint32)(stored_rate + 0.5);
-        }
-        skode_write_wav(ctx, ands_string(ctx->parse), sw.data[x],
-                        sw.size[x], 1, sample_rate, 0);
+        skode_export_wave_wav(ctx, ands_string(ctx->parse), x);
       }
       return 0;
 }
@@ -1704,6 +1773,12 @@ int skode_exec_VS(skode_t *ctx, ands_t *s, const double *arg, int argc) {
 }
 int skode_exec_VC(skode_t *ctx, ands_t *s, const double *arg, int argc) {
   return word_exec_VC(NULL, ctx, s, (double*)arg, argc);
+}
+int skode_exec_ca(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  return word_exec_ca(NULL, ctx, s, (double*)arg, argc);
+}
+int skode_exec_cc(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  return word_exec_cc(NULL, ctx, s, (double*)arg, argc);
 }
 int skode_exec_VW(skode_t *ctx, ands_t *s, const double *arg, int argc) {
   return word_exec_VW(NULL, ctx, s, (double*)arg, argc);

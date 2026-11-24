@@ -1,0 +1,44 @@
+@name     cue_add
+@alias    ca
+@group    wave
+@c_name   skode_clause_cue_add_3
+@type     immediate
+@arity    3
+@match    (finite, finite, finite)
+@summary  add cue or slice to specific wave slot
+@doc
+Adds a cue point or slice region to the specified wave slot.
+Usage: [label] slot start end ca
+@code
+    return skode_exec_ca(ctx, s, args, argc);
+@end
+
+@name     cue_add
+@alias    ca
+@group    wave
+@c_name   skode_clause_cue_add_2
+@type     immediate
+@arity    2
+@match    (finite, finite)
+@summary  add slice to active voice wave slot
+@doc
+Adds a slice region (start..end) to the active voice's wave slot.
+Usage: [label] start end ca
+@code
+    return skode_exec_ca(ctx, s, args, argc);
+@end
+
+@name     cue_add
+@alias    ca
+@group    wave
+@c_name   skode_clause_cue_add_1
+@type     immediate
+@arity    1
+@match    (finite)
+@summary  add cue point to active voice wave slot
+@doc
+Adds a cue point at sample start to the active voice's wave slot.
+Usage: [label] start ca
+@code
+    return skode_exec_ca(ctx, s, args, argc);
+@end

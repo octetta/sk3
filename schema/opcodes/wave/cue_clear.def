@@ -1,0 +1,29 @@
+@name     cue_clear
+@alias    cc
+@group    wave
+@c_name   skode_clause_cue_clear_1
+@type     immediate
+@arity    1
+@match    (finite)
+@summary  clear all cues for wave slot
+@doc
+Clears all cue points and slices for specified wave slot.
+Usage: slot cc
+@code
+    return skode_exec_cc(ctx, s, args, argc);
+@end
+
+@name     cue_clear
+@alias    cc
+@group    wave
+@c_name   skode_clause_cue_clear_0
+@type     immediate
+@arity    0
+@match    ()
+@summary  clear all cues for active voice wave slot
+@doc
+Clears all cue points and slices for the active voice's wave slot.
+Usage: cc
+@code
+    return skode_exec_cc(ctx, s, args, argc);
+@end
