@@ -1,0 +1,48 @@
+@name     pwm_mod
+@alias    PW
+@group    mod
+@c_name   skode_clause_pwm_mod_0
+@type     realtime
+@arity    0
+@match    ()
+@summary  disable pulse width modulation
+@doc
+Disables pulse width modulation on active voice.
+Usage: PW (or pwm_mod)
+@code
+    if (voice < 0 || voice >= synth_config.voice_max) return -1;
+    return pwm_mod_set(voice, -1, 0.0f);
+@end
+
+@name     pwm_mod
+@alias    PW
+@group    mod
+@c_name   skode_clause_pwm_mod_1
+@type     realtime
+@arity    1
+@match    (finite)
+@summary  set pulse width modulation source or disable
+@doc
+Disables PWM if source < 0, or sets modulator voice with 1.0 depth.
+Usage: PW source (e.g. PW 1 or PW -1)
+@code
+    if (voice < 0 || voice >= synth_config.voice_max) return -1;
+    int src = (int)args[0];
+    return (src < 0) ? pwm_mod_set(voice, -1, 0.0f) : pwm_mod_set(voice, src, 1.0f);
+@end
+
+@name     pwm_mod
+@alias    PW
+@group    mod
+@c_name   skode_clause_pwm_mod_2
+@type     realtime
+@arity    2
+@match    (finite, finite)
+@summary  set pulse width modulation source and depth
+@doc
+Sets pulse width modulation source voice and depth (-1.0 .. 1.0).
+Usage: PW source depth (e.g. PW 1 0.3)
+@code
+    if (voice < 0 || voice >= synth_config.voice_max) return -1;
+    return pwm_mod_set(voice, (int)args[0], (float)args[1]);
+@end

@@ -2786,6 +2786,12 @@ static void test_909_load_rejects_too_small_wave_table(void) {
   consume(test, &ctx, "/l909");
 
   chdir(cwd);
+  synth_free();
+  synth_config_defaults();
+  synth_init(8);
+  wave_table_init(0);
+  voice_init();
+  seq_init();
 #endif
 }
 
@@ -4318,6 +4324,72 @@ static void test_sample_render_physical_modeling_and_loop_metadata(void) {
   expect_substr(test, ands_string(ctx.parse), "root:62", "parse metadata populated with detected root");
 }
 
+static void test_polyblep_pwm_and_phonemes(void) {
+  const char *test = "polyblep pwm and phonemes";
+  skode_t ctx = new_ctx();
+  char out[1024];
+
+  /* 1. Pulse width (pw) */
+  voice_init();
+  consume(test, &ctx, "v0 pw 0.25");
+  expect_float(test, sv.pulse_width[0], 0.25f, 0.001f, "pw 0.25");
+  voice_format(0, out, sizeof(out), 0);
+  expect_substr(test, out, "pw 0.25", "voice_format pw 0.25");
+
+  consume(test, &ctx, "v0 pw 75");
+  expect_float(test, sv.pulse_width[0], 0.75f, 0.001f, "pw 75 percentage");
+
+  consume(test, &ctx, "v0 pw");
+  expect_float(test, sv.pulse_width[0], 0.5f, 0.001f, "pw reset to 0.5");
+
+  /* 2. PWM modulation (PW) */
+  consume(test, &ctx, "v0 PW 1 0.4");
+  expect_int(test, sv.pwm_mod_osc[0], 1, "PW mod osc");
+  expect_float(test, sv.pwm_mod_depth[0], 0.4f, 0.001f, "PW depth");
+  voice_format(0, out, sizeof(out), 0);
+  expect_substr(test, out, "PW1,0.4", "voice_format PW");
+
+  consume(test, &ctx, "v0 PW");
+  expect_int(test, sv.pwm_mod_osc[0], -1, "PW reset mod osc");
+
+  /* 3. PWM envelope (pwt / pwd) */
+  consume(test, &ctx, "v0 pwt 0.05 0.15 0.3 0.2 pwd 0.35");
+  expect_int(test, sv.use_pwm_envelope[0], 1, "use_pwm_envelope enable");
+  expect_float(test, sv.pwm_env_depth[0], 0.35f, 0.001f, "pwm_env_depth");
+  expect_float(test, sv.pwm_envelope[0].a, 0.05f, 0.001f, "pwm_envelope a");
+  expect_float(test, sv.pwm_envelope[0].d, 0.15f, 0.001f, "pwm_envelope d");
+  expect_float(test, sv.pwm_envelope[0].s, 0.3f, 0.001f, "pwm_envelope s");
+  expect_float(test, sv.pwm_envelope[0].r, 0.2f, 0.001f, "pwm_envelope r");
+  voice_format(0, out, sizeof(out), 0);
+  expect_substr(test, out, "pwt 0.05 0.15 0.3 0.2 pwd 0.35", "voice_format pwt pwd");
+
+  consume(test, &ctx, "v0 pwt");
+  expect_int(test, sv.use_pwm_envelope[0], 0, "pwt reset");
+
+  /* 4. Wave to phonemes (w>p / vox?) */
+  /* Empty slot analysis returns empty string */
+  consume(test, &ctx, "999 w>p");
+  const char *str = skode_get_string(&ctx);
+  if (!str || strcmp(str, "") != 0) {
+    fail(test, "empty slot w>p should yield empty context string");
+  }
+
+  /* Render phonemes to slot 320 via tts!, then transcribe back with w>p */
+  consume(test, &ctx, "[AA1:150] 320 tts!");
+  consume(test, &ctx, "320 w>p");
+  str = skode_get_string(&ctx);
+  if (!str || str[0] != '[') {
+    fail(test, "valid slot 320 w>p should transcribe phoneme DSL string starting with '['");
+  }
+
+  /* Test vox? alias */
+  consume(test, &ctx, "320 vox?");
+  str = skode_get_string(&ctx);
+  if (!str || str[0] != '[') {
+    fail(test, "valid slot 320 vox? should transcribe phoneme DSL string starting with '['");
+  }
+}
+
 int main(int argc, char **argv) {
   synth_init(8);
   wave_table_init(0);
@@ -4402,6 +4474,7 @@ int main(int argc, char **argv) {
   test_voice_format_links();
   test_voice_format_pitch_mode();
   test_voice_format_envelopes();
+  test_polyblep_pwm_and_phonemes();
   test_error_system();
   test_binary_rejection_and_text_validation();
 

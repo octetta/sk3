@@ -287,9 +287,21 @@ static inline float osc_sample_at_phase(skred_engine_t *engine, int voice, doubl
             float s = 0.0f;
             switch (w) {
                 case WAVE_TABLE_SQR:
-                case WAVE_TABLE_CENTERED_PULSE:
-                    s = sk_polyblep_pulse(p, dt, 0.5f);
+                case WAVE_TABLE_CENTERED_PULSE: {
+                    float pwm = sv.pulse_width ? sv.pulse_width[voice] : 0.5f;
+                    if (sv.use_pwm_envelope && sv.use_pwm_envelope[voice] && sv.pwm_envelope) {
+                        float env_val = envelope_step_e(&sv.pwm_envelope[voice], current_sample);
+                        pwm += env_val * sv.pwm_env_depth[voice];
+                    }
+                    if (sv.pwm_mod_osc && sv.pwm_mod_osc[voice] >= 0 && sv.sample) {
+                        int mod_v = sv.pwm_mod_osc[voice];
+                        pwm += sv.sample[mod_v] * sv.pwm_mod_depth[voice];
+                    }
+                    if (pwm < 0.01f) pwm = 0.01f;
+                    if (pwm > 0.99f) pwm = 0.99f;
+                    s = sk_polyblep_pulse(p, dt, pwm);
                     break;
+                }
                 case WAVE_TABLE_SAW_DOWN:
                     s = -sk_polyblep_saw(p, dt);
                     break;

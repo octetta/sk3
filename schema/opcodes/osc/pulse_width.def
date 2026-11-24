@@ -1,0 +1,31 @@
+@name     pulse_width
+@alias    pw
+@group    osc
+@c_name   skode_clause_pulse_width_0
+@type     realtime
+@arity    0
+@match    ()
+@summary  reset pulse width to 50% square
+@doc
+Resets PolyBLEP pulse width to 0.5 (50% square) on active voice.
+Usage: pw (or pulse_width)
+@code
+    if (voice < 0 || voice >= synth_config.voice_max) return -1;
+    return pulse_width_set(voice, 0.5f);
+@end
+
+@name     pulse_width
+@alias    pw
+@group    osc
+@c_name   skode_clause_pulse_width_1
+@type     realtime
+@arity    1
+@match    (finite)
+@summary  set pulse width
+@doc
+Sets PolyBLEP pulse width / duty cycle on active voice (0.01..0.99 or 1..99%).
+Usage: pw width (e.g. pw 0.25 or pw 25)
+@code
+    if (voice < 0 || voice >= synth_config.voice_max) return -1;
+    return pulse_width_set(voice, (float)args[0]);
+@end

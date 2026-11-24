@@ -1986,6 +1986,48 @@ int skode_exec_tts(skode_t *ctx, ands_t *s, const double *arg, int argc) {
   return 0;
 }
 
+int skode_exec_wave_to_phonemes(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  (void)s;
+  if (!ctx) return -1;
+  int slot = -1;
+  if (argc > 0) {
+    slot = (int)arg[0];
+  } else {
+    int v = ctx->voice;
+    if (v >= 0 && v < synth_config.voice_max) {
+      slot = sv.wave_table_index[v];
+    }
+  }
+
+  if (slot < 0 || slot >= synth_config.wave_table_max || !sw.data || !sw.data[slot] || sw.size[slot] <= 0) {
+    skode_set_string(ctx, "");
+    return 0;
+  }
+
+  float rate = (sw.rate && sw.rate[slot] > 0) ? (float)sw.rate[slot] : (float)MAIN_SAMPLE_RATE;
+  if (rate < 1000.0f) rate = 48000.0f;
+
+  int max_dsl = 16384;
+  char *dsl_buf = (char *)malloc(max_dsl);
+  if (!dsl_buf) {
+    skode_set_string(ctx, "");
+    return 0;
+  }
+
+  int len = sk_speech_analyze_pcm(sw.data[slot], sw.size[slot], rate, dsl_buf, max_dsl);
+  if (len > 0) {
+    while (len > 0 && (dsl_buf[len - 1] == ' ' || dsl_buf[len - 1] == '\n' || dsl_buf[len - 1] == '\r')) {
+      dsl_buf[--len] = '\0';
+    }
+    skode_set_string(ctx, dsl_buf);
+  } else {
+    skode_set_string(ctx, "");
+  }
+
+  free(dsl_buf);
+  return 0;
+}
+
 /* -------------------------------------------------------------------------
  * Physical Modeling Sample Synthesis DSL & Wave Renderer
  * ------------------------------------------------------------------------- */

@@ -295,6 +295,7 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
     m = sv.pan_mod_osc[n];  if (m >= 0 && m < nvoices) voice_active[m] = 1;
     m = sv.amp_mod_osc[n];  if (m >= 0 && m < nvoices) voice_active[m] = 1;
     m = sv.ring_osc[n];     if (m >= 0 && m < nvoices) voice_active[m] = 1;
+    m = sv.pwm_mod_osc[n];  if (m >= 0 && m < nvoices) voice_active[m] = 1;
   }
 
   /* A hard-sync master must keep running while any of its targets sounds,
@@ -525,6 +526,8 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
           envelope_release_e_at(&sv.cz_envelope[n], current_sample);
         if (!release_tail)
           envelope_release_e_at(&sv.freq_envelope[n], current_sample);
+        if (!release_tail)
+          envelope_release_e_at(&sv.pwm_envelope[n], current_sample);
         sv.loop_release_tail[n] = 0;
         skred_control_voice_event(SKRED_CONTROL_EVENT_VOICE_RELEASE,
           current_sample, n);
@@ -623,6 +626,7 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
         if (sv.filter_envelope[n].is_active) sv.filter_envelope[n].sample_start++;
         if (sv.cz_envelope[n].is_active) sv.cz_envelope[n].sample_start++;
         if (sv.freq_envelope[n].is_active) sv.freq_envelope[n].sample_start++;
+        if (sv.pwm_envelope[n].is_active) sv.pwm_envelope[n].sample_start++;
       }
       float env = 1.0f;
       float mod = 1.0f;

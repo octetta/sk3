@@ -267,6 +267,13 @@ void synth_alloc_voices(int voice_max) {
     VALLOC(ring_osc,        int);
     VALLOC(ring_amount,     float);
 
+    VALLOC(pulse_width,     float);
+    VALLOC(pwm_mod_osc,     int);
+    VALLOC(pwm_mod_depth,   float);
+    VALLOC(use_pwm_envelope,int);
+    VALLOC(pwm_env_depth,   float);
+    VALLOC(pwm_envelope,    envelope_t);
+
     VALLOC(text,            text_t);
 }
 
@@ -341,6 +348,8 @@ void synth_free_voices(void) {
     VFREE(pan_mod_osc);      VFREE(pan_mod_depth);  VFREE(pan_mod_adder);
     VFREE(amp_mod_osc);      VFREE(amp_mod_depth);  VFREE(amp_mod_adder);
     VFREE(ring_osc); VFREE(ring_amount);
+    VFREE(pulse_width); VFREE(pwm_mod_osc); VFREE(pwm_mod_depth);
+    VFREE(use_pwm_envelope); VFREE(pwm_env_depth); VFREE(pwm_envelope);
 
     VFREE(text);
 }

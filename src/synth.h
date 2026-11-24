@@ -32,6 +32,8 @@ float mmf_process(skred_engine_t *engine, int n, float input);
 float cz_phasor(int n, float p, float d, float active_start, float active_end);
 int cz_set(int v, int n, float f);
 int cmod_set(int voice, int o, float f);
+int pulse_width_set(int voice, float pw);
+int pwm_mod_set(int voice, int o, float depth);
 
 void envelope_init(int v, float a, float d, float s, float r);
 void amp_envelope_trigger(int v, float f);

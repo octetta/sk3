@@ -31,6 +31,22 @@ int cmod_set(int voice, int o, float f) {
   return 0;
 }
 
+int pulse_width_set(int voice, float pw) {
+  if (voice_invalid(voice)) return SYNTH_INVALID_VOICE;
+  if (pw > 1.0f) pw = pw / 100.0f;
+  if (pw < 0.01f) pw = 0.01f;
+  if (pw > 0.99f) pw = 0.99f;
+  sv.pulse_width[voice] = pw;
+  return 0;
+}
+
+int pwm_mod_set(int voice, int o, float depth) {
+  if (voice_invalid(voice) || mod_voice_invalid(o)) return SYNTH_INVALID_VOICE;
+  sv.pwm_mod_osc[voice] = o;
+  sv.pwm_mod_depth[voice] = depth;
+  return 0;
+}
+
 #include <stdio.h>
 #include "control-events.h"
 
@@ -301,6 +317,37 @@ char *voice_format(int v, char *out, size_t out_size, int verbose) {
                 sv.cz_envelope[v].s,
                 sv.cz_envelope[v].r,
                 sv.cz_env_depth[v]);
+        }
+    }
+
+    if (verbose || (sv.pulse_width[v] != 0.5f))
+        APPEND(" pw %g", sv.pulse_width[v]);
+
+    if (verbose || (sv.pwm_mod_osc[v] >= 0 && sv.pwm_mod_depth[v] != 0.0f))
+        APPEND(" PW%d,%g", sv.pwm_mod_osc[v], sv.pwm_mod_depth[v]);
+
+    if (sv.pwm_envelope[v].mode == 1) {
+        APPEND(" (");
+        for (int stage = 0; stage < sv.pwm_envelope[v].num_stages; stage++) {
+            float time_val = sv.pwm_envelope[v].times[stage] / (float)MAIN_SAMPLE_RATE;
+            if (stage == sv.pwm_envelope[v].sustain_stage) time_val = -time_val;
+            APPEND("%g %g", time_val, sv.pwm_envelope[v].levels[stage]);
+            if (stage < sv.pwm_envelope[v].num_stages - 1) APPEND(" ");
+        }
+        APPEND(") pwte pwd %g", sv.pwm_env_depth[v]);
+    } else if (verbose || sv.use_pwm_envelope[v]) {
+        if (sv.pwm_envelope[v].s == 0.0f && sv.pwm_envelope[v].r == 0.0f) {
+            APPEND(" pwt %g %g pwd %g",
+                sv.pwm_envelope[v].a,
+                sv.pwm_envelope[v].d,
+                sv.pwm_env_depth[v]);
+        } else {
+            APPEND(" pwt %g %g %g %g pwd %g",
+                sv.pwm_envelope[v].a,
+                sv.pwm_envelope[v].d,
+                sv.pwm_envelope[v].s,
+                sv.pwm_envelope[v].r,
+                sv.pwm_env_depth[v]);
         }
     }
 
@@ -842,6 +889,11 @@ int voice_copy(int v, int n) {
   sv.use_freq_envelope[n] = sv.use_freq_envelope[v];
   sv.freq_env_depth[n] = sv.freq_env_depth[v];
   envelope_copy_e(&sv.freq_envelope[n], &sv.freq_envelope[v]);
+  pulse_width_set(n, sv.pulse_width[v]);
+  pwm_mod_set(n, sv.pwm_mod_osc[v], sv.pwm_mod_depth[v]);
+  sv.use_pwm_envelope[n] = sv.use_pwm_envelope[v];
+  sv.pwm_env_depth[n] = sv.pwm_env_depth[v];
+  envelope_copy_e(&sv.pwm_envelope[n], &sv.pwm_envelope[v]);
   sv.filter_mode[n] = sv.filter_mode[v];
   mmf_init(&skred_global_engine, n, sv.filter_freq[v], sv.filter_res[v]);
   sv.phase_inc[n] = sv.phase_inc[v];
@@ -1047,6 +1099,12 @@ void voice_reset(int i) {
   sv.use_cz_envelope[i] = 0;
   sv.cz_env_depth[i] = 0.0f;
   envelope_init_e(&sv.cz_envelope[i], 0.0f, 0.0f, 1.0f, 0.0f);
+  sv.pulse_width[i] = 0.5f;
+  sv.pwm_mod_osc[i] = -1;
+  sv.pwm_mod_depth[i] = 0.0f;
+  sv.use_pwm_envelope[i] = 0;
+  sv.pwm_env_depth[i] = 0.0f;
+  envelope_init_e(&sv.pwm_envelope[i], 0.0f, 0.0f, 1.0f, 0.0f);
   sv.text[i][0] = '\0';
 }
 
@@ -1165,6 +1223,8 @@ int envelope_velocity(int voice, float f) {
             envelope_release_e(&sv.cz_envelope[voice]);
         if (!one_shot_loop_release && sv.freq_envelope[voice].is_active)
             envelope_release_e(&sv.freq_envelope[voice]);
+        if (!one_shot_loop_release && sv.pwm_envelope[voice].is_active)
+            envelope_release_e(&sv.pwm_envelope[voice]);
     } else {
       sv.use_amp_envelope[voice] = 1;
       sv.freq_mod_feedback_z1[voice] = 0.0f;
@@ -1182,6 +1242,8 @@ int envelope_velocity(int voice, float f) {
           envelope_trigger_e(&sv.cz_envelope[voice], f);
       if (sv.use_freq_envelope[voice])
           envelope_trigger_e(&sv.freq_envelope[voice], f);
+      if (sv.use_pwm_envelope[voice])
+          envelope_trigger_e(&sv.pwm_envelope[voice], f);
     }
     return 0;
 }

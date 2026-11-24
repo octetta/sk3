@@ -87,6 +87,15 @@
 @reset      0.0
 @doc        Phase increment per audio sample frame
 
+@field      pulse_width
+@type       float
+@default    0.5
+@range      0.01 .. 0.99
+@opcode     pw
+@copy       true
+@reset      0.5
+@doc        PolyBLEP oscillator pulse width / duty cycle (0.01..0.99)
+
 @field      noise_type
 @type       int
 @default    0

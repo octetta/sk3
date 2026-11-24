@@ -1,0 +1,119 @@
+@name     wave_to_phonemes
+@alias    w>p
+@group    wave
+@c_name   skode_clause_wave_to_phonemes_0
+@type     immediate
+@arity    0
+@match    ()
+@summary  transcribe active voice wave to phoneme DSL string
+@doc
+Analyzes active voice wavetable slot with LPC formant/pitch tracking and stores transcribed phoneme DSL string into context string.
+Usage: w>p
+@code
+    return skode_exec_wave_to_phonemes(ctx, s, args, argc);
+@end
+
+@name     wave_to_phonemes
+@alias    w>p
+@group    wave
+@c_name   skode_clause_wave_to_phonemes_1
+@type     immediate
+@arity    1
+@match    (any)
+@summary  transcribe wave slot to phoneme DSL string
+@doc
+Analyzes specified wavetable slot with LPC formant/pitch tracking and stores transcribed phoneme DSL string into context string.
+Usage: slot w>p (e.g. 300 w>p)
+@code
+    return skode_exec_wave_to_phonemes(ctx, s, args, argc);
+@end
+
+@name     wave_to_phonemes_vox
+@alias    vox?
+@group    wave
+@c_name   skode_clause_wave_to_phonemes_vox_0
+@type     immediate
+@arity    0
+@match    ()
+@summary  transcribe active voice wave to phoneme DSL string
+@doc
+Analyzes active voice wavetable slot with LPC formant/pitch tracking and stores transcribed phoneme DSL string into context string.
+Usage: vox?
+@code
+    return skode_exec_wave_to_phonemes(ctx, s, args, argc);
+@end
+
+@name     wave_to_phonemes_vox
+@alias    vox?
+@group    wave
+@c_name   skode_clause_wave_to_phonemes_vox_1
+@type     immediate
+@arity    1
+@match    (any)
+@summary  transcribe wave slot to phoneme DSL string
+@doc
+Analyzes specified wavetable slot with LPC formant/pitch tracking and stores transcribed phoneme DSL string into context string.
+Usage: slot vox?
+@code
+    return skode_exec_wave_to_phonemes(ctx, s, args, argc);
+@end
+
+@name     wave_to_phonemes_slash_vox
+@alias    /vox?
+@group    wave
+@c_name   skode_clause_wave_to_phonemes_slash_vox_0
+@type     immediate
+@arity    0
+@match    ()
+@summary  transcribe active voice wave to phoneme DSL string
+@doc
+Analyzes active voice wavetable slot with LPC formant/pitch tracking and stores transcribed phoneme DSL string into context string.
+Usage: /vox?
+@code
+    return skode_exec_wave_to_phonemes(ctx, s, args, argc);
+@end
+
+@name     wave_to_phonemes_slash_vox
+@alias    /vox?
+@group    wave
+@c_name   skode_clause_wave_to_phonemes_slash_vox_1
+@type     immediate
+@arity    1
+@match    (any)
+@summary  transcribe wave slot to phoneme DSL string
+@doc
+Analyzes specified wavetable slot with LPC formant/pitch tracking and stores transcribed phoneme DSL string into context string.
+Usage: slot /vox?
+@code
+    return skode_exec_wave_to_phonemes(ctx, s, args, argc);
+@end
+
+@name     wave_to_phonemes_w2p
+@alias    w2p
+@group    wave
+@c_name   skode_clause_wave_to_phonemes_w2p_0
+@type     immediate
+@arity    0
+@match    ()
+@summary  transcribe active voice wave to phoneme DSL string
+@doc
+Analyzes active voice wavetable slot with LPC formant/pitch tracking and stores transcribed phoneme DSL string into context string.
+Usage: w2p
+@code
+    return skode_exec_wave_to_phonemes(ctx, s, args, argc);
+@end
+
+@name     wave_to_phonemes_w2p
+@alias    w2p
+@group    wave
+@c_name   skode_clause_wave_to_phonemes_w2p_1
+@type     immediate
+@arity    1
+@match    (any)
+@summary  transcribe wave slot to phoneme DSL string
+@doc
+Analyzes specified wavetable slot with LPC formant/pitch tracking and stores transcribed phoneme DSL string into context string.
+Usage: slot w2p
+@code
+    return skode_exec_wave_to_phonemes(ctx, s, args, argc);
+@end

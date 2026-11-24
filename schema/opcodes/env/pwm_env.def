@@ -1,0 +1,44 @@
+@name     pwm_env
+@alias    pwt
+@group    env
+@c_name   skode_clause_pwm_env_0
+@type     immediate
+@arity    0
+@match    ()
+@summary  reset pulse width envelope to flat (bypass)
+@doc
+Resets PWM envelope to flat (a=0, d=0, s=1, r=0), disabling it.
+Usage: pwt (or pwm_env)
+@code
+    if (!ctx) return -1;
+    (void)s; (void)argc;
+    int voice = ctx->voice;
+    envelope_configure_e(&sv.pwm_envelope[voice], 0.0f, 0.0f, 1.0f, 0.0f);
+    sv.use_pwm_envelope[voice] = 0;
+    return 0;
+@end
+
+@name     pwm_env
+@alias    pwt
+@group    env
+@c_name   skode_clause_pwm_env
+@type     immediate
+@arity    2..4
+@match    (finite, finite, finite, finite)
+@summary  configure pulse width ADSR envelope
+@doc
+Configures the ADSR pulse width envelope for the selected voice.
+If only two elements are specified, sustain and release are assumed to be 0.
+Usage: pwt a,d[,s,r]
+@code
+    if (!ctx) return -1;
+    (void)s;
+    int voice = ctx->voice;
+    float a = args[0];
+    float d = (argc > 1) ? args[1] : 0.0f;
+    float s_val = (argc > 2) ? args[2] : 0.0f;
+    float r = (argc > 3) ? args[3] : 0.0f;
+    envelope_configure_e(&sv.pwm_envelope[voice], a, d, s_val, r);
+    sv.use_pwm_envelope[voice] = !(a == 0 && d == 0 && s_val == 1 && r == 0);
+    return 0;
+@end

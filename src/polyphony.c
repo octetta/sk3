@@ -124,6 +124,12 @@ static int clone_voice(const poly_group_t *group, int source, int dest,
   sv.use_freq_envelope[dest] = sv.use_freq_envelope[source];
   sv.freq_env_depth[dest] = sv.freq_env_depth[source];
   envelope_copy_e(&sv.freq_envelope[dest], &sv.freq_envelope[source]);
+  sv.pulse_width[dest] = sv.pulse_width[source];
+  sv.pwm_mod_osc[dest] = sv.pwm_mod_osc[source];
+  sv.pwm_mod_depth[dest] = sv.pwm_mod_depth[source];
+  sv.use_pwm_envelope[dest] = sv.use_pwm_envelope[source];
+  sv.pwm_env_depth[dest] = sv.pwm_env_depth[source];
+  envelope_copy_e(&sv.pwm_envelope[dest], &sv.pwm_envelope[source]);
   sv.freq_mod_mode[dest] = sv.freq_mod_mode[source];
   sv.smoother_enable[dest] = sv.smoother_enable[source];
   sv.smoother_smoothing[dest] = sv.smoother_smoothing[source];

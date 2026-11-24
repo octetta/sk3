@@ -356,6 +356,7 @@ int skode_exec_data_to_wave(skode_t *ctx, ands_t *s, const double *arg, int argc
 int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int argc);
 int skode_exec_wave_findloop(skode_t *ctx, ands_t *s, const double *arg, int argc);
 int skode_exec_tts(skode_t *ctx, ands_t *s, const double *arg, int argc);
+int skode_exec_wave_to_phonemes(skode_t *ctx, ands_t *s, const double *arg, int argc);
 int skode_exec_slashm(skode_t *ctx, ands_t *s, const double *arg, int argc);
 int skode_exec_slashm_bang(skode_t *ctx, ands_t *s, const double *arg, int argc);
 int skode_exec_lts(skode_t *ctx, ands_t *s, const double *arg, int argc);

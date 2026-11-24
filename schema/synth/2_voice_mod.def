@@ -311,3 +311,49 @@
 @copy       true
 @reset      0.0
 @doc        Pitch envelope sweep depth in semitones
+
+# ------------------------------------------------------------------------------
+# Pulse Width Modulation (PWM)
+# ------------------------------------------------------------------------------
+
+@field      pwm_mod_osc
+@type       int
+@default    -1
+@range      -1 .. 255
+@opcode     PW
+@link       voice
+@link_kind  pwm_mod
+@copy       true
+@reset      -1
+@doc        Modulator voice ID for pulse width modulation (-1 = none)
+
+@field      pwm_mod_depth
+@type       float
+@default    0.0
+@range      -1.0 .. 1.0
+@opcode     PW
+@copy       true
+@reset      0.0
+@doc        Pulse width modulation depth multiplier
+
+# ------------------------------------------------------------------------------
+# Dedicated PWM Envelope
+# ------------------------------------------------------------------------------
+
+@field      use_pwm_envelope
+@type       int
+@default    0
+@range      0 .. 1
+@copy       true
+@reset      0
+@doc        Enable dedicated pulse width ADSR envelope
+
+@field      pwm_env_depth
+@type       float
+@default    0.0
+@range      -1.0 .. 1.0
+@opcode     pwd
+@copy       true
+@reset      0.0
+@doc        Pulse width envelope sweep depth (-1.0 .. 1.0)
+

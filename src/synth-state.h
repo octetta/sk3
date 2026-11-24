@@ -220,6 +220,13 @@ typedef struct {
     int    * restrict ring_osc;
     float  * restrict ring_amount;
 
+    float  * restrict pulse_width;
+    int    * restrict pwm_mod_osc;
+    float  * restrict pwm_mod_depth;
+    int    * restrict use_pwm_envelope;
+    float  * restrict pwm_env_depth;
+    envelope_t * restrict pwm_envelope;
+
     text_t * restrict text;
 } synth_voices_t;
 
