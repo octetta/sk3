@@ -216,15 +216,17 @@ static queue_t seq_q;
 static int seq_q_ready = 0;
 
 /* @stage seq_event_dispatch
- * @title     Timestamped Sequencer Event Queue Dispatch
- * @scope     sequencer
- * @schema    3_sequencer.def
- * @fields    [seq_q]
- * @opcodes   [sched]
- * @consumes  [now, event_fn]
- * @produces  []
- * @depends   []
- * @bypassed  [seq_q empty]
+ * @title            Timestamped Sequencer Event Queue Dispatch
+ * @scope            engine
+ * @rate             event
+ * @phase            sequencer
+ * @reads            [seq_q]
+ * @writes           [seq_q]
+ * @opcodes          [sched]
+ * @consumes         [now, event_fn]
+ * @produces         []
+ * @depends          []
+ * @condition        !queue_is_empty(&seq_q)
  */
 void do_event(uint64_t now, void (*event_fn)(const event_t *event)) {
   // Run expired (ready) queued events.
@@ -240,15 +242,17 @@ void do_event(uint64_t now, void (*event_fn)(const event_t *event)) {
 /* @end seq_event_dispatch */
 
 /* @stage seq_pattern_clock
- * @title     Pattern Timeline Clock, Downbeat Sync, & Step Dispatch
- * @scope     sequencer
- * @schema    3_sequencer.def
- * @fields    [tempo_time_per_step, seq_sample_origin, seq_tick_origin, master_tick, seq_state, seq_modulo, seq_pattern_length, seq_pointer, seq_offset]
- * @opcodes   [bpm, tempo, pat, play, stop]
- * @consumes  [now, program_fn]
- * @produces  [master_tick, seq_pointer, seq_offset, seq_state]
- * @depends   []
- * @bypassed  [!simple_mutex_trylock(&seq_edit_mutex)]
+ * @title            Pattern Timeline Clock, Downbeat Sync, & Step Dispatch
+ * @scope            engine
+ * @rate             sample
+ * @phase            sequencer
+ * @reads            [tempo_time_per_step, seq_sample_origin, seq_tick_origin, master_tick, seq_state, seq_modulo, seq_pattern_length, seq_pointer, seq_offset, seq_pending_state, seq_control_events, seq_mute]
+ * @writes           [master_tick, seq_pointer, seq_offset, seq_state, seq_pending_state, seq_current_pattern]
+ * @opcodes          [bpm, tempo, pat, play, stop]
+ * @consumes         [now, program_fn]
+ * @produces         []
+ * @depends          []
+ * @condition        simple_mutex_trylock(&seq_edit_mutex)
  */
 void do_pattern(uint64_t now,
     void (*program_fn)(int pattern, int step, const event_program_t *program)) {
