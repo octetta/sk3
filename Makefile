@@ -178,6 +178,7 @@ dist-api-windows: windows-cross-libs
 sync-skode: $(SYNTH_GEN_OUTPUTS) wasm
 	@echo "==> Synchronizing Gleam code in skode with skred..."
 	./tools/mksynth schema/synth src/gen $(CURDIR)/../skode/src/skode/gen $(CURDIR)/VERSION
+	python3 ./tools/mkopcodes_dict.py
 	@if command -v gleam >/dev/null 2>&1 && [ -d "$(CURDIR)/../skode" ]; then \
 		(cd $(CURDIR)/../skode && gleam format >/dev/null 2>&1); \
 	fi
@@ -188,6 +189,15 @@ sync-skode: $(SYNTH_GEN_OUTPUTS) wasm
 	cp -f build_wasm/skred_worklet_processor.js $(CURDIR)/../skode/app/editor/wasm/
 	cp -f build_wasm/skred_worklet_engine.js $(CURDIR)/../skode/app/editor/wasm/
 	cp -f build_wasm/skred_worklet_engine.wasm $(CURDIR)/../skode/app/editor/wasm/
+	@if [ -d "$(CURDIR)/../skred-web" ]; then \
+		echo "==> Copying compiled WASM binary to skred-web..."; \
+		cp -f build_wasm/skred_api.js $(CURDIR)/../skred-web/; \
+		cp -f build_wasm/skred_api.wasm $(CURDIR)/../skred-web/; \
+		cp -f build_wasm/skred_worklet_processor.js $(CURDIR)/../skred-web/; \
+		cp -f build_wasm/skred_worklet_engine.js $(CURDIR)/../skred-web/; \
+		cp -f build_wasm/skred_worklet_engine.wasm $(CURDIR)/../skred-web/; \
+		echo "$(VERSION)" > $(CURDIR)/../skred-web/WASM_VERSION.txt; \
+	fi
 	@echo "==> Running Skode tests..."
 	@if command -v gleam >/dev/null 2>&1 && [ -d "$(CURDIR)/../skode" ]; then \
 		(cd $(CURDIR)/../skode && gleam test && gleam test --target javascript); \
