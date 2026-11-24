@@ -215,6 +215,17 @@ static int pattern_length_compute(int p) {
 static queue_t seq_q;
 static int seq_q_ready = 0;
 
+/* @stage seq_event_dispatch
+ * @title     Timestamped Sequencer Event Queue Dispatch
+ * @scope     sequencer
+ * @schema    3_sequencer.def
+ * @fields    [seq_q]
+ * @opcodes   [sched]
+ * @consumes  [now, event_fn]
+ * @produces  []
+ * @depends   []
+ * @bypassed  [seq_q empty]
+ */
 void do_event(uint64_t now, void (*event_fn)(const event_t *event)) {
   // Run expired (ready) queued events.
   item_t item;
@@ -226,7 +237,19 @@ void do_event(uint64_t now, void (*event_fn)(const event_t *event)) {
     }
   }
 }
+/* @end seq_event_dispatch */
 
+/* @stage seq_pattern_clock
+ * @title     Pattern Timeline Clock, Downbeat Sync, & Step Dispatch
+ * @scope     sequencer
+ * @schema    3_sequencer.def
+ * @fields    [tempo_time_per_step, seq_sample_origin, seq_tick_origin, master_tick, seq_state, seq_modulo, seq_pattern_length, seq_pointer, seq_offset]
+ * @opcodes   [bpm, tempo, pat, play, stop]
+ * @consumes  [now, program_fn]
+ * @produces  [master_tick, seq_pointer, seq_offset, seq_state]
+ * @depends   []
+ * @bypassed  [!simple_mutex_trylock(&seq_edit_mutex)]
+ */
 void do_pattern(uint64_t now,
     void (*program_fn)(int pattern, int step, const event_program_t *program)) {
   if (!simple_mutex_trylock(&seq_edit_mutex)) return;
@@ -383,6 +406,7 @@ void do_pattern(uint64_t now,
   }
   seq_edit_unlock();
 }
+/* @end seq_pattern_clock */
 
 int seq_next_boundary(uint64_t now, uint64_t limit, uint64_t *boundary) {
   if (!boundary || limit < now) return 0;

@@ -277,6 +277,17 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
   //BEN_MARK_A(bench, benchp, num_frames, bencho);
 
 
+  /* @stage voice_active_prepass
+   * @title     Voice Activity & Cross-Modulation Dependency Pre-Pass
+   * @scope     callback_prepass
+   * @schema    1_voice_core.def, 2_voice_mod.def
+   * @fields    [amp_envelope, finished, one_shot, use_amp_envelope, cz_mod_osc, freq_mod_osc, pan_mod_osc, amp_mod_osc, ring_osc, pwm_mod_osc, link_sync]
+   * @opcodes   [v, gate, trig, c, C, F, P, A, XM, PW, sync]
+   * @consumes  [nvoices]
+   * @produces  [voice_active, block_active, current_active_voices]
+   * @depends   []
+   * @bypassed  [nvoices == 0]
+   */
   int block_active[VOICE_MAX_HARD_LIMIT / VOICE_ALIGN] = {0};
   int num_blocks = nvoices / VOICE_ALIGN;
   int current_active_voices = 0;
@@ -313,11 +324,23 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
       current_active_voices++;
     }
   }
+  /* @end voice_active_prepass */
   atomic_store_int(&skred_global_engine.active_voices_count, current_active_voices);
 
   uint64_t callback_sample = SAMPLE_COUNT_ADD(num_frames);
 
   for (int i = 0; i < num_frames; i++) {
+    /* @stage frame_init
+     * @title     Per-Frame Accumulator Initialization & Sampling Arm Check
+     * @scope     frame
+     * @schema    1_voice_core.def
+     * @fields    []
+     * @opcodes   [rec, rec!]
+     * @consumes  [callback_sample, i]
+     * @produces  [current_sample, sample_left, sample_right, delay_input_left, delay_input_right, record_left, record_right, noise_raw]
+     * @depends   [voice_active_prepass]
+     * @bypassed  []
+     */
     uint64_t current_sample = callback_sample + (uint64_t)i;
     float sample_left = 0.0f;
     float sample_right = 0.0f;
@@ -344,10 +367,23 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
     uint64_t noise_raw = audio_rng_next(&synth_random);
     float whiteish = 0.0f;
     int whiteish_ready = 0;
+    /* @end frame_init */
+
     for (int block = 0; block < num_blocks; block++) {
       if (!block_active[block]) continue;
       for (int b = 0; b < VOICE_ALIGN; b++) {
         int n = block * VOICE_ALIGN + b;
+      /* @stage voice_gate_check
+       * @title     Voice Active & Finished Early-Exit Gate
+       * @scope     voice
+       * @schema    1_voice_core.def
+       * @fields    [mark_go, finished]
+       * @opcodes   [v, gate, trig]
+       * @consumes  [voice_active[n], sv.finished[n]]
+       * @produces  []
+       * @depends   [voice_active_prepass]
+       * @bypassed  [!voice_active[n] || sv.finished[n]]
+       */
       if (sv.mark_go[n]) {
         //clock_gettime(VOICE_CLOCK, &sv.mark_b[n]);
         sv.mark_go[n] = 0;
@@ -360,6 +396,19 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
         // hold last value to modulator consumers see statle output after one-shot ends
         continue;
       }  
+      /* @end voice_gate_check */
+
+      /* @stage voice_glissando
+       * @title     Portamento / Glissando Pitch Glide
+       * @scope     voice
+       * @schema    2_voice_mod.def
+       * @fields    [glissando_enable, phase_inc, glissando_target, glissando_mode, glissando_delta, glissando_speed]
+       * @opcodes   [g, s]
+       * @consumes  [n]
+       * @produces  [sv.phase_inc[n], sv.glissando_enable[n]]
+       * @depends   [voice_gate_check]
+       * @bypassed  [!sv.glissando_enable[n]]
+       */
       if (sv.glissando_enable[n]) {
         if (!sk_glissando_step(&sv.phase_inc[n], sv.glissando_target[n],
                                sv.glissando_mode[n], sv.glissando_delta[n],
@@ -368,10 +417,33 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
         }
         osc_update_wavetable_mip(n);
       }
+      /* @end voice_glissando */
       int was_finished = sv.finished[n];
       char is_capture = 0;
+      /* @stage osc_source_select
+       * @title     Primary Oscillator Source Dispatch (Capture / Utility / Noise / Wavetable+FM)
+       * @scope     voice
+       * @schema    1_voice_core.def, 2_voice_mod.def
+       * @fields    [source_type, wave_table_index, sample_r, phase_inc, use_freq_envelope, freq_env_depth, freq_mod_osc, freq_mod_depth, freq_mod_adder, freq_mod_mode, freq_mod_feedback]
+       * @opcodes   [w, f, pt, pd, F, FF, fb, cap, metro, tap]
+       * @consumes  [n, current_sample, noise_raw]
+       * @produces  [f, is_capture, sv.sample_r[n]]
+       * @depends   [voice_glissando]
+       * @bypassed  []
+       */
       switch (sv.source_type[n]) {
       case OSC_SOURCE_CAPTURE: {
+        /* @stage osc_source_capture
+         * @title     Audio Input Capture Stream Source
+         * @scope     voice
+         * @schema    1_voice_core.def
+         * @fields    [wave_table_index, sample_r]
+         * @opcodes   [cap]
+         * @consumes  [this_capture, this_capture_channels, i]
+         * @produces  [f, sv.sample_r[n], is_capture]
+         * @depends   []
+         * @bypassed  [sv.source_type[n] != OSC_SOURCE_CAPTURE]
+         */
         int capture_channel = sv.wave_table_index[n] - WAVE_TABLE_CAPTURE_FIRST;
         if (capture_channel == 0) {
           f = (this_capture_channels > 0) ? this_capture[(size_t)i * this_capture_channels + 0] : 0.0f;
@@ -390,8 +462,20 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
         }
         is_capture = 1;
         break;
+        /* @end osc_source_capture */
       }
       case OSC_SOURCE_UTILITY: {
+        /* @stage osc_source_utility
+         * @title     DC, Impulse, Metronome, Delay Tap, or Control Signal Generator
+         * @scope     voice
+         * @schema    1_voice_core.def
+         * @fields    [wave_table_index, sample_r, phase, phase_inc, table_size, freq_bend]
+         * @opcodes   [w]
+         * @consumes  [current_sample, delay_bus[0]]
+         * @produces  [f, sv.sample_r[n], sv.phase[n]]
+         * @depends   []
+         * @bypassed  [sv.source_type[n] != OSC_SOURCE_UTILITY]
+         */
         int util = sv.wave_table_index[n];
         switch (util) {
           case WAVE_TABLE_SILENCE:
@@ -442,8 +526,20 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
             break;
         }
         break;
+        /* @end osc_source_utility */
       }
       case OSC_SOURCE_NOISE: {
+        /* @stage osc_source_noise
+         * @title     Pitched LFSR or White Noise Generator
+         * @scope     voice
+         * @schema    1_voice_core.def, 2_voice_mod.def
+         * @fields    [wave_table_index, noise_sample, phase, phase_inc, table_size, use_freq_envelope, freq_env_depth, freq_mod_osc, freq_mod_depth, freq_mod_adder]
+         * @opcodes   [w, f, pt, pd, F, noise]
+         * @consumes  [noise_raw, current_sample]
+         * @produces  [f, sv.phase[n], sv.noise_sample[n]]
+         * @depends   []
+         * @bypassed  [sv.source_type[n] != OSC_SOURCE_NOISE]
+         */
         if (sv.wave_table_index[n] == WAVE_TABLE_NOISE_ALT) {
           if (!whiteish_ready) {
             whiteish = audio_rng_raw_float(noise_raw);
@@ -477,8 +573,20 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
           f = sv.noise_sample[n];
         }
         break;
+        /* @end osc_source_noise */
       }
       default: {
+        /* @stage osc_source_wavetable_fm
+         * @title     Wavetable / PolyBLEP Oscillator with Pitch Envelope & FM / Phase Modulation
+         * @scope     voice
+         * @schema    1_voice_core.def, 2_voice_mod.def
+         * @fields    [phase_inc, use_freq_envelope, freq_envelope, freq_env_depth, freq_mod_mode, freq_mod_osc, freq_mod_depth, freq_mod_adder, freq_mod_feedback, freq_mod_feedback_z1, freq_mod_feedback_z2]
+         * @opcodes   [w, f, pt, pd, F, FF, fb]
+         * @consumes  [current_sample, engine]
+         * @produces  [f]
+         * @depends   []
+         * @bypassed  [sv.source_type[n] == OSC_SOURCE_CAPTURE || sv.source_type[n] == OSC_SOURCE_UTILITY || sv.source_type[n] == OSC_SOURCE_NOISE]
+         */
         float phase_inc = sv.phase_inc[n];
         if (sv.use_freq_envelope[n]) {
             float freq_env_val = envelope_step_e(&sv.freq_envelope[n], current_sample);
@@ -513,8 +621,21 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
           f = osc_next_at(engine, n, phase_inc, 0.0f, current_sample);
         }
         break;
+        /* @end osc_source_wavetable_fm */
       }
       }
+      /* @end osc_source_select */
+      /* @stage voice_loop_check
+       * @title     Sample Loop Points & Envelope Release Trigger
+       * @scope     voice
+       * @schema    1_voice_core.def
+       * @fields    [loop_ended, one_shot, loop_release_tail, amp_envelope, filter_envelope, cz_envelope, freq_envelope, pwm_envelope, finished]
+       * @opcodes   [loop, findloop]
+       * @consumes  [n, current_sample]
+       * @produces  [sv.loop_ended[n], sv.loop_release_tail[n]]
+       * @depends   [osc_source_select]
+       * @bypassed  [!sv.loop_ended[n] && !sv.finished[n]]
+       */
       if (sv.loop_ended[n]) {
         int release_tail = sv.one_shot[n] && sv.loop_release_tail[n];
         sv.loop_ended[n] = 0;
@@ -536,9 +657,35 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
         skred_control_voice_event(SKRED_CONTROL_EVENT_VOICE_FINISHED,
           current_sample, n);
       }
-        if (sv.ring_osc[n] >= 0.0) {
-          f *= sv.sample[sv.ring_osc[n]];
-        }
+      /* @end voice_loop_check */
+
+      /* @stage voice_ring_mod
+       * @title     Ring Modulation (Four-Quadrant Multiplier)
+       * @scope     voice
+       * @schema    2_voice_mod.def
+       * @fields    [ring_osc, ring_amount]
+       * @opcodes   [XM]
+       * @consumes  [f, sv.ring_osc[n], sv.sample]
+       * @produces  [f]
+       * @depends   [osc_source_select]
+       * @bypassed  [sv.ring_osc[n] < 0]
+       */
+      if (sv.ring_osc[n] >= 0.0) {
+        f *= sv.sample[sv.ring_osc[n]];
+      }
+      /* @end voice_ring_mod */
+
+      /* @stage voice_sample_hold
+       * @title     Sample & Hold / Clock Jitter / Linear Decimation
+       * @scope     voice
+       * @schema    2_voice_mod.def
+       * @fields    [sample_hold_ratio, freq, sample_hold_mode, sample_hold_count, sample_hold_jitter_target, sample_hold, sample_hold_smooth, sample]
+       * @opcodes   [h]
+       * @consumes  [f, synth_random]
+       * @produces  [sv.sample[n], sv.sample_hold_count[n]]
+       * @depends   [voice_ring_mod]
+       * @bypassed  [sv.sample_hold_ratio[n] <= 0.0f]
+       */
       if (sv.sample_hold_ratio[n] > 0.0f) {
         float f_hz = sv.freq[n] > 0.0f ? sv.freq[n] : 440.0f;
         int sah_period = (int)(((float)MAIN_SAMPLE_RATE / f_hz) * sv.sample_hold_ratio[n]);
@@ -578,15 +725,37 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
       } else {
         sv.sample[n] = f;
       }
+      /* @end voice_sample_hold */
 
-      // apply quantizer
+      /* @stage voice_quantize
+       * @title     Bit Crusher & Non-linear Curve Quantization
+       * @scope     voice
+       * @schema    2_voice_mod.def
+       * @fields    [quantize, sample]
+       * @opcodes   [bc]
+       * @consumes  [sv.sample[n], synth_random]
+       * @produces  [sv.sample[n]]
+       * @depends   [voice_sample_hold]
+       * @bypassed  [sv.quantize[n] == 0]
+       */
       if (sv.quantize[n]) {
         int q_bits = sv.quantize[n] % 100;
         int q_curve = sv.quantize[n] / 100;
         sv.sample[n] = quantize_bits_curve(sv.sample[n], q_bits, q_curve, &synth_random);
       }
+      /* @end voice_quantize */
 
-      // apply multi-mode filter
+      /* @stage voice_filter
+       * @title     Biquad Multi-Mode Filter & Cutoff Envelope
+       * @scope     voice
+       * @schema    2_voice_mod.def
+       * @fields    [filter_mode, filter_update_counter, filter_freq, filter_envelope, filter_env_depth, filter_res, sample]
+       * @opcodes   [j, k, q, ft, fd]
+       * @consumes  [sv.sample[n], current_sample, engine]
+       * @produces  [sv.sample[n], sv.filter_update_counter[n]]
+       * @depends   [voice_quantize]
+       * @bypassed  [sv.filter_mode[n] == 0]
+       */
       if (sv.filter_mode[n]) {
         if (sv.filter_update_counter[n] <= 0) {
           float cutoff = sv.filter_freq[n];
@@ -602,8 +771,19 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
         sv.filter_update_counter[n]--;
         sv.sample[n] = mmf_process(engine, n, sv.sample[n]);
       }
+      /* @end voice_filter */
 
-      // apply amp to sample
+      /* @stage voice_smoother
+       * @title     One-Pole Gain Smoother & Exponential Decoupler
+       * @scope     voice
+       * @schema    2_voice_mod.def
+       * @fields    [amp, smoother_enable, smoother_mode, smoother_delta, smoother_gain, smoother_smoothing]
+       * @opcodes   [a, s]
+       * @consumes  [sv.amp[n]]
+       * @produces  [amp, sv.smoother_gain[n]]
+       * @depends   []
+       * @bypassed  [!sv.smoother_enable[n]]
+       */
       float amp = sv.amp[n];
 #if 1
       if (sv.smoother_enable[n]) {
@@ -621,6 +801,19 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
         amp = sv.smoother_gain[n];
       }
 #endif
+      /* @end voice_smoother */
+
+      /* @stage voice_amp_env
+       * @title     Amplitude Envelope (ADSR / Multistage) & Amplitude Modulation
+       * @scope     voice
+       * @schema    1_voice_core.def, 2_voice_mod.def
+       * @fields    [paused, amp_envelope, filter_envelope, cz_envelope, freq_envelope, pwm_envelope, use_amp_envelope, amp_envelope_mode, amp_mod_osc, amp_mod_depth, amp_mod_adder]
+       * @opcodes   [t, te, A]
+       * @consumes  [current_sample, amp, sv.sample]
+       * @produces  [final, env, mod]
+       * @depends   [voice_smoother, voice_filter]
+       * @bypassed  []
+       */
       if (sv.paused && sv.paused[n]) {
         if (sv.amp_envelope[n].is_active) sv.amp_envelope[n].sample_start++;
         if (sv.filter_envelope[n].is_active) sv.filter_envelope[n].sample_start++;
@@ -651,6 +844,18 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
       }
       
       float final = amp * env * mod;
+      /* @end voice_amp_env */
+      /* @stage voice_pause_fade
+       * @title     Voice Pause Gain Ramp
+       * @scope     voice
+       * @schema    1_voice_core.def
+       * @fields    [paused, pause_gain]
+       * @opcodes   [pause]
+       * @consumes  [final, sv.paused, sv.pause_gain]
+       * @produces  [final, sv.pause_gain]
+       * @depends   [voice_amp_env]
+       * @bypassed  [!sv.paused || !sv.pause_gain]
+       */
       if (sv.paused && sv.pause_gain) {
         float pause_target = sv.paused[n] ? 0.0f : 1.0f;
         if (sv.pause_gain[n] < pause_target) {
@@ -662,7 +867,19 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
         }
         final *= sv.pause_gain[n];
       }
+      /* @end voice_pause_fade */
       
+      /* @stage voice_latency_probe
+       * @title     Command-to-Audio Latency Telemetry Probe
+       * @scope     voice
+       * @schema    1_voice_core.def
+       * @fields    [latency_timestamp_ns]
+       * @opcodes   []
+       * @consumes  [env, sv.latency_timestamp_ns, synth_config.trace_latency]
+       * @produces  [sv.latency_timestamp_ns]
+       * @depends   [voice_amp_env]
+       * @bypassed  [!synth_config.trace_latency || env <= 0.0f || sv.latency_timestamp_ns[n] <= 0]
+       */
       if (synth_config.trace_latency && env > 0.0f && sv.latency_timestamp_ns[n] > 0) {
         struct timespec ts;
         clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -671,17 +888,53 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
         fprintf(stderr, "# command latency [v%d]: %llu ns (%.3f ms)\n", n, (unsigned long long)delta_ns, delta_ns / 1000000.0);
         sv.latency_timestamp_ns[n] = 0;
       }
+      /* @end voice_latency_probe */
 
+      /* @stage voice_scale_output
+       * @title     Voice Output Scaling
+       * @scope     voice
+       * @schema    1_voice_core.def
+       * @fields    [sample, sample_r]
+       * @opcodes   []
+       * @consumes  [final, sv.sample, sv.sample_r]
+       * @produces  [sv.sample, sv.sample_r]
+       * @depends   [voice_pause_fade]
+       * @bypassed  []
+       */
       sv.sample[n] *= final;
       if (sv.sample_r) {
         sv.sample_r[n] *= final;
       }
+      /* @end voice_scale_output */
 
+      /* @stage voice_fm_feedback
+       * @title     FM Feedback Shift Registers
+       * @scope     voice
+       * @schema    2_voice_mod.def
+       * @fields    [freq_mod_mode, freq_mod_feedback, freq_mod_feedback_z1, freq_mod_feedback_z2, sample]
+       * @opcodes   [fb]
+       * @consumes  [sv.sample, sv.freq_mod_mode, sv.freq_mod_feedback]
+       * @produces  [sv.freq_mod_feedback_z1, sv.freq_mod_feedback_z2]
+       * @depends   [voice_scale_output]
+       * @bypassed  [sv.freq_mod_mode[n] != 2 || sv.freq_mod_feedback[n] <= 0.0f]
+       */
       if (sv.freq_mod_mode[n] == 2 && sv.freq_mod_feedback[n] > 0.0f) {
         sv.freq_mod_feedback_z2[n] = sv.freq_mod_feedback_z1[n];
         sv.freq_mod_feedback_z1[n] = sv.sample[n];
       }
+      /* @end voice_fm_feedback */
 
+      /* @stage voice_pan
+       * @title     Stereo Panning & Pan Modulation
+       * @scope     voice
+       * @schema    1_voice_core.def, 2_voice_mod.def
+       * @fields    [pan, pan_left, pan_right, pan_mod_osc, pan_mod_depth, pan_mod_adder, sample, sample_r, source_type, table_right]
+       * @opcodes   [p, P, PP]
+       * @consumes  [sv.sample, sv.sample_r, sv.pan_mod_osc, sv.pan_left, sv.pan_right]
+       * @produces  [left, right, sv.pan_left, sv.pan_right]
+       * @depends   [voice_scale_output]
+       * @bypassed  []
+       */
       float left  = sv.sample[n];
       float right = (sv.sample_r && (is_capture || (sv.table_right && sv.table_right[n]) || (sv.source_type && sv.source_type[n] == OSC_SOURCE_UTILITY))) ? sv.sample_r[n] : left;
       if (sv.pan_mod_osc[n] >= 0) {
@@ -692,7 +945,19 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
       }
       left  *= sv.pan_left[n];
       right *= sv.pan_right[n];
+      /* @end voice_pan */
 
+      /* @stage voice_sample_tap
+       * @title     Internal Voice/Dry Sampling & Multitrack Tap Accumulation
+       * @scope     voice
+       * @schema    1_voice_core.def
+       * @fields    [disconnect, record]
+       * @opcodes   [rec, rec!]
+       * @consumes  [left, right, sample_state, sampling, sv.disconnect, sv.record]
+       * @produces  [record_voice_left, record_voice_right, record_dry_left, record_dry_right, record_left, record_right]
+       * @depends   [voice_pan]
+       * @bypassed  []
+       */
       if (sample_state == SAMPLE_STATE_RECORDING &&
           sampling.source == SAMPLE_SOURCE_VOICE &&
           sampling.source_voice == n) {
@@ -711,7 +976,19 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
         record_left[track] += left;
         record_right[track] += right;
       }
+      /* @end voice_sample_tap */
 
+      /* @stage voice_delay_send_and_sum
+       * @title     Delay Bus Send Accumulation & Master Mix Summation
+       * @scope     voice
+       * @schema    1_voice_core.def, 2_voice_mod.def
+       * @fields    [disconnect, delay_send, pan, sample, sample_r, source_type, table_right, record]
+       * @opcodes   [d, D, off]
+       * @consumes  [left, right, sv.disconnect, sv.delay_send, sv.sample, sv.sample_r]
+       * @produces  [delay_input_left, delay_input_right, sample_left, sample_right]
+       * @depends   [voice_pan]
+       * @bypassed  [sv.disconnect[n] != 0]
+       */
       if (sv.disconnect[n] == 0) {
         if (sv.delay_send[n] > 0.0f && delay_voice_can_send(engine, n)) {
           int bus = -1;
@@ -731,9 +1008,21 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
         sample_left  += left;
         sample_right += right;
       }
+      /* @end voice_delay_send_and_sum */
       } // end block b
     } // end block
 
+    /* @stage master_delay
+     * @title     Master Delay Bus Process & Wet Return Summation
+     * @scope     frame
+     * @schema    4_master_effects.def
+     * @fields    [delay_bus]
+     * @opcodes   [d, D]
+     * @consumes  [delay_input_left, delay_input_right, delay_bus]
+     * @produces  [sample_left, sample_right, record_left, record_right]
+     * @depends   [voice_delay_send_and_sum]
+     * @bypassed  [!delay_bus[bus].active]
+     */
     for (int bus = 0; bus < DELAY_BUS_COUNT; bus++) {
       if (delay_input_left[bus] != 0.0f || delay_input_right[bus] != 0.0f) delay_bus[bus].active = 1;
       if (!delay_bus[bus].active) continue;
@@ -750,14 +1039,38 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
         }
       }
     }
+    /* @end master_delay */
 
+    /* @stage master_volume_clip
+     * @title     Master Volume Smoothing & Soft Clipping
+     * @scope     frame
+     * @schema    4_master_effects.def
+     * @fields    [volume_smoother_gain, volume_smoother_smoothing, volume_final]
+     * @opcodes   [vol, V]
+     * @consumes  [sample_left, sample_right, volume_smoother_gain, volume_smoother_smoothing, volume_final]
+     * @produces  [sample_left, sample_right, volume_smoother_gain]
+     * @depends   [master_delay]
+     * @bypassed  []
+     */
     // Adjust to main volume: smooth it otherwise is sounds crummy with realtime changes
     volume_smoother_gain += volume_smoother_smoothing * (volume_final - volume_smoother_gain);
     float volume_adjusted = volume_smoother_gain;
 
     sample_left  = master_soft_clip(sample_left * volume_adjusted);
     sample_right = master_soft_clip(sample_right * volume_adjusted);
+    /* @end master_volume_clip */
 
+    /* @stage master_record_bus
+     * @title     Sample Buffer Recording Write & Multichannel Output Mirror
+     * @scope     frame
+     * @schema    1_voice_core.def, 4_master_effects.def
+     * @fields    [sampling]
+     * @opcodes   [rec, rec!]
+     * @consumes  [sample_left, sample_right, record_left, record_right, record_frames, buffer, num_channels]
+     * @produces  [buffer, record_frames, sampling]
+     * @depends   [master_volume_clip]
+     * @bypassed  []
+     */
     if (sample_state == SAMPLE_STATE_RECORDING &&
         atomic_load_int(&sampling.frames) > 0) {
       size_t frame = (size_t)sampling.ptr * 2;
@@ -811,6 +1124,7 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
       output_frame[channel] = record_left[track] * track_gain[track];
       output_frame[channel + 1] = record_right[track] * track_gain[track];
     }
+    /* @end master_record_bus */
   }
 
   if (engine->ping_requested && num_frames > 0) {
