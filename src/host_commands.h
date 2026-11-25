@@ -7,6 +7,7 @@
 #include <ctype.h>
 #include <stdbool.h>
 #include <stdarg.h>
+#include <time.h>
 
 #ifdef _WIN32
   #include <windows.h>
@@ -31,6 +32,8 @@
 
 #include "api.h"
 #include "exp-vfs/skred_vfs.h"
+#include "exp-vfs/miniz.h"
+#include "exp-vfs/miniz_zip.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -198,11 +201,137 @@ typedef struct {
     size_t size;
 } skred_staged_file_t;
 
+/* Cached disk directory files for indexed reference */
+static skred_staged_file_t s_dir_files[512];
+static int s_dir_count = 0;
+
+static inline const char *skred_host_strcasestr(const char *haystack, const char *needle) {
+    if (!haystack || !needle) return NULL;
+    if (!*needle) return haystack;
+    size_t nlen = strlen(needle);
+    while (*haystack) {
+        if (strncasecmp(haystack, needle, nlen) == 0) return haystack;
+        haystack++;
+    }
+    return NULL;
+}
+
+static inline bool skred_host_match_filter(const char *name, const char *filter) {
+    if (!name || !*name) return false;
+    if (!filter || !*filter) return true;
+
+    const char *dot = strrchr(name, '.');
+    const char *ext = dot ? dot + 1 : "";
+    const char *f = (*filter == '.') ? filter + 1 : filter;
+
+    /* Audio group: .wav, .mp3, .flac (case-insensitive) */
+    if (strcasecmp(f, "audio") == 0 || strcasecmp(f, "wav") == 0 ||
+        strcasecmp(f, "wave") == 0 || strcasecmp(f, "sound") == 0 ||
+        strcasecmp(f, "sounds") == 0) {
+        return (strcasecmp(ext, "wav") == 0 || strcasecmp(ext, "mp3") == 0 || strcasecmp(ext, "flac") == 0);
+    }
+
+    /* Skode group */
+    if (strcasecmp(f, "sk") == 0 || strcasecmp(f, "skode") == 0) {
+        return (strcasecmp(ext, "sk") == 0 || strcasecmp(ext, "skode") == 0);
+    }
+
+    /* KSynth group */
+    if (strcasecmp(f, "ks") == 0 || strcasecmp(f, "ksynth") == 0) {
+        return (strcasecmp(ext, "ks") == 0 || strcasecmp(ext, "ksynth") == 0);
+    }
+
+    /* Zip archive group */
+    if (strcasecmp(f, "zip") == 0) {
+        return (strcasecmp(ext, "zip") == 0);
+    }
+
+    /* Direct extension match (e.g. mp3, flac, mid) */
+    if (strcasecmp(ext, f) == 0) {
+        return true;
+    }
+
+    /* Case-insensitive substring match in filename */
+    return (skred_host_strcasestr(name, filter) != NULL);
+}
+
+static inline void skred_host_seed_rand(void) {
+    static bool seeded = false;
+    if (!seeded) {
+        srand((unsigned int)(time(NULL) ^ (uintptr_t)&seeded));
+        seeded = true;
+    }
+}
+
+static inline void skred_host_print_file_entry(const skred_host_env_t *env, int idx, const char *name, size_t sz) {
+    if (sz < 1024) env->print(env->userdata, "  %d. %s (%zu B)\n", idx, name, sz);
+    else if (sz < 1024 * 1024) env->print(env->userdata, "  %d. %s (%.1f KB)\n", idx, name, (double)sz / 1024.0);
+    else env->print(env->userdata, "  %d. %s (%.1f MB)\n", idx, name, (double)sz / (1024.0 * 1024.0));
+}
+
 static inline int skred_host_staging_cmp(const void *a, const void *b) {
     const skred_staged_file_t *fa = (const skred_staged_file_t *)a;
     const skred_staged_file_t *fb = (const skred_staged_file_t *)b;
     return strcasecmp(fa->name, fb->name);
 }
+
+static inline int skred_host_list_disk_dir(const char *filter, skred_staged_file_t *out_files, int max_files) {
+    if (!out_files || max_files <= 0) return 0;
+    int count = 0;
+#ifdef _WIN32
+    char search_pattern[MAX_PATH];
+    snprintf(search_pattern, sizeof(search_pattern), "*.*");
+    WIN32_FIND_DATAA fd;
+    HANDLE hFind = FindFirstFileA(search_pattern, &fd);
+    if (hFind != INVALID_HANDLE_VALUE) {
+        do {
+            if (strcmp(fd.cFileName, ".") != 0 && strcmp(fd.cFileName, "..") != 0) {
+                if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+                    if (skred_host_match_filter(fd.cFileName, filter)) {
+                        if (count < max_files) {
+                            strncpy(out_files[count].name, fd.cFileName, sizeof(out_files[count].name) - 1);
+                            out_files[count].name[sizeof(out_files[count].name) - 1] = '\0';
+                            out_files[count].size = ((size_t)fd.nFileSizeHigh << 32) | fd.nFileSizeLow;
+                            count++;
+                        }
+                    }
+                }
+            }
+        } while (FindNextFileA(hFind, &fd));
+        FindClose(hFind);
+    }
+#else
+    DIR *d = opendir(".");
+    if (d) {
+        struct dirent *dir;
+        while ((dir = readdir(d)) != NULL) {
+            if (strcmp(dir->d_name, ".") != 0 && strcmp(dir->d_name, "..") != 0) {
+                struct stat st;
+                if (stat(dir->d_name, &st) == 0 && !S_ISDIR(st.st_mode)) {
+                    if (skred_host_match_filter(dir->d_name, filter)) {
+                        if (count < max_files) {
+                            strncpy(out_files[count].name, dir->d_name, sizeof(out_files[count].name) - 1);
+                            out_files[count].name[sizeof(out_files[count].name) - 1] = '\0';
+                            out_files[count].size = (size_t)st.st_size;
+                            count++;
+                        }
+                    }
+                }
+            }
+        }
+        closedir(d);
+    }
+#endif
+    if (count > 1) {
+        qsort(out_files, count, sizeof(skred_staged_file_t), skred_host_staging_cmp);
+    }
+    s_dir_count = count;
+    for (int i = 0; i < count; i++) {
+        s_dir_files[i] = out_files[i];
+    }
+    return count;
+}
+
 
 static inline int skred_host_staging_get_files(skred_staged_file_t *out_files, int max_files) {
     if (!out_files || max_files <= 0) return 0;
@@ -268,10 +397,12 @@ static inline void skred_host_cmd_help(const skred_host_env_t *env) {
         "  -min <index|off>             Open MIDI input port (-min off to close)\n"
         "  -mout <index|off>            Open MIDI output port (-mout off to close)\n"
         "  -mstatus                     Display active MIDI port connections\n"
-        "  -add <path>                  Attach file/zip to staging area (supports spaces & ~)\n"
-        "  -del <name|index>            Remove attached file by name or 0-based index\n"
-        "  -ls [index [cmd]]            List attached files, or select file by 0-based index\n"
-        "  -pick <index> [cmd]          Load file at 0-based index into string buffer (ready for /w, ks, etc.)\n"
+        "  -ls [filter]                 Browse disk files (e.g. -ls audio, -ls wav, -ls ks)\n"
+        "  -tray                        View session staging tray (aliased: -crate, -files)\n"
+        "  -add <path|indices|all>      Stage file(s) into tray (e.g. -add 0, -add 0 1, -add all)\n"
+        "  -del <name|index|all>        Remove file(s) from staging tray\n"
+        "  -pick <idx|?|rand> [flt] [c] Load file into string buffer and optionally run cmd\n"
+        "  -zip <archive.zip>           Pack current staging tray into zip (aliased: -pack)\n"
         "  -cd [dir]                    Change directory (defaults to home ~; supports spaces)\n"
         "  -pwd                         Display current working directory\n"
         "  -help                        Show this cheat sheet\n"
@@ -533,6 +664,104 @@ static inline int skred_host_execute(const char *cmd_line, const skred_host_env_
 
     /* --- File Attachment Staging Controls --- */
     if (strcmp(norm, "add") == 0) {
+        if (!remainder || !*remainder) {
+            env->print(env->userdata, "Usage: -add <path | index | indices | all>\n");
+            return 1;
+        }
+
+        /* Check for "all" keyword */
+        if (strcasecmp(remainder, "all") == 0) {
+            if (s_dir_count == 0) {
+                skred_host_list_disk_dir("", s_dir_files, 512);
+            }
+            if (s_dir_count == 0) {
+                env->print(env->userdata, "No files in current directory to add.\n");
+                return 1;
+            }
+            skred_host_staging_init();
+            int added = 0;
+            for (int i = 0; i < s_dir_count; i++) {
+                char target[1024];
+                snprintf(target, sizeof(target), "%s/%s", s_host_staging_dir, s_dir_files[i].name);
+                if (skred_host_copy_file(s_dir_files[i].name, target)) {
+                    added++;
+                }
+            }
+            env->print(env->userdata, "Added %d file(s) to staging tray.\n", added);
+            return 1;
+        }
+
+        /* Check if arguments are integer indices or ranges (e.g. "0", "0 1 2", "0..3", "0-3") */
+        bool is_index_list = true;
+        const char *chk = remainder;
+        while (*chk) {
+            while (isspace((unsigned char)*chk)) chk++;
+            if (!*chk) break;
+            if (!isdigit((unsigned char)*chk)) {
+                is_index_list = false;
+                break;
+            }
+            while (isdigit((unsigned char)*chk)) chk++;
+            if (*chk == '.' && *(chk + 1) == '.') {
+                chk += 2;
+                if (!isdigit((unsigned char)*chk)) { is_index_list = false; break; }
+                while (isdigit((unsigned char)*chk)) chk++;
+            } else if (*chk == '-' && isdigit((unsigned char)*(chk + 1))) {
+                chk++;
+                while (isdigit((unsigned char)*chk)) chk++;
+            }
+            if (*chk && !isspace((unsigned char)*chk)) {
+                is_index_list = false;
+                break;
+            }
+        }
+
+        if (is_index_list) {
+            if (s_dir_count == 0) {
+                skred_host_list_disk_dir("", s_dir_files, 512);
+            }
+            if (s_dir_count == 0) {
+                env->print(env->userdata, "No files available. Run -ls to browse files first.\n");
+                return 1;
+            }
+            skred_host_staging_init();
+            int added = 0;
+            const char *cur = remainder;
+            while (*cur) {
+                while (isspace((unsigned char)*cur)) cur++;
+                if (!*cur) break;
+                int start_idx = 0;
+                int end_idx = 0;
+                char *endp = NULL;
+                start_idx = (int)strtol(cur, &endp, 10);
+                end_idx = start_idx;
+                if (endp && *endp == '.' && *(endp + 1) == '.') {
+                    endp += 2;
+                    end_idx = (int)strtol(endp, &endp, 10);
+                } else if (endp && *endp == '-' && isdigit((unsigned char)*(endp + 1))) {
+                    endp++;
+                    end_idx = (int)strtol(endp, &endp, 10);
+                }
+                cur = endp;
+
+                if (start_idx > end_idx) { int tmp = start_idx; start_idx = end_idx; end_idx = tmp; }
+                for (int i = start_idx; i <= end_idx; i++) {
+                    if (i >= 0 && i < s_dir_count) {
+                        char target[1024];
+                        snprintf(target, sizeof(target), "%s/%s", s_host_staging_dir, s_dir_files[i].name);
+                        if (skred_host_copy_file(s_dir_files[i].name, target)) {
+                            env->print(env->userdata, "Attached [%s] to staging tray\n", s_dir_files[i].name);
+                            added++;
+                        }
+                    } else {
+                        env->print(env->userdata, "Error: Index %d out of range (0..%d).\n", i, s_dir_count - 1);
+                    }
+                }
+            }
+            return 1;
+        }
+
+        /* Otherwise, treat as file path */
         char path_clean[1024] = {0};
         skred_host_extract_path(remainder, path_clean, sizeof(path_clean));
         if (path_clean[0] == '\0') {
@@ -555,7 +784,7 @@ static inline int skred_host_execute(const char *cmd_line, const skred_host_env_
         char target_path[1024];
         snprintf(target_path, sizeof(target_path), "%s/%s", s_host_staging_dir, bname);
         if (skred_host_copy_file(path_clean, target_path)) {
-            env->print(env->userdata, "Attached [%s] to staging area (available for /w, ks, etc.)\n", bname);
+            env->print(env->userdata, "Attached [%s] to staging area (available for /ws, /ls, /ks, etc.)\n", bname);
         } else {
             env->print(env->userdata, "Error: Could not copy [%s] to staging area.\n", path_clean);
         }
@@ -566,7 +795,14 @@ static inline int skred_host_execute(const char *cmd_line, const skred_host_env_
         char del_name[1024] = {0};
         skred_host_extract_path(remainder, del_name, sizeof(del_name));
         if (del_name[0] == '\0') {
-            env->print(env->userdata, "Usage: -del <filename|index>\n");
+            env->print(env->userdata, "Usage: -del <filename|index|all>\n");
+            return 1;
+        }
+
+        if (strcasecmp(del_name, "all") == 0) {
+            skred_host_staging_cleanup();
+            skred_host_staging_init();
+            env->print(env->userdata, "Cleared all files from staging tray.\n");
             return 1;
         }
 
@@ -579,7 +815,7 @@ static inline int skred_host_execute(const char *cmd_line, const skred_host_env_
             if (num_idx < count) {
                 target_name = files[num_idx].name;
             } else {
-                env->print(env->userdata, "Error: Index %ld out of range (0..%d). Run -ls to view files.\n",
+                env->print(env->userdata, "Error: Index %ld out of range (0..%d). Run -tray to view files.\n",
                            num_idx, count > 0 ? count - 1 : 0);
                 return 1;
             }
@@ -598,28 +834,97 @@ static inline int skred_host_execute(const char *cmd_line, const skred_host_env_
     /* --- File Selection Into String Buffer --- */
     if (strcmp(norm, "pick") == 0 || strcmp(norm, "get") == 0 || strcmp(norm, "use") == 0 || strcmp(norm, "file") == 0) {
         if (!arg1) {
-            env->print(env->userdata, "Usage: -pick <index> [command] (e.g. -pick 0 or -pick 0 /ws 900)\n");
+            env->print(env->userdata, "Usage: -pick <index|?|rand> [filter] [command] (e.g. -pick 0 /ws 0 or -pick ? audio /ws 0)\n");
             return 1;
         }
-        int idx = atoi(arg1);
-        skred_staged_file_t files[256];
-        int count = skred_host_staging_get_files(files, 256);
-        if (idx < 0 || idx >= count) {
-            env->print(env->userdata, "Error: Index %d out of range (0..%d). Run -ls to view files.\n",
-                       idx, count > 0 ? count - 1 : 0);
-            return 1;
+
+        char chosen_file[256] = {0};
+        const char *tail = NULL;
+        bool is_random = (strcmp(arg1, "?") == 0 || strcasecmp(arg1, "rand") == 0 || strcasecmp(arg1, "random") == 0);
+
+        if (is_random) {
+            skred_host_seed_rand();
+            const char *filter = NULL;
+            char filter_buf[128] = {0};
+            const char *rest = remainder;
+            while (*rest && isspace((unsigned char)*rest)) rest++;
+            while (*rest && !isspace((unsigned char)*rest)) rest++;
+            while (*rest && isspace((unsigned char)*rest)) rest++;
+
+            if (*rest) {
+                if (*rest == '/' || *rest == '-' || *rest == '.') {
+                    tail = rest;
+                } else {
+                    size_t fi = 0;
+                    while (*rest && !isspace((unsigned char)*rest) && fi < sizeof(filter_buf) - 1) {
+                        filter_buf[fi++] = *rest++;
+                    }
+                    filter_buf[fi] = '\0';
+                    filter = filter_buf;
+                    while (*rest && isspace((unsigned char)*rest)) rest++;
+                    if (*rest) tail = rest;
+                }
+            }
+
+            /* Gather candidates from staging tray */
+            skred_staged_file_t tray_files[256];
+            int tray_count = skred_host_staging_get_files(tray_files, 256);
+            int candidates[512];
+            int num_cand = 0;
+            for (int i = 0; i < tray_count; i++) {
+                if (skred_host_match_filter(tray_files[i].name, filter)) {
+                    candidates[num_cand++] = i;
+                }
+            }
+
+            if (num_cand > 0) {
+                int r_idx = candidates[rand() % num_cand];
+                snprintf(chosen_file, sizeof(chosen_file), "%s", tray_files[r_idx].name);
+            } else {
+                /* Tray has no matches; fall back to disk browser */
+                if (s_dir_count == 0) {
+                    skred_host_list_disk_dir(filter, s_dir_files, 512);
+                }
+                int disk_cand[512];
+                int num_disk_cand = 0;
+                for (int i = 0; i < s_dir_count; i++) {
+                    if (skred_host_match_filter(s_dir_files[i].name, filter)) {
+                        disk_cand[num_disk_cand++] = i;
+                    }
+                }
+                if (num_disk_cand > 0) {
+                    int r_idx = disk_cand[rand() % num_disk_cand];
+                    snprintf(chosen_file, sizeof(chosen_file), "%s", s_dir_files[r_idx].name);
+                } else {
+                    env->print(env->userdata, "Error: No files found matching filter '%s'.\n", filter ? filter : "*");
+                    return 1;
+                }
+            }
+        } else {
+            int idx = atoi(arg1);
+            skred_staged_file_t files[256];
+            int count = skred_host_staging_get_files(files, 256);
+            if (count > 0 && idx >= 0 && idx < count) {
+                snprintf(chosen_file, sizeof(chosen_file), "%s", files[idx].name);
+            } else if (s_dir_count > 0 && idx >= 0 && idx < s_dir_count) {
+                snprintf(chosen_file, sizeof(chosen_file), "%s", s_dir_files[idx].name);
+            } else {
+                env->print(env->userdata, "Error: Index %d out of range (0..%d). Run -tray or -ls to view files.\n",
+                           idx, (count > 0 ? count : (s_dir_count > 0 ? s_dir_count : 1)) - 1);
+                return 1;
+            }
+
+            const char *p = remainder;
+            while (*p && isspace((unsigned char)*p)) p++;
+            while (*p && !isspace((unsigned char)*p)) p++;
+            while (*p && isspace((unsigned char)*p)) p++;
+            if (*p) tail = p;
         }
-        const char *fname = files[idx].name;
-        skred_set_string(fname);
 
-        /* Check for trailing command after index */
-        const char *tail = remainder;
-        while (*tail && isspace((unsigned char)*tail)) tail++;
-        while (*tail && !isspace((unsigned char)*tail)) tail++;
-        while (*tail && isspace((unsigned char)*tail)) tail++;
+        skred_set_string(chosen_file);
 
-        if (*tail) {
-            env->print(env->userdata, "String buffer: [%s] -> executing '%s'\n", fname, tail);
+        if (tail && *tail) {
+            env->print(env->userdata, "String buffer: [%s] -> executing '%s'\n", chosen_file, tail);
             char run_buf[4096];
             snprintf(run_buf, sizeof(run_buf), "%s", tail);
             int r = skred_command(run_buf);
@@ -627,64 +932,121 @@ static inline int skred_host_execute(const char *cmd_line, const skred_host_env_
             if (log && log[0]) env->print(env->userdata, "%s", log);
             if (r > 0) env->print(env->userdata, "r = %d\n", r);
         } else {
-            env->print(env->userdata, "String buffer: [%s] (ready for /w, ks, /ls, etc.)\n", fname);
+            env->print(env->userdata, "String buffer: [%s] (ready for /ws, /ls, /ks, etc.)\n", chosen_file);
         }
         return 1;
     }
 
-    /* --- Staging & Environment Inspection --- */
-    if (strcmp(norm, "ls") == 0 || strcmp(norm, "staged") == 0 || strcmp(norm, "files") == 0) {
+    /* --- Session Staging Tray Inspection --- */
+    if (strcmp(norm, "tray") == 0 || strcmp(norm, "crate") == 0 ||
+        strcmp(norm, "files") == 0 || strcmp(norm, "staged") == 0) {
         skred_staged_file_t files[256];
         int count = skred_host_staging_get_files(files, 256);
 
-        if (arg1 && isdigit((unsigned char)arg1[0])) {
-            int idx = atoi(arg1);
-            if (idx >= 0 && idx < count) {
-                const char *fname = files[idx].name;
-                skred_set_string(fname);
-
-                const char *tail = remainder;
-                while (*tail && isspace((unsigned char)*tail)) tail++;
-                while (*tail && !isspace((unsigned char)*tail)) tail++;
-                while (*tail && isspace((unsigned char)*tail)) tail++;
-
-                if (*tail) {
-                    env->print(env->userdata, "String buffer: [%s] -> executing '%s'\n", fname, tail);
-                    char run_buf[4096];
-                    snprintf(run_buf, sizeof(run_buf), "%s", tail);
-                    int r = skred_command(run_buf);
-                    char *log = skred_log();
-                    if (log && log[0]) env->print(env->userdata, "%s", log);
-                    if (r > 0) env->print(env->userdata, "r = %d\n", r);
-                } else {
-                    env->print(env->userdata, "String buffer: [%s] (ready for /w, ks, /ls, etc.)\n", fname);
-                }
-                return 1;
-            } else {
-                env->print(env->userdata, "Error: Index %d out of range (0..%d). Run -ls to view files.\n",
-                           idx, count > 0 ? count - 1 : 0);
-                return 1;
-            }
-        }
-
-        env->print(env->userdata, "# staging area: %s\n", s_host_staging_dir);
+        env->print(env->userdata, "# [tray: %s] (%d files)\n", s_host_staging_dir, count);
         if (count == 0) {
-            env->print(env->userdata, "  (no files currently attached in staging area)\n");
+            env->print(env->userdata, "  (staging tray is empty; use -add to stage files)\n");
         } else {
             for (int i = 0; i < count; i++) {
-                size_t sz = files[i].size;
-                if (sz < 1024) env->print(env->userdata, "  %d. %s (%zu B)\n", i, files[i].name, sz);
-                else if (sz < 1024 * 1024) env->print(env->userdata, "  %d. %s (%.1f KB)\n", i, files[i].name, (double)sz / 1024.0);
-                else env->print(env->userdata, "  %d. %s (%.1f MB)\n", i, files[i].name, (double)sz / (1024.0 * 1024.0));
+                skred_host_print_file_entry(env, i, files[i].name, files[i].size);
+            }
+        }
+        return 1;
+    }
+
+    /* --- Disk Browser --- */
+    if (strcmp(norm, "ls") == 0) {
+        /* If arg1 is purely digits and in range of s_dir_files, pick convenience */
+        char *endptr = NULL;
+        long idx = (arg1 && *arg1) ? strtol(arg1, &endptr, 10) : -1;
+        if (arg1 && endptr && *endptr == '\0' && idx >= 0 && s_dir_count > 0 && idx < s_dir_count) {
+            const char *fname = s_dir_files[idx].name;
+            skred_set_string(fname);
+            const char *tail = remainder;
+            while (*tail && isspace((unsigned char)*tail)) tail++;
+            while (*tail && !isspace((unsigned char)*tail)) tail++;
+            while (*tail && isspace((unsigned char)*tail)) tail++;
+            if (*tail) {
+                env->print(env->userdata, "String buffer: [%s] -> executing '%s'\n", fname, tail);
+                char run_buf[4096];
+                snprintf(run_buf, sizeof(run_buf), "%s", tail);
+                int r = skred_command(run_buf);
+                char *log = skred_log();
+                if (log && log[0]) env->print(env->userdata, "%s", log);
+                if (r > 0) env->print(env->userdata, "r = %d\n", r);
+            } else {
+                env->print(env->userdata, "String buffer: [%s] (ready for /ws, /ls, /ks, etc.)\n", fname);
+            }
+            return 1;
+        }
+
+        const char *filter = arg1;
+        skred_staged_file_t files[512];
+        int count = skred_host_list_disk_dir(filter, files, 512);
+
+        char cwd[1024];
+        if (!getcwd(cwd, sizeof(cwd))) snprintf(cwd, sizeof(cwd), ".");
+
+        if (filter && *filter) {
+            env->print(env->userdata, "# [disk: %s] (filter: %s, %d files)\n", cwd, filter, count);
+        } else {
+            env->print(env->userdata, "# [disk: %s] (%d files)\n", cwd, count);
+        }
+
+        if (count == 0) {
+            env->print(env->userdata, "  (no matching files in working directory)\n");
+        } else {
+            for (int i = 0; i < count; i++) {
+                skred_host_print_file_entry(env, i, files[i].name, files[i].size);
             }
         }
         if (skred_vfs_mode() != SKRED_VFS_DISK) {
             env->print(env->userdata, "# mounted archive: %s (cwd: %s)\n", skred_vfs_root(), skred_getcwd());
         }
-        char cwd[1024];
-        if (getcwd(cwd, sizeof(cwd))) {
-            env->print(env->userdata, "# working dir: %s\n", cwd);
+        return 1;
+    }
+
+    /* --- Pack Staging Tray into Zip Archive --- */
+    if (strcmp(norm, "zip") == 0 || strcmp(norm, "pack") == 0) {
+        char zip_name[1024] = {0};
+        skred_host_extract_path(remainder, zip_name, sizeof(zip_name));
+        if (zip_name[0] == '\0') {
+            snprintf(zip_name, sizeof(zip_name), "session.zip");
         }
+        if (!strstr(zip_name, ".zip") && !strstr(zip_name, ".ZIP")) {
+            strncat(zip_name, ".zip", sizeof(zip_name) - strlen(zip_name) - 1);
+        }
+
+        skred_staged_file_t files[256];
+        int count = skred_host_staging_get_files(files, 256);
+        if (count == 0) {
+            env->print(env->userdata, "Error: Staging tray is empty. Use -add to stage files before zipping.\n");
+            return 1;
+        }
+
+        mz_zip_archive zip;
+        memset(&zip, 0, sizeof(zip));
+        if (!mz_zip_writer_init_file(&zip, zip_name, 0)) {
+            env->print(env->userdata, "Error: Failed to create zip file '%s'.\n", zip_name);
+            return 1;
+        }
+
+        int added = 0;
+        for (int i = 0; i < count; i++) {
+            char src_path[1024];
+            snprintf(src_path, sizeof(src_path), "%s/%s", s_host_staging_dir, files[i].name);
+            if (mz_zip_writer_add_file(&zip, files[i].name, src_path, NULL, 0, MZ_DEFAULT_LEVEL)) {
+                added++;
+            }
+        }
+
+        if (!mz_zip_writer_finalize_archive(&zip)) {
+            mz_zip_writer_end(&zip);
+            env->print(env->userdata, "Error: Failed to finalize zip archive '%s'.\n", zip_name);
+            return 1;
+        }
+        mz_zip_writer_end(&zip);
+        env->print(env->userdata, "Packed %d file(s) from staging tray into [%s].\n", added, zip_name);
         return 1;
     }
 
@@ -705,6 +1067,8 @@ static inline int skred_host_execute(const char *cmd_line, const skred_host_env_
                 snprintf(target_dir, sizeof(target_dir), "/");
             }
         }
+
+        s_dir_count = 0; /* Invalidate cached disk directory */
 
         if (skred_vfs_mode() != SKRED_VFS_DISK) {
             if (skred_chdir(target_dir)) {

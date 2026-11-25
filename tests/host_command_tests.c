@@ -180,9 +180,9 @@ int main(void) {
     assert(strstr((char *)read_data, "AudioDataWithSpaces") != NULL);
     free(read_data);
 
-    /* 8. Test -ls and 0-based index selection (-pick / -get / -ls <idx>) */
+    /* 8. Test -tray and 0-based index selection (-pick / -get / -ls <idx>) */
     reset_test_state();
-    assert(skred_host_execute("-ls", &env) == 1);
+    assert(skred_host_execute("-tray", &env) == 1);
     assert(strstr(g_last_output, "0.") != NULL);
     assert(strstr(g_last_output, "1.") != NULL);
 
@@ -193,9 +193,9 @@ int main(void) {
     const char *cur_str = skred_get_string();
     assert(cur_str != NULL && strlen(cur_str) > 0);
 
-    // Pick file 1 using alias -ls 1
+    // Pick file 1 using alias -pick 1
     reset_test_state();
-    assert(skred_host_execute("-ls 1", &env) == 1);
+    assert(skred_host_execute("-pick 1", &env) == 1);
     assert(strstr(g_last_output, "String buffer: [") != NULL);
 
     // Pick with trailing command
@@ -225,6 +225,75 @@ int main(void) {
 
     unlink(tmp_src);
     unlink(tmp_space_src);
+
+    /* 9b. Test Disk Browser (-ls [filter]) & Case-Insensitive Audio Filtering */
+    // Create test audio and non-audio files in a test directory
+    char tmp_dir[256];
+    snprintf(tmp_dir, sizeof(tmp_dir), "/tmp/sk3_test_browser_%d", (int)getpid());
+    mkdir(tmp_dir, 0700);
+
+    char f1[512], f2[512], f3[512], f4[512], f5[512];
+    snprintf(f1, sizeof(f1), "%s/kick.wav", tmp_dir);
+    snprintf(f2, sizeof(f2), "%s/SNARE.WAV", tmp_dir);
+    snprintf(f3, sizeof(f3), "%s/loop.mp3", tmp_dir);
+    snprintf(f4, sizeof(f4), "%s/perc.FLAC", tmp_dir);
+    snprintf(f5, sizeof(f5), "%s/notes.txt", tmp_dir);
+
+    FILE *fp1 = fopen(f1, "w"); fprintf(fp1, "wav1"); fclose(fp1);
+    FILE *fp2 = fopen(f2, "w"); fprintf(fp2, "wav2"); fclose(fp2);
+    FILE *fp3 = fopen(f3, "w"); fprintf(fp3, "mp3"); fclose(fp3);
+    FILE *fp4 = fopen(f4, "w"); fprintf(fp4, "flac"); fclose(fp4);
+    FILE *fp5 = fopen(f5, "w"); fprintf(fp5, "txt"); fclose(fp5);
+
+    // Switch to test dir
+    char orig_cwd[1024];
+    assert(getcwd(orig_cwd, sizeof(orig_cwd)) != NULL);
+    chdir(tmp_dir);
+
+    // -ls audio should find all 4 audio files (.wav, .WAV, .mp3, .FLAC) and omit notes.txt
+    reset_test_state();
+    assert(skred_host_execute("-ls audio", &env) == 1);
+    assert(strstr(g_last_output, "4 files") != NULL);
+    assert(strstr(g_last_output, "kick.wav") != NULL);
+    assert(strstr(g_last_output, "SNARE.WAV") != NULL);
+    assert(strstr(g_last_output, "loop.mp3") != NULL);
+    assert(strstr(g_last_output, "perc.FLAC") != NULL);
+    assert(strstr(g_last_output, "notes.txt") == NULL);
+
+    // Test staging from disk listing by index (-add 0 2)
+    reset_test_state();
+    assert(skred_host_execute("-add 0 2", &env) == 1);
+    reset_test_state();
+    assert(skred_host_execute("-tray", &env) == 1);
+    assert(strstr(g_last_output, "2 files") != NULL);
+
+    // Test Random Pick (-pick ? audio /ws 0)
+    reset_test_state();
+    assert(skred_host_execute("-pick ? audio /ws 0", &env) == 1);
+    assert(strstr(g_last_output, "executing '/ws 0'") != NULL);
+    assert(skred_get_string() != NULL && strlen(skred_get_string()) > 0);
+
+    // Test Packaging Tray into Zip Archive (-zip test_archive.zip)
+    char zip_target[512];
+    snprintf(zip_target, sizeof(zip_target), "%s/test_pack.zip", tmp_dir);
+    char zip_cmd[1024];
+    snprintf(zip_cmd, sizeof(zip_cmd), "-zip %s", zip_target);
+    reset_test_state();
+    assert(skred_host_execute(zip_cmd, &env) == 1);
+    assert(strstr(g_last_output, "Packed 2 file(s)") != NULL);
+
+    // Verify zip archive exists and contains the 2 files
+    mz_zip_archive test_zip;
+    memset(&test_zip, 0, sizeof(test_zip));
+    assert(mz_zip_reader_init_file(&test_zip, zip_target, 0) == true);
+    assert(mz_zip_reader_get_num_files(&test_zip) == 2);
+    mz_zip_reader_end(&test_zip);
+
+    // Cleanup test dir
+    unlink(f1); unlink(f2); unlink(f3); unlink(f4); unlink(f5);
+    unlink(zip_target);
+    chdir(orig_cwd);
+    rmdir(tmp_dir);
 
     /* 10. Test Tilde (~) expansion */
     const char *home = getenv("HOME");
@@ -259,7 +328,6 @@ int main(void) {
     }
 
     /* 11. Test -cd and -pwd */
-    char orig_cwd[1024];
     assert(getcwd(orig_cwd, sizeof(orig_cwd)) != NULL);
 
     reset_test_state();
