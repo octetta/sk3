@@ -9,6 +9,7 @@ src/gen/
 tools/mksynth
 tools/mkopcodes
 tools/render_dsp_demo
+tools/__pycache__
 
 # Editor and OS
 .DS_Store

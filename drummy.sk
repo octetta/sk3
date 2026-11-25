@@ -1,0 +1,30 @@
+gen! 100 [ drum:kick p:160 end:45 d:0.42 drive:1.8 ]
+gen! 101 [ drum:snare snap:0.85 d:0.08 tail:0.22 ]
+gen! 102 [ drum:hat open:0 d:0.04 ]
+gen! 103 [ drum:hat open:1 d:0.45 ]
+
+vox! 330 0 [ y uw1 ]
+vox! 340 1 [ aa1 r ay ]
+vox! 350 2 [ b iy1 n iy0 ]
+vox! 360 1 [ hh eh1 d ]
+
+v0 w100  vt [kick]
+v1 w101  vt [snare]
+v2 w102  vt [closed hat]
+v3 w103  vt [open hat]
+
+v4 w330  vt [you]
+v5 w340  vt [are a]
+v6 w350  vt [beenie]
+v7 w360  vt [head]
+
+y0 %2
+
+x0 [ v0 l1 ; v4 l1 ]
+x1 [ v2 l1 ]
+x2 [ v1 l1 ; v5 l1 ]
+x3 [ v2 l1 ]
+x4 [ v0 l1 ; v6 l1 ]
+x5 [ v2 l1 +.25 l1 ]
+x6 [ v1 l1 ; v7 l1 ]
+x7 [ v3 l1 ]

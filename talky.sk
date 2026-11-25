@@ -1,0 +1,96 @@
+v0w7a10 [ah:10 m uw:300~1 s:50 ih:500 k s s s s sh sh] tts! 1 d>r /r 100 v0 w100 l1
+?s
+W100
+v0w7a10 [ah:10 m uw:300~1 s:50 ih:500 k s s s s sh sh] tts! 1 d>w 100
+v0w7a10 [ah:10 m uw:300~1 s:50 ih:500 k s s s s sh sh] tts! 1 d>w 100 v0w100l1
+W100
+v0w7a10 [|hello| HH AH0 L OW1 |world| W ER1 L] tts! 1 d>w 100 v0w100l1
+      D
+v0w7a10 [|hello| HH AH0 L OW1 |world| W ER1 L] tts! 1 d>w 100 v0w100l1
+W100
+?
+l1
+v0w7a10 [|hello| HH AH0 L OW1 |world| W ER1 L] tts! 1 d>w 100 v0w100l1
+W100
+VC1l1
+VC0l1
+VC1l1
+VC l1
+y0%4[v0 VC&0 l1]x0
+(0 1) /SS 0
+z1
+M60
+b
+g.1
+g0
+b
+??
+n69
+b
+v0w7a10 [|hello| HH AH0 L OW1 sh |world| W ER1 L] tts! 1 d>w 100 v0w100l1
+v0w7a10 [|hello| HH AH0 L OW1 sh s s sh |world| W ER1 L] tts! 1 d>w 100 v0w100l1
+v0w7a10 [|hello| HH AH0 L OW1 |obo| sh s s sh |world| W ER1 L] tts! 1 d>w 100 v0w100l1
+/SS 0 (0 1 2)
+v0w7a10 [|hello| HH AH0 L OW1 _ |obo| sh s s sh |world| W ER1 L] tts! 1 d>w 100 v0w100l1
+v0w7a10 [|hello| HH AH0 L OW1 _ |obo| sh s s sh _ |world| W ER1 L] tts! 1 d>w 100 v0w100l1
+v0w7a10 [|hello| HH AH0 L OW1 _ |obo| sh s ah s sh _ |world| W ER1 L] tts! 1 d>w 100 v0w100l1
+v0w7a10 [|hello| HH AH0 L OW1 _ |obo| oh sh s ah s sh _ |world| W ER1 L] tts! 1 d>w 100 v0w100l1
+v0w7a10 [|hello| HH AH0 L OW1 _ |obo| eh sh s ah s sh _ |world| W ER1 L] tts! 1 d>w 100 v0w100l1
+v0w7a10 [|hello| HH AH0 L OW1 _ |obo| eh sh s ah sh _ |world| W ER1 L] tts! 1 d>w 100 v0w100l1
+v0w7a10 [|hello| HH AH0 L OW1 _ |obo| eh sh ah sh _ |world| W ER1 L] tts! 1 d>w 100 v0w100l1
+v0w7a10 [|hello| HH AH0 L OW1 _ |obo| eh:100 sh ah sh _ |world| W ER1 L] tts! 1 d>w 100 v0w100l1
+v0w7a10 [|hello| HH AH0 L OW1 _ |obo| eh:200 sh ah sh _ |world| W ER1 L] tts! 1 d>w 100 v0w100l1
+v0w7a10 [|hello| HH AH0 L OW1 _ |obo| eh:200 sh ah:500 sh _ |world| W ER1 L] tts! 1 d>w 100 v0w100l1
+/SS 0 (0 2)
+v0w7a10 [|hello| HH AH0 L OW1 _ |obo| eh:200 sh ah:500 sh _ |world| W ER1 L D] tts! 1 d>w 100 v0w100l1
+/SS 1 (50 80)
+z
+[v0 VC&0 n&1 l1] x0
+/SS 1 (50 70)
+/SS 1 (60 70)
+v0B1
+v0B0
+b
+??
+Z
+z
+?S
+v0w7a10 [|hello| HH AH0 L OW1 _ |obo| eh:200 sh ah:1500 sh _ |world| W ER1 L D] tts! 1 d>w 100 v0w100l1
+v0w7a10 [|hello| HH AH0 L OW1 _ |obo| eh:200 sh ah:100 sh _ |world| W ER1 L D] tts! 1 d>w 100 v0w100l1
+W100
+z0
+z1
+??
+v1w5f880l1
+v1w5n100l1
+v0XM1
+v1m1
+v1g1
+n0
+n127
+n50
+v1NT1
+v1NT2
+v1NT3
+??
+v0XM
+v0XM-1
+v0A1,1
+v1n69
+v1n100
+v0n62
+v0A-1
+n50
+g.1
+g.2
+g.3
+g.4
+g.5
+g.4
+??
+v1w0
+v0F1,1
+v1l1
+??
+v0F-1
+??
