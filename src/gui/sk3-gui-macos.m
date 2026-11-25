@@ -142,11 +142,11 @@
 }
 
 static void macos_append_log(void *ctx, const char *text) {
-    Sk3GuiController *c = (__bridge Sk3GuiController *)ctx;
+    Sk3AppDelegate *c = (__bridge Sk3AppDelegate *)ctx;
     [c appendLog:[NSString stringWithUTF8String:text]];
 }
 static void macos_clear_log(void *ctx) {
-    Sk3GuiController *c = (__bridge Sk3GuiController *)ctx;
+    Sk3AppDelegate *c = (__bridge Sk3AppDelegate *)ctx;
     dispatch_async(dispatch_get_main_queue(), ^{
         c.logView.string = @"";
     });
