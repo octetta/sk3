@@ -157,10 +157,26 @@ typedef struct ands_s {
     buffer_t atom;
     buffer_t defer;
     
-    // Data array
+    // Data array (current) and its swap-position twin (previous), the twin
+    // is allocated lazily the first time it is needed.
     double *data;
     int data_len;
     int data_cap;
+    double *data_prev;
+    int data_prev_len;
+    int data_prev_cap;
+
+    // Growth ceilings, overflow reporting and in-flight literal bookkeeping.
+    // An append literal ("((" / "[[") is transactional: if the input ends
+    // before its closer, or anything was dropped, it is rolled back to
+    // lit_base so a damaged message never half-applies.
+    int max_data;
+    int max_string;
+    int overflow;
+    int lit_append;
+    int lit_base;
+    int lit_dropped;
+    int str_wr;
     
     // Defer state
     double defer_num;
@@ -663,6 +679,96 @@ char* atom_string(int i) {
 }
 
 // ============================================================================
+// GROWABLE DATA / STRING STORAGE
+// ============================================================================
+// Geometric growth through a temporary pointer: a failed realloc leaves the
+// old block untouched and owned (no leak, no lost data). Growth stops at the
+// per-parser ceiling; anything beyond it is dropped and s->overflow is set.
+
+static int darr_reserve(ands_t *s, double **p, int *cap, int need) {
+    int c;
+    double *q;
+
+    if (need > s->max_data) { s->overflow = 1; s->lit_dropped = 1; return 0; }
+    if (need <= *cap) return 1;
+    c = *cap > 0 ? *cap : DATA_BUF_LEN;
+    while (c < need) {
+        if (c > s->max_data / 2) { c = s->max_data; break; }
+        c *= 2;
+    }
+    if (c < need) c = need;
+    q = (double *)realloc(*p, (size_t)c * sizeof(double));
+    if (!q) { s->overflow = 1; s->lit_dropped = 1; return 0; }
+    *p = q;
+    *cap = c;
+    return 1;
+}
+
+static void data_push(ands_t *s, double v) {
+    if (!s->data) return;
+    /* always checked: the ceiling applies even while spare capacity remains */
+    if (!darr_reserve(s, &s->data, &s->data_cap, s->data_len + 1)) return;
+    s->data[s->data_len++] = v;
+}
+
+static int data_prev_alloc(ands_t *s) {
+    if (s->data_prev) return 1;
+    s->data_prev = (double *)malloc(DATA_BUF_LEN * sizeof(double));
+    if (!s->data_prev) return 0;
+    s->data_prev_cap = DATA_BUF_LEN;
+    s->data_prev_len = 0;
+    return 1;
+}
+
+static int data_flip(ands_t *s) {
+    double *p; int l, c;
+    if (!data_prev_alloc(s)) return 0;
+    p = s->data; l = s->data_len; c = s->data_cap;
+    s->data = s->data_prev; s->data_len = s->data_prev_len; s->data_cap = s->data_prev_cap;
+    s->data_prev = p; s->data_prev_len = l; s->data_prev_cap = c;
+    return 1;
+}
+
+static int string_reserve(ands_t *s, buffer_t *b, int extra) {
+    int need, c;
+    char *q;
+
+    if (extra < 0) return 0;
+    need = b->len + extra + 1;
+    if (need > s->max_string) { s->overflow = 1; s->lit_dropped = 1; return 0; }
+    if (need <= b->cap) return 1;
+    c = b->cap > 0 ? b->cap : 128;
+    while (c < need) {
+        if (c > s->max_string / 2) { c = s->max_string; break; }
+        c *= 2;
+    }
+    if (c < need) c = need;
+    q = (char *)realloc(b->data, (size_t)c);
+    if (!q) { s->overflow = 1; s->lit_dropped = 1; return 0; }
+    b->data = q;
+    b->cap = c;
+    return 1;
+}
+
+static void string_push(ands_t *s, buffer_t *b, char c) {
+    if (!string_reserve(s, b, 1)) return;
+    b->data[b->len++] = c;
+    b->data[b->len] = '\0';
+}
+
+/* Input ended inside an append literal: undo whatever it added. */
+static void literal_abort(ands_t *s) {
+    if (!s->lit_append) return;
+    if (s->state == GET_ARRAY) {
+        s->data_len = s->lit_base;
+    } else if (s->state == GET_STRING) {
+        buffer_t *b = &s->string[s->str_wr];
+        b->len = s->lit_base;
+        if (b->data) b->data[b->len] = '\0';
+    }
+}
+
+// ============================================================================
 // ACTION FUNCTIONS - Extracted for clarity
 // ============================================================================
 
@@ -705,8 +811,7 @@ static void action_finish_defer(ands_t *s) {
 static void action_finish_array(ands_t *s) {
     // Push final number if any
     if (s->num.len > 0) {
-        if (s->data && s->data_len < s->data_cap)
-            s->data[s->data_len++] = ands_strtod(buffer_str(&s->num));
+        data_push(s, ands_strtod(buffer_str(&s->num)));
         buffer_clear(&s->num);
     }
 }
@@ -748,6 +853,7 @@ int ands_consume(ands_t *s, char *line) {
     char *end;
     int parse_err = 0;
 
+    s->overflow = 0;
     buffer_init(&expanded, (int)strlen(line) + 1);
     if (expanded.data && ands_preprocess_macros(s, line, &expanded, 0)) {
         parse_line = expanded.data;
@@ -767,6 +873,11 @@ int ands_consume(ands_t *s, char *line) {
                     action_finish_number(s);
                     s->state = START;
                     break;
+                case GET_ARRAY:
+                case GET_STRING:
+                    literal_abort(s);
+                    s->state = START;
+                    break;
                 default:
                     break;
             }
@@ -782,12 +893,33 @@ int ands_consume(ands_t *s, char *line) {
                     s->state = GET_NUMBER;
                 }
                 else if (IS_STRING(*ptr))    {
-                  buffer_clear(&s->string[s->string_idx]);
+                  s->lit_dropped = 0;
+                  if (ptr + 1 < end && IS_STRING(ptr[1])) {
+                    /* "[[" : append to the current string, no buffer swap */
+                    s->lit_append = 1;
+                    s->str_wr = s->string_read_idx;
+                    s->lit_base = s->string[s->str_wr].len;
+                    ptr++;
+                  } else {
+                    s->lit_append = 0;
+                    s->str_wr = s->string_idx;
+                    buffer_clear(&s->string[s->str_wr]);
+                  }
                   s->state = GET_STRING;
                 }
                 else if (IS_ARRAY(*ptr))     {
                   buffer_clear(&s->num);
-                  s->data_len = 0;
+                  s->lit_dropped = 0;
+                  if (ptr + 1 < end && IS_ARRAY(ptr[1])) {
+                    /* "((" : append to the current array, no buffer swap */
+                    s->lit_append = 1;
+                    s->lit_base = s->data_len;
+                    ptr++;
+                  } else {
+                    s->lit_append = 0;
+                    data_flip(s);       /* current -> previous (best effort) */
+                    s->data_len = 0;
+                  }
                   s->state = GET_ARRAY;
                 }
                 else if (IS_VARIABLE(*ptr))  { s->state = GET_VARIABLE; }
@@ -823,62 +955,54 @@ int ands_consume(ands_t *s, char *line) {
 
             case GET_STRING:
                 if (IS_STRING_END(*ptr)) {
-                    // Flip buffers: reading from current, writing to next
-                    s->string_read_idx = s->string_idx;
-                    s->string_fresh = 1;
-                    s->fn(s, GOT_STRING);
-                    s->string_idx = (s->string_idx + 1) % STRING_BUF_MOD;
+                    if (s->lit_append) {
+                        /* all-or-nothing: undo a piece that did not fit */
+                        if (s->lit_dropped) literal_abort(s);
+                        s->string_fresh = 1;
+                        s->fn(s, GOT_STRING);
+                    } else {
+                        // Flip buffers: reading from current, writing to next
+                        s->string_read_idx = s->str_wr;
+                        s->string_fresh = 1;
+                        s->fn(s, GOT_STRING);
+                        s->string_idx = (s->string_idx + 1) % STRING_BUF_MOD;
+                    }
                     s->state = START;
                 } else {
-                    buffer_push(&s->string[s->string_idx], *ptr);
+                    string_push(s, &s->string[s->str_wr], *ptr);
                 }
                 break;
 
             case GET_ARRAY:
                 if (IS_ARRAY_END(*ptr)) {
                     action_finish_array(s);
+                    if (s->lit_append && s->lit_dropped) literal_abort(s);
                     s->fn(s, GOT_ARRAY);
                     s->state = START;
                 } else if (IS_NUMBER_EX(*ptr)) {
                     buffer_push(&s->num, *ptr);
                 } else if (IS_VARIABLE(*ptr)) {
-                    if (s->num.len > 0) {
-                        if (s->data && s->data_len < s->data_cap)
-                            s->data[s->data_len++] = ands_strtod(buffer_str(&s->num));
-                        buffer_clear(&s->num);
-                    }
+                    action_finish_array(s);
                     ptr++;
                     if (ptr < end && isdigit((unsigned char)*ptr)) {
                         int variable = ands_var_parse(&ptr, end);
-                        double val = ands_get_local(s, variable);
-                        if (s->data && s->data_len < s->data_cap)
-                            s->data[s->data_len++] = val;
+                        data_push(s, ands_get_local(s, variable));
                         ptr--;
                     } else {
                         ptr--;   /* bare '$': reprocess the next character */
                     }
                 } else if (IS_STREAM(*ptr)) {
-                    if (s->num.len > 0) {
-                        if (s->data && s->data_len < s->data_cap)
-                            s->data[s->data_len++] = ands_strtod(buffer_str(&s->num));
-                        buffer_clear(&s->num);
-                    }
+                    action_finish_array(s);
                     ptr++;
                     if (ptr < end && isdigit((unsigned char)*ptr)) {
                         int stream = ands_var_parse(&ptr, end);
-                        double val = ands_stream_pull(s, stream);
-                        if (s->data && s->data_len < s->data_cap)
-                            s->data[s->data_len++] = val;
+                        data_push(s, ands_stream_pull(s, stream));
                         ptr--;
                     } else {
                         ptr--;   /* bare '&': reprocess the next character */
                     }
                 } else if (IS_SEPARATOR(*ptr)) {
-                    if (s->num.len > 0) {
-                        if (s->data && s->data_len < s->data_cap)
-                            s->data[s->data_len++] = ands_strtod(buffer_str(&s->num));
-                        buffer_clear(&s->num);
-                    }
+                    action_finish_array(s);
                 }
                 break;
 
@@ -1096,8 +1220,12 @@ ands_t *ands_new(int (*fn)(ands_t *s, int info), void *user) {
     buffer_init(&s->num, NUM_BUF_LEN);
     buffer_init(&s->string[0], STRING_BUF_LEN);
     buffer_init(&s->string[1], STRING_BUF_LEN);
-    s->string_idx = 0;
+    /* Invariant: string_idx != string_read_idx (write buffer is the swap
+       position), so a "[[" append can never alias the buffer being written. */
+    s->string_idx = 1;
     s->string_read_idx = 0;
+    s->max_data = ANDS_DATA_MAX_DEFAULT;
+    s->max_string = ANDS_STRING_MAX_DEFAULT;
     buffer_init(&s->atom, ATOM_MAX + 1);
     buffer_init(&s->defer, STRING_BUF_LEN);
 
@@ -1147,7 +1275,9 @@ void ands_free(ands_t *s) {
     buffer_free(&s->defer);
 
     if (s->data) free(s->data);
+    if (s->data_prev) free(s->data_prev);
     s->data = NULL;
+    s->data_prev = NULL;
     s->data_cap = 0;
     s->data_len = 0;
     free(s);
@@ -1408,20 +1538,26 @@ void ands_global_to_local(ands_t *s, int n) {
     (void)n;
 }
 
-#define STRING_PTR(s) s->string[s->string_idx % STRING_BUF_MOD].data
-
 char *ands_string_from_external(ands_t *s, char *src, int len) {
-  char *dst;
+  buffer_t *dst;
   if (!s || !src) return NULL;
   if (len < 0) len = 0;
-  if (len >= STRING_BUF_LEN) len = STRING_BUF_LEN - 1;
-  dst = STRING_PTR(s);
-  memcpy(dst, src, (size_t)len);
-  dst[len] = '\0';
+  dst = &s->string[s->string_idx];
+  buffer_clear(dst);
+  s->lit_dropped = 0;
+  if (!string_reserve(s, dst, len)) {
+    /* ceiling hit: keep what fits */
+    if (len > s->max_string - 1) len = s->max_string - 1;
+    if (len > dst->cap - 1) len = dst->cap - 1;
+    if (len < 0) len = 0;
+  }
+  memcpy(dst->data, src, (size_t)len);
+  dst->data[len] = '\0';
+  dst->len = len;
   s->string_read_idx = s->string_idx;
   s->string_fresh = 1;
   s->string_idx = (s->string_idx + 1) % STRING_BUF_MOD;
-  return dst;
+  return dst->data;
 }
 
 char *ands_string_to_external(ands_t *s, char *dst, int len) {
@@ -1434,3 +1570,108 @@ char *ands_string_to_external(ands_t *s, char *dst, int len) {
 
 
 
+
+// ============================================================================
+// APPEND / SWAP PRIMITIVES
+// ============================================================================
+// Pointers returned by ands_data()/ands_string()/..._prev() are valid until the
+// next call that can grow storage (any append, "(" / "[" literal, or
+// ands_*_from_external). Re-fetch them after such a call.
+
+void ands_set_limits(ands_t *s, int max_data, int max_string) {
+  if (!s) return;
+  if (max_data > 0) s->max_data = max_data;
+  if (max_string > 0) s->max_string = max_string;
+}
+
+int ands_overflow(ands_t *s) { return s ? s->overflow : 0; }
+
+int ands_data_append(ands_t *s, const double *v, int n) {
+  if (!s || !v || n <= 0) return 0;
+  if (n > s->max_data - s->data_len) { s->overflow = 1; return 0; }
+  if (!darr_reserve(s, &s->data, &s->data_cap, s->data_len + n)) return 0;
+  memcpy(s->data + s->data_len, v, (size_t)n * sizeof(double));
+  s->data_len += n;
+  return n;                 /* all-or-nothing */
+}
+
+double *ands_data_prev(ands_t *s) { return s ? s->data_prev : NULL; }
+int ands_data_prev_len(ands_t *s) { return s ? s->data_prev_len : 0; }
+int ands_data_swap(ands_t *s) { return s ? data_flip(s) : 0; }
+
+/* d>>d : current is appended to previous in place, then the roles swap so the
+   concatenation is current. Returns the new length, or -1 on failure. */
+int ands_data_concat(ands_t *s) {
+  if (!s || !data_prev_alloc(s)) return -1;
+  if (s->data_len > s->max_data - s->data_prev_len) { s->overflow = 1; return -1; }
+  if (!darr_reserve(s, &s->data_prev, &s->data_prev_cap,
+                    s->data_prev_len + s->data_len)) return -1;
+  if (s->data_len > 0)
+    memcpy(s->data_prev + s->data_prev_len, s->data,
+           (size_t)s->data_len * sizeof(double));
+  s->data_prev_len += s->data_len;
+  data_flip(s);
+  return s->data_len;
+}
+
+int ands_string_append(ands_t *s, const char *p, int n) {
+  buffer_t *b;
+  if (!s || !p || n <= 0) return 0;
+  b = &s->string[s->string_read_idx];
+  if (!string_reserve(s, b, n)) return 0;   /* all-or-nothing */
+  memcpy(b->data + b->len, p, (size_t)n);
+  b->len += n;
+  b->data[b->len] = '\0';
+  s->string_fresh = 1;
+  return n;
+}
+
+int ands_string_appendf(ands_t *s, const char *fmt, ...) {
+  va_list ap, ap2;
+  int n, r;
+  char *tmp;
+  if (!s || !fmt) return 0;
+  va_start(ap, fmt);
+  va_copy(ap2, ap);
+  n = vsnprintf(NULL, 0, fmt, ap);
+  va_end(ap);
+  if (n <= 0) { va_end(ap2); return 0; }
+  tmp = (char *)malloc((size_t)n + 1);
+  if (!tmp) { va_end(ap2); s->overflow = 1; return 0; }
+  vsnprintf(tmp, (size_t)n + 1, fmt, ap2);
+  va_end(ap2);
+  r = ands_string_append(s, tmp, n);
+  free(tmp);
+  return r;
+}
+
+char *ands_string_prev(ands_t *s) {
+  return s ? buffer_str(&s->string[s->string_idx]) : NULL;
+}
+int ands_string_prev_len(ands_t *s) {
+  return s ? s->string[s->string_idx].len : 0;
+}
+
+void ands_string_swap(ands_t *s) {
+  int t;
+  if (!s) return;
+  t = s->string_read_idx;
+  s->string_read_idx = s->string_idx;
+  s->string_idx = t;
+  s->string_fresh = 1;
+}
+
+/* s>>s : current appended onto previous in place, roles swap so the result is
+   current. Returns the new length, or -1 on failure (nothing changed). */
+int ands_string_concat(ands_t *s) {
+  buffer_t *dst, *src;
+  if (!s) return -1;
+  dst = &s->string[s->string_idx];
+  src = &s->string[s->string_read_idx];
+  if (!string_reserve(s, dst, src->len)) return -1;
+  if (src->len > 0) memcpy(dst->data + dst->len, src->data, (size_t)src->len);
+  dst->len += src->len;
+  dst->data[dst->len] = '\0';
+  ands_string_swap(s);
+  return s->string[s->string_read_idx].len;
+}

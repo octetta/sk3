@@ -1,0 +1,14 @@
+@name     data_slice_to_args
+@alias    ds>a
+@group    data
+@c_name   skode_clause_data_slice_to_args
+@type     immediate
+@arity    2
+@match    (finite, finite)
+@summary  replace argument list with a slice of the data array
+@doc
+Usage: start count ds>a word
+Replaces the argument list with count values of the data array starting at start.
+@code
+    return skode_exec_d_slice_to_args(ctx, s, args, argc);
+@end

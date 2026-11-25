@@ -580,6 +580,254 @@ static void test_stream_variable_sigil_edges(void) {
   if (r.len > 1 && strcmp(r.events[1].text, "v0 a10") != 0) fail(test, "\"+$v0 a10\" body should be \"v0 a10\"");
 }
 
+
+/* ------------------------------------------------------------------------ */
+/* Append forms ("((" and "[[") and swap-position primitives                 */
+/* ------------------------------------------------------------------------ */
+
+static int null_cb(ands_t *s, int info) { (void)s; (void)info; return 0; }
+
+static ands_t *new_plain(const char *test) {
+  ands_t *s = ands_new(null_cb, NULL);
+  if (!s) fail(test, "ands_new returned NULL");
+  return s;
+}
+
+static void feed(ands_t *s, const char *text) {
+  char buf[65536];
+  snprintf(buf, sizeof(buf), "%s", text);
+  ands_consume(s, buf);
+}
+
+static void expect_data(const char *test, ands_t *s, const double *want, int n) {
+  if (ands_data_len(s) != n) {
+    char msg[96];
+    snprintf(msg, sizeof(msg), "data len expected %d, got %d", n, ands_data_len(s));
+    fail(test, msg);
+    return;
+  }
+  for (int i = 0; i < n; i++) {
+    if (!near_double(ands_data(s)[i], want[i])) {
+      char msg[96];
+      snprintf(msg, sizeof(msg), "data[%d] expected %g, got %g", i, want[i], ands_data(s)[i]);
+      fail(test, msg);
+      return;
+    }
+  }
+}
+
+static void expect_str(const char *test, const char *got, const char *want) {
+  if (strcmp(got, want) != 0) {
+    char msg[200];
+    snprintf(msg, sizeof(msg), "string expected [%s], got [%s]", want, got);
+    fail(test, msg);
+  }
+}
+
+static void test_array_append_form(void) {
+  const char *test = "array append form";
+  ands_t *s = new_plain(test);
+  if (!s) return;
+
+  feed(s, "((5 6)");                       /* append to empty */
+  { double w[] = {5, 6}; expect_data(test, s, w, 2); }
+
+  feed(s, "((7 8)");                       /* persists across consume calls */
+  { double w[] = {5, 6, 7, 8}; expect_data(test, s, w, 4); }
+
+  feed(s, "((9) ((10 11)");                /* several appends in one chunk */
+  { double w[] = {5, 6, 7, 8, 9, 10, 11}; expect_data(test, s, w, 7); }
+
+  ands_set_local(s, 1, 42);
+  feed(s, "((1 $1 2)");                    /* variables work inside append */
+  if (ands_data_len(s) != 10 || !near_double(ands_data(s)[8], 42)) fail(test, "variable in append array");
+
+  feed(s, "(1 2)");                        /* plain form starts over ... */
+  { double w[] = {1, 2}; expect_data(test, s, w, 2); }
+  if (ands_data_prev_len(s) != 10) fail(test, "previous array not kept in swap position");
+
+  feed(s, "()");                           /* ... and so does the empty form */
+  if (ands_data_len(s) != 0 || ands_data_prev_len(s) != 2) fail(test, "empty array reset");
+  ands_free(s);
+}
+
+static void test_array_append_events(void) {
+  const char *test = "array append events";
+  recorder_t r;
+  char input[] = "((1 2) foo";
+  run_parse(test, input, &r);
+  expect_len(test, &r, 3);
+  expect_event(test, &r, 0, GOT_ARRAY, "----");
+  expect_event(test, &r, 1, FUNCTION, "foo-");
+  expect_event(test, &r, 2, CHUNK_END, "----");
+}
+
+static void test_array_growth_and_ceiling(void) {
+  const char *test = "array growth and ceiling";
+  ands_t *s = new_plain(test);
+  char *big = (char *)malloc(60000);
+  if (!s || !big) { fail(test, "alloc"); return; }
+
+  strcpy(big, "(");
+  for (int i = 0; i < 3000; i++) { char n[16]; snprintf(n, sizeof(n), "%d ", i); strcat(big, n); }
+  strcat(big, ")");
+  feed(s, big);                            /* plain literal now grows past 1024 */
+  if (ands_data_len(s) != 3000 || ands_data(s)[2999] != 2999) fail(test, "plain growth");
+
+  strcpy(big, "(("); for (int i = 0; i < 3000; i++) { char n[16]; snprintf(n, sizeof(n), "%d ", i); strcat(big, n); }
+  strcat(big, ")");
+  feed(s, big);
+  if (ands_data_len(s) != 6000) fail(test, "append growth");
+
+  ands_set_limits(s, 7000, 0);             /* ceiling: whole piece or nothing */
+  feed(s, big);
+  if (ands_data_len(s) != 6000) fail(test, "over-ceiling append must be rolled back");
+  if (!ands_overflow(s)) fail(test, "overflow flag not set");
+  feed(s, "((1 2)");
+  if (ands_data_len(s) != 6002 || ands_overflow(s)) fail(test, "append after overflow / flag not cleared");
+  free(big);
+  ands_free(s);
+}
+
+static void test_ceiling_applies_within_capacity(void) {
+  const char *test = "ceiling within capacity";
+  ands_t *s = new_plain(test);
+  if (!s) return;
+  ands_set_limits(s, 10, 0);
+  feed(s, "(1 2 3)");
+  feed(s, "((4 5 6 7 8 9 10 11 12 13 14 15)");   /* whole piece refused */
+  if (ands_data_len(s) != 3 || !ands_overflow(s)) fail(test, "append not refused at ceiling");
+  feed(s, "((4 5)");
+  if (ands_data_len(s) != 5) fail(test, "append under ceiling");
+  ands_free(s);
+}
+
+static void test_truncated_append_is_rolled_back(void) {
+  const char *test = "truncated append";
+  ands_t *s = new_plain(test);
+  if (!s) return;
+  feed(s, "(1 2)");
+  feed(s, "((3 4 5.");                     /* closer lost, e.g. truncated datagram */
+  { double w[] = {1, 2}; expect_data(test, s, w, 2); }
+  feed(s, "((3)");                         /* parser is clean for the next message */
+  { double w[] = {1, 2, 3}; expect_data(test, s, w, 3); }
+
+  feed(s, "[abc]");
+  feed(s, "[[def");
+  expect_str(test, ands_string(s), "abc");
+  feed(s, "[[def]");
+  expect_str(test, ands_string(s), "abcdef");
+  ands_free(s);
+}
+
+static void test_string_append_form(void) {
+  const char *test = "string append form";
+  ands_t *s = new_plain(test);
+  if (!s) return;
+
+  feed(s, "[[hello]");                     /* append with nothing before */
+  expect_str(test, ands_string(s), "hello");
+  feed(s, "[[ world]");
+  expect_str(test, ands_string(s), "hello world");
+  if (!ands_string_fresh(s)) fail(test, "append should mark the string fresh");
+
+  feed(s, "[x]");                          /* plain: old string moves to swap position */
+  expect_str(test, ands_string(s), "x");
+  expect_str(test, ands_string_prev(s), "hello world");
+
+  feed(s, "[a] [b] [[c]");                 /* [[ leaves the swap position alone */
+  expect_str(test, ands_string(s), "bc");
+  expect_str(test, ands_string_prev(s), "a");
+
+  feed(s, "[]");
+  expect_str(test, ands_string(s), "");
+  ands_free(s);
+}
+
+static void test_string_append_events_and_macros(void) {
+  const char *test = "string append events";
+  recorder_t r;
+  char input[] = "[[ab] foo";
+  int macros_before, macros_after;
+  ands_t *s;
+
+  run_parse(test, input, &r);
+  expect_len(test, &r, 3);
+  expect_event(test, &r, 0, GOT_STRING, "----");
+  expect_event(test, &r, 1, FUNCTION, "foo-");
+  expect_str(test, r.events[0].text, "ab");
+
+  s = new_plain(test);
+  macros_before = ands_macro_count(s);
+  feed(s, "[[ab]: 1");                     /* not a macro definition */
+  macros_after = ands_macro_count(s);
+  if (macros_before != macros_after) fail(test, "[[x]: was treated as a macro definition");
+  ands_free(s);
+}
+
+static void test_string_growth(void) {
+  const char *test = "string growth";
+  ands_t *s = new_plain(test);
+  char *chunk = (char *)malloc(40010);
+  if (!s || !chunk) { fail(test, "alloc"); return; }
+  chunk[0] = '['; chunk[1] = '[';
+  memset(chunk + 2, 'z', 40000);
+  chunk[40002] = ']'; chunk[40003] = '\0';
+  feed(s, "[]");
+  feed(s, chunk);                          /* 40000 */
+  feed(s, chunk);                          /* 80000 > old fixed 65535 cap */
+  if (ands_string_len(s) != 80000) fail(test, "append past old fixed buffer size");
+
+  ands_set_limits(s, 0, 100000);
+  feed(s, chunk);                          /* would be 120000 > ceiling */
+  if (ands_string_len(s) != 80000 || !ands_overflow(s)) fail(test, "over-ceiling string append");
+  ands_free(s);
+  free(chunk);
+}
+
+static void test_swap_primitives(void) {
+  const char *test = "swap primitives";
+  ands_t *s = new_plain(test);
+  double more[] = {3, 4};
+  if (!s) return;
+
+  feed(s, "[a] [b]");
+  if (ands_string_concat(s) != 2) fail(test, "string concat length");
+  expect_str(test, ands_string(s), "ab");
+  ands_string_swap(s);                     /* swap exposes the other buffer ... */
+  expect_str(test, ands_string(s), "b");
+  ands_string_swap(s);                     /* ... and swapping back restores it */
+  expect_str(test, ands_string(s), "ab");
+  if (ands_string_appendf(s, " %d/%g", 7, 0.5) <= 0) fail(test, "appendf");
+  expect_str(test, ands_string(s), "ab 7/0.5");
+
+  feed(s, "(1 2) (3 4)");                  /* prev = 1 2, cur = 3 4 */
+  if (ands_data_concat(s) != 4) fail(test, "data concat length");
+  { double w[] = {1, 2, 3, 4}; expect_data(test, s, w, 4); }
+  if (ands_data_append(s, more, 2) != 2) fail(test, "data append");
+  { double w[] = {1, 2, 3, 4, 3, 4}; expect_data(test, s, w, 6); }
+  if (!ands_data_swap(s) || ands_data_len(s) != 2) fail(test, "data swap");
+  { double w[] = {3, 4}; expect_data(test, s, w, 2); }
+
+  char ext[] = "external";
+  ands_string_from_external(s, ext, 8);
+  expect_str(test, ands_string(s), "external");
+  ands_free(s);
+}
+
+static void test_no_leak_under_repeated_append(void) {
+  const char *test = "repeated append";
+  ands_t *s = new_plain(test);
+  if (!s) return;
+  for (int i = 0; i < 20000; i++) {
+    feed(s, "((1 2 3 4 5 6 7 8)");
+    feed(s, "[[abcdefgh]");
+    if (i % 5000 == 4999) { feed(s, "(1)"); feed(s, "[x]"); }
+  }
+  /* run under ASan/LSan: any leaked growth block is reported at exit */
+  ands_free(s);
+}
+
 int main(void) {
   test_compact_commands();
   test_strings_and_arrays();
@@ -601,6 +849,16 @@ int main(void) {
   test_macro_definitions_do_not_break_strings();
   test_macros_are_global();
   test_macro_management_api();
+  test_array_append_form();
+  test_array_append_events();
+  test_array_growth_and_ceiling();
+  test_ceiling_applies_within_capacity();
+  test_truncated_append_is_rolled_back();
+  test_string_append_form();
+  test_string_append_events_and_macros();
+  test_string_growth();
+  test_swap_primitives();
+  test_no_leak_under_repeated_append();
 
   if (failures) {
     fprintf(stderr, "%d ANDS parser test failure(s)\n", failures);

@@ -520,6 +520,50 @@ copy the latest numeric result into parser data. `k>w` combines that copy with
 wave installation. Wavetable metadata is not part of the transferred Ksynth
 vector, so `k>w` arguments supply the desired rate and playback mode.
 
+### Append forms, swap position, and piecewise uploads
+
+The parser keeps two values of each kind: the **current** array and string, and
+the **previous** one in the swap position. A plain `(...)` or `[...]` literal
+starts a new value; the old current value moves to the swap position.
+
+| Form | Behavior |
+| --- | --- |
+| `(1 2 3)` / `[text]` | New current array / string; the old one becomes previous |
+| `((1 2 3)` | Append to the current array (no swap) |
+| `[[text]` | Append to the current string (no swap) |
+| `()` / `[]` | Empty current value (previous is kept) |
+
+Append literals are all-or-nothing: if the input ends before the closing `)` or
+`]` (for example a truncated UDP datagram), or the piece would pass the
+ceiling, nothing from that literal is kept. Arrays and strings grow on demand up
+to a per-parser ceiling (default 1048576 values and 4 MiB, settable with
+`ands_set_limits()` or `-DANDS_DATA_MAX_DEFAULT=` / `-DANDS_STRING_MAX_DEFAULT=`).
+`ands_overflow()` reports whether the last `ands_consume()` dropped data.
+
+| Command | Arguments | Behavior |
+| --- | --- | --- |
+| `s>>s` | none | Previous string + current string; the result is current |
+| `s<>s` | none | Swap current and previous strings |
+| `fmt>>s` | numeric args | Format the current string as a template (`@0`..) and append it to the previous string; the result is current |
+| `d>>d` | none | Previous array + current array; the result is current |
+| `d<>d` | none | Swap current and previous arrays |
+| `d>a` | none | Push the data array onto the argument list (after existing arguments, up to the argument limit) for the next word |
+| `ds>a` | `start count` | Replace the argument list with a slice of the data array |
+| `a>d` | numeric args | Arguments become the current array |
+| `a>>d` | numeric args | Append the arguments to the current array |
+| `k>>d` | none | Append the latest Ksynth result to the data array |
+| `dlen` | none | Print the data array length and return it in `@0` |
+
+A word runs when the *next* atom starts or the chunk ends, so literals written
+after an atom are visible to it. Separate chained commands with `;`:
+`[x] [y] s>>s; [z] s>>s`. For envelopes: `(0.002 0.25 1 5) d>a t; d>a pt`.
+
+Piecewise waveform upload over UDP/HTTP: send each piece as its own message
+(`((v1 v2 ...)`, keeping UDP datagrams under about 1000 bytes), then send `dlen`
+and compare the reported length with what was sent before using the data.
+Starting every piece with `((` also keeps it from being mistaken for a Skred
+command by the UDP front end.
+
 ## Files, Samples, and Recording
 
 | Command | Arguments or string | Behavior | Main function |

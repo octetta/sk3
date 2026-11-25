@@ -1,0 +1,15 @@
+@name     ksynth_append_data
+@alias    k>>d
+@group    ksynth
+@ifdef KSYNTH
+@c_name   skode_clause_ksynth_append_data
+@type     immediate
+@arity    0
+@match    ()
+@summary  append KSynth result vector to data array
+@doc
+Appends the most recent KSynth vector result to the data array instead of replacing it.
+Usage: k>>d
+@code
+    return skode_exec_k_append_d(ctx, s, args, argc);
+@end

@@ -1,0 +1,119 @@
+@name     args_append_data
+@alias    a>>d
+@group    data
+@c_name   skode_clause_args_append_data_1
+@type     immediate
+@arity    1
+@match    (any)
+@summary  append arguments to the data array
+@doc
+Appends the arguments to the data array.
+Usage: 1 2 3 a>>d
+@code
+    return skode_exec_args_append_d(ctx, s, args, argc);
+@end
+
+@name     args_append_data
+@alias    a>>d
+@group    data
+@c_name   skode_clause_args_append_data_2
+@type     immediate
+@arity    2
+@match    (any, any)
+@summary  append arguments to the data array
+@doc
+Appends the arguments to the data array.
+Usage: 1 2 3 a>>d
+@code
+    return skode_exec_args_append_d(ctx, s, args, argc);
+@end
+
+@name     args_append_data
+@alias    a>>d
+@group    data
+@c_name   skode_clause_args_append_data_3
+@type     immediate
+@arity    3
+@match    (any, any, any)
+@summary  append arguments to the data array
+@doc
+Appends the arguments to the data array.
+Usage: 1 2 3 a>>d
+@code
+    return skode_exec_args_append_d(ctx, s, args, argc);
+@end
+
+@name     args_append_data
+@alias    a>>d
+@group    data
+@c_name   skode_clause_args_append_data_4
+@type     immediate
+@arity    4
+@match    (any, any, any, any)
+@summary  append arguments to the data array
+@doc
+Appends the arguments to the data array.
+Usage: 1 2 3 a>>d
+@code
+    return skode_exec_args_append_d(ctx, s, args, argc);
+@end
+
+@name     args_append_data
+@alias    a>>d
+@group    data
+@c_name   skode_clause_args_append_data_5
+@type     immediate
+@arity    5
+@match    (any, any, any, any, any)
+@summary  append arguments to the data array
+@doc
+Appends the arguments to the data array.
+Usage: 1 2 3 a>>d
+@code
+    return skode_exec_args_append_d(ctx, s, args, argc);
+@end
+
+@name     args_append_data
+@alias    a>>d
+@group    data
+@c_name   skode_clause_args_append_data_6
+@type     immediate
+@arity    6
+@match    (any, any, any, any, any, any)
+@summary  append arguments to the data array
+@doc
+Appends the arguments to the data array.
+Usage: 1 2 3 a>>d
+@code
+    return skode_exec_args_append_d(ctx, s, args, argc);
+@end
+
+@name     args_append_data
+@alias    a>>d
+@group    data
+@c_name   skode_clause_args_append_data_7
+@type     immediate
+@arity    7
+@match    (any, any, any, any, any, any, any)
+@summary  append arguments to the data array
+@doc
+Appends the arguments to the data array.
+Usage: 1 2 3 a>>d
+@code
+    return skode_exec_args_append_d(ctx, s, args, argc);
+@end
+
+@name     args_append_data
+@alias    a>>d
+@group    data
+@c_name   skode_clause_args_append_data_8
+@type     immediate
+@arity    8
+@match    (any, any, any, any, any, any, any, any)
+@summary  append arguments to the data array
+@doc
+Appends the arguments to the data array.
+Usage: 1 2 3 a>>d
+@code
+    return skode_exec_args_append_d(ctx, s, args, argc);
+@end

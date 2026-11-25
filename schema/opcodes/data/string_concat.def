@@ -1,0 +1,14 @@
+@name     string_concat
+@alias    s>>s
+@group    data
+@c_name   skode_clause_string_concat
+@type     immediate
+@arity    0
+@match    ()
+@summary  append current string to previous, result becomes current
+@doc
+Concatenates the last two strings: previous + current. The result is the current string.
+Usage: [a] [b] s>>s   (gives "ab")
+@code
+    return skode_exec_s_concat(ctx, s, args, argc);
+@end

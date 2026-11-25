@@ -86,6 +86,16 @@ typedef uint32_t atom_t;
 #define ANDS_MACRO_BODY_LEN (2048)
 #define ANDS_RETURN_MAX (10)  /* @0 .. @9 */
 
+/* Default ceilings for the parser's data array (doubles) and each string
+   buffer (bytes), applied to parsed literals and the append primitives.
+   Override per parser with ands_set_limits(). */
+#ifndef ANDS_DATA_MAX_DEFAULT
+#define ANDS_DATA_MAX_DEFAULT   (1 << 20)
+#endif
+#ifndef ANDS_STRING_MAX_DEFAULT
+#define ANDS_STRING_MAX_DEFAULT (1 << 22)
+#endif
+
 ands_t *ands_new(int (*fn)(ands_t *s, int info), void *user);
 void ands_free(ands_t *s);
 int ands_consume(ands_t *s, char *line);
@@ -186,6 +196,34 @@ int ands_return_saved_error(ands_t *s);
 void ands_return_restore_saved(ands_t *s);
 
 char *ands_string_to_external(ands_t *s, char *dst, int len);
+
+/*
+ * Append forms and swap-position primitives.
+ *
+ * Syntax: "((1 2 3)" appends to the current array and "[[text]" appends to the
+ * current string, instead of replacing it. A plain "(...)" / "[...]" starts a
+ * new value and the old one moves to the swap position (see *_prev).
+ * An append literal is all-or-nothing: if the input ends before the closer, or
+ * any part would exceed the ceiling, nothing from that literal is kept.
+ *
+ * Pointers from ands_data()/ands_string()/ands_data_prev()/ands_string_prev()
+ * are valid only until the next call that can grow storage.
+ */
+void ands_set_limits(ands_t *s, int max_data, int max_string);
+int ands_overflow(ands_t *s);            /* set if the current ands_consume() dropped data */
+
+int ands_data_append(ands_t *s, const double *v, int n);   /* returns n, or 0 (nothing appended) */
+double *ands_data_prev(ands_t *s);
+int ands_data_prev_len(ands_t *s);
+int ands_data_swap(ands_t *s);           /* 1 on success */
+int ands_data_concat(ands_t *s);         /* previous += current, then swap; new length or -1 */
+
+int ands_string_append(ands_t *s, const char *p, int n);
+int ands_string_appendf(ands_t *s, const char *fmt, ...);
+char *ands_string_prev(ands_t *s);
+int ands_string_prev_len(ands_t *s);
+void ands_string_swap(ands_t *s);
+int ands_string_concat(ands_t *s);       /* previous += current, then swap; new length or -1 */
 char *ands_string_from_external(ands_t *s, char *src, int len);
 
 #define ATOM4(c) (c)

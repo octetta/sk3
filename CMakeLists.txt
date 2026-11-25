@@ -255,6 +255,11 @@ target_link_libraries(ands_parser_tests PRIVATE api)
 target_include_directories(ands_parser_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}/src/gen")
 add_test(NAME ands.parser-contract COMMAND ands_parser_tests)
 
+add_executable(skode_append_tests tests/skode_append_tests.c)
+target_link_libraries(skode_append_tests PRIVATE api)
+target_include_directories(skode_append_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}/src/gen")
+add_test(NAME ands.append-words COMMAND skode_append_tests)
+
 add_executable(skode_state_tests tests/skode_state_tests.c)
 target_link_libraries(skode_state_tests PRIVATE api)
 target_include_directories(skode_state_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}/src/gen")

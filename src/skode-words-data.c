@@ -1245,6 +1245,130 @@ int skode_exec_n_gtd(skode_t *ctx, ands_t *s, const double *arg, int argc) {
   return word_exec_n_gtd(NULL, ctx, s, (double*)arg, argc);
 }
 
+/* ------------------------------------------------------------------------
+ * Append / swap words. They act on the parser's current/previous string and
+ * data array (see ands.h) and are immediate-only like every parser-state word.
+ * ---------------------------------------------------------------------- */
+
+int skode_exec_s_concat(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  (void)s; (void)arg; (void)argc;
+  if (ands_string_concat(ctx->parse) < 0) {
+    ctx->printf(ctx, "# s>>s: result exceeds the string limit\n");
+    return SK_ERR_INVALID_PARAM;
+  }
+  return 0;
+}
+
+int skode_exec_s_swap(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  (void)s; (void)arg; (void)argc;
+  ands_string_swap(ctx->parse);
+  return 0;
+}
+
+/* [accumulated] [template @0 @1] a b fmt>>s
+ * Formats the current string (the template) with the arguments and appends the
+ * result to the previous string; the accumulation becomes the current string. */
+int skode_exec_fmt_append(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  char formatted[1024];
+  int n;
+  (void)s;
+  skode_format_string_args(formatted, sizeof(formatted),
+                          ands_string(ctx->parse), (double *)arg, argc);
+  n = (int)strlen(formatted);
+  ands_string_swap(ctx->parse);
+  if (n > 0 && ands_string_append(ctx->parse, formatted, n) == 0) {
+    ctx->printf(ctx, "# fmt>>s: result exceeds the string limit\n");
+    return SK_ERR_INVALID_PARAM;
+  }
+  return 0;
+}
+
+int skode_exec_d_concat(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  (void)s; (void)arg; (void)argc;
+  if (ands_data_concat(ctx->parse) < 0) {
+    ctx->printf(ctx, "# d>>d: result exceeds the data limit\n");
+    return SK_ERR_INVALID_PARAM;
+  }
+  return 0;
+}
+
+int skode_exec_d_swap(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  (void)s; (void)arg; (void)argc;
+  if (!ands_data_swap(ctx->parse)) return SK_ERR_INVALID_PARAM;
+  return 0;
+}
+
+/* d>a : push the whole data array onto the argument list (after any arguments
+ * already there) and keep the list for the next word. Stops at the list limit. */
+int skode_exec_d_to_args(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  int n = ands_data_len(ctx->parse);
+  int before = ands_arg_len(s);
+  (void)arg; (void)argc;
+  ands_arg_push_many(s, ands_data(ctx->parse), n);
+  if (ands_arg_len(s) - before < n) {
+    ctx->printf(ctx, "# d>a: only %d of %d values fit on the argument list\n",
+                ands_arg_len(s) - before, n);
+  }
+  return 1;
+}
+
+/* ds>a start count : replace the argument list with a slice of the data array */
+int skode_exec_d_slice_to_args(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  int start = 0, count = 0, len = ands_data_len(ctx->parse);
+  if (argc < 2 || !skode_double_to_int(arg[0], &start) ||
+      !skode_double_to_int(arg[1], &count) || start < 0 || count < 0 || start > len) {
+    ctx->printf(ctx, "# ds>a start count: out of range (data length %d)\n", len);
+    return SK_ERR_INVALID_PARAM;
+  }
+  if (count > len - start) count = len - start;
+  ands_arg_clear(s);
+  ands_arg_push_many(s, ands_data(ctx->parse) + start, count);
+  return 1;
+}
+
+/* a>d : the arguments become the data array (like a plain "(...)" literal) */
+int skode_exec_args_to_d(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  (void)s;
+  ands_data_swap(ctx->parse);
+  ands_data_len_set(ctx->parse, 0);
+  if (argc > 0 && ands_data_append(ctx->parse, arg, argc) == 0) {
+    ctx->printf(ctx, "# a>d: exceeds the data limit\n");
+    return SK_ERR_INVALID_PARAM;
+  }
+  return 0;
+}
+
+/* a>>d : the arguments are appended to the data array (like "((...)") */
+int skode_exec_args_append_d(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  (void)s;
+  if (argc > 0 && ands_data_append(ctx->parse, arg, argc) == 0) {
+    ctx->printf(ctx, "# a>>d: exceeds the data limit\n");
+    return SK_ERR_INVALID_PARAM;
+  }
+  return 0;
+}
+
+/* dlen : report the data array length (printed, and returned in @0). Cheap
+ * acknowledgement for piecewise uploads, unlike ?d which dumps everything. */
+int skode_exec_d_len(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  int n = ands_data_len(ctx->parse);
+  (void)arg; (void)argc;
+  ctx->printf(ctx, "# D len=%d\n", n);
+  ands_return_push(s, (double)n);
+  return 0;
+}
+
+int skode_exec_k_append_d(skode_t *ctx, ands_t *s, const double *arg, int argc) {
+  (void)s; (void)arg; (void)argc;
+#ifdef KSYNTH
+  skode_ks_result_append_data(ctx);
+  return 0;
+#else
+  (void)ctx;
+  return -1;
+#endif
+}
+
 void skode_register_words_data(skode_vocab_t *vocab) {
   (void)vocab;
   /* All data/ksynth/macro words migrated to .def files in schema/opcodes/ */

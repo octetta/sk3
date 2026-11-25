@@ -122,6 +122,30 @@ int skode_ks_result_to_data(skode_t *ctx) {
   return len > 0;
 }
 
+/* k>>d : like skode_ks_result_to_data() but appends to the data array (and to
+   the current string for string results) instead of replacing it. */
+int skode_ks_result_append_data(skode_t *ctx) {
+  if (!ctx || !ctx->ks_result || k_is_func((K)ctx->ks_result)) return 0;
+  K result = (K)ctx->ks_result;
+  if (k_is_string(result)) {
+    const char *str = (const char *)result->f;
+    if (str && ctx->parse) {
+      int n = (int)strlen(str);
+      if (n > 0 && ands_string_append(ctx->parse, str, n) == 0) {
+        ctx->printf(ctx, "# k>>d: string append exceeds the string limit\n");
+        return 0;
+      }
+    }
+    return 1;
+  }
+  if (result->n <= 0) return 0;
+  if (ands_data_append(ctx->parse, result->f, result->n) == 0) {
+    ctx->printf(ctx, "# k>>d: appending %d values exceeds the data limit\n", (int)result->n);
+    return 0;
+  }
+  return 1;
+}
+
 int skode_ks_bind_values(skode_t *ctx, int variable,
                          const double *values, size_t len) {
   if (variable < 0 || variable >= 26) {

@@ -1,0 +1,14 @@
+@name     string_swap
+@alias    s<>s
+@group    data
+@c_name   skode_clause_string_swap
+@type     immediate
+@arity    0
+@match    ()
+@summary  swap current and previous strings
+@doc
+Exchanges the current string and the one in the swap position.
+Usage: [a] [b] s<>s
+@code
+    return skode_exec_s_swap(ctx, s, args, argc);
+@end

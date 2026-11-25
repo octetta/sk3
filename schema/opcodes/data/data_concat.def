@@ -1,0 +1,14 @@
+@name     data_concat
+@alias    d>>d
+@group    data
+@c_name   skode_clause_data_concat
+@type     immediate
+@arity    0
+@match    ()
+@summary  append current data array to previous, result becomes current
+@doc
+Concatenates the last two arrays: previous + current. The result is the current array.
+Usage: (1 2) (3 4) d>>d
+@code
+    return skode_exec_d_concat(ctx, s, args, argc);
+@end

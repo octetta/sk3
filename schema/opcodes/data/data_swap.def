@@ -1,0 +1,14 @@
+@name     data_swap
+@alias    d<>d
+@group    data
+@c_name   skode_clause_data_swap
+@type     immediate
+@arity    0
+@match    ()
+@summary  swap current and previous data arrays
+@doc
+Exchanges the current data array and the one in the swap position.
+Usage: (1 2) (3 4) d<>d
+@code
+    return skode_exec_d_swap(ctx, s, args, argc);
+@end

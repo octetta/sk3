@@ -1,0 +1,14 @@
+@name     data_length
+@alias    dlen
+@group    data
+@c_name   skode_clause_data_length
+@type     immediate
+@arity    0
+@match    ()
+@summary  report data array length
+@doc
+Prints the data array length and returns it in @0. Use as an acknowledgement after piecewise uploads.
+Usage: dlen
+@code
+    return skode_exec_d_len(ctx, s, args, argc);
+@end

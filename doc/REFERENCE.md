@@ -9,10 +9,10 @@ Generated automatically by `tools/mkopcodes` from modular opcode definitions in 
 
 ## Architecture & System Overview
 
-- **Total Command Words**: 333
-- **Total Dispatch Clauses**: 687
+- **Total Command Words**: 344
+- **Total Dispatch Clauses**: 720
 - **Real-Time Audio Opcode Handlers**: 167 (audio-thread safe, zero allocation, zero string lookup)
-- **Immediate / Control Plane Clauses**: 520 (REPL / parser / file system / diagnostics)
+- **Immediate / Control Plane Clauses**: 553 (REPL / parser / file system / diagnostics)
 
 ### Functional Command Groups
 
@@ -33,9 +33,9 @@ Generated automatically by `tools/mkopcodes` from modular opcode definitions in 
 | rec | `rec` | 24 | Track stems, buffer recording, auto-trim, track routing |
 | midi | `midi` | 24 | MIDI devices, bindings, routes, file playback |
 | scope | `scope` | 4 | Oscilloscope shared-memory IPC and events |
-| ksynth | `ksynth` | 11 | KSynth DSL, array bridges, bytebeat eval |
+| ksynth | `ksynth` | 12 | KSynth DSL, array bridges, bytebeat eval |
 | macro | `macro` | 7 | User macro definition, storage, and execution |
-| data | `data` | 23 | Variables, Forth stack words, data arrays, string slots |
+| data | `data` | 33 | Variables, Forth stack words, data arrays, string slots |
 | vfs | `vfs` | 10 | Virtual file system, ZIP archives, script loading |
 | sys | `sys` | 34 | Hardware audio I/O, engine lifecycle, system diagnostics |
 
@@ -298,7 +298,7 @@ Triggers voice gate on.
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `285` (`skode_clause_inst_note_c591`)
+- **Discrete Opcode ID**: `285` (`skode_clause_inst_note_c624`)
 - **Summary**: trigger instrument note
 
 **Description & Details**:
@@ -312,7 +312,7 @@ Usage: i note
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `286` (`skode_clause_inst_note_c592`)
+- **Discrete Opcode ID**: `286` (`skode_clause_inst_note_c625`)
 - **Summary**: trigger instrument note with velocity
 
 **Description & Details**:
@@ -326,7 +326,7 @@ Usage: i note velocity
 
 - **Arity**: `3`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `287` (`skode_clause_inst_note_c593`)
+- **Discrete Opcode ID**: `287` (`skode_clause_inst_note_c626`)
 - **Summary**: trigger instrument note with velocity and cents
 
 **Description & Details**:
@@ -5901,7 +5901,7 @@ Usage: -j step
 
 - **Arity**: `3`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `265` (`skode_clause_pattern_loop_c431`)
+- **Discrete Opcode ID**: `265` (`skode_clause_pattern_loop_c464`)
 - **Summary**: pattern step loop counter and branch
 
 **Description & Details**:
@@ -6042,7 +6042,7 @@ Usage: zq mode (or pattern_queue mode)
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `266` (`skode_clause_pattern_ratchet_c432`)
+- **Discrete Opcode ID**: `266` (`skode_clause_pattern_ratchet_c465`)
 - **Summary**: set step ratchet multiplier
 
 **Description & Details**:
@@ -6249,7 +6249,7 @@ Usage: z??
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `264` (`skode_clause_pattern_state_set_c430`)
+- **Discrete Opcode ID**: `264` (`skode_clause_pattern_state_set_c463`)
 - **Summary**: set pattern state by explicit index
 
 **Description & Details**:
@@ -7205,7 +7205,7 @@ Usage: DO?
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `267` (`skode_clause_stream_copy_c442`)
+- **Discrete Opcode ID**: `267` (`skode_clause_stream_copy_c475`)
 - **Summary**: copy stream contents
 
 **Description & Details**:
@@ -7227,7 +7227,7 @@ Usage: /SC dst src
 
 - **Arity**: `3`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `270` (`skode_clause_stream_gen_c445`)
+- **Discrete Opcode ID**: `270` (`skode_clause_stream_gen_c478`)
 - **Summary**: configure virtual stream generator with default step 1.0
 
 **Description & Details**:
@@ -7241,7 +7241,7 @@ Usage: /SG stream_idx min max
 
 - **Arity**: `4`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `271` (`skode_clause_stream_gen_c446`)
+- **Discrete Opcode ID**: `271` (`skode_clause_stream_gen_c479`)
 - **Summary**: configure virtual stream generator with step
 
 **Description & Details**:
@@ -7255,7 +7255,7 @@ Usage: /SG stream_idx min max step
 
 - **Arity**: `5`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `272` (`skode_clause_stream_gen_c447`)
+- **Discrete Opcode ID**: `272` (`skode_clause_stream_gen_c480`)
 - **Summary**: configure virtual stream generator with step and mode
 
 **Description & Details**:
@@ -7277,7 +7277,7 @@ Usage: /SG stream_idx min max step mode
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `268` (`skode_clause_stream_mode_c443`)
+- **Discrete Opcode ID**: `268` (`skode_clause_stream_mode_c476`)
 - **Summary**: set stream playback mode
 
 **Description & Details**:
@@ -7299,7 +7299,7 @@ Usage: /SM stream_idx mode
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `269` (`skode_clause_stream_pos_c444`)
+- **Discrete Opcode ID**: `269` (`skode_clause_stream_pos_c477`)
 - **Summary**: set stream read position
 
 **Description & Details**:
@@ -9055,6 +9055,7 @@ Usage: /ss
 | Command | Alias | Clauses | Arity | Execution | Summary |
 |:---|:---|:---:|:---:|:---:|:---|
 | [`data_to_ksynth`](#data_to_ksynth) | `d>k` | 1 | 1 | Immediate | bind data array to KSynth variable |
+| [`ksynth_append_data`](#ksynth_append_data) | `k>>d` | 1 | 0 | Immediate | append KSynth result vector to data array |
 | [`ksynth_eval`](#ksynth_eval) | `ks` | 1 | 0 | Immediate | evaluate inline KSynth expression |
 | [`ksynth_load_file`](#ksynth_load_file) | `/ks` | 2 | 0..1 | Immediate | load KSynth script from file |
 | [`ksynth_load_slot`](#ksynth_load_slot) | `/k` | 2 | 1..2 | Immediate | load built-in KSynth instrument slot |
@@ -9084,6 +9085,28 @@ Usage: /ss
 ```text
 Binds active data buffer array to KSynth global variable index.
 Usage: d>k var
+```
+
+---
+
+### `ksynth_append_data`
+
+- **Alias**: `k>>d`
+- **Group**: `ksynth`
+- **Clause Count**: 1
+
+#### Clause 1: `ksynth_append_data()`
+
+- **Arity**: `0`
+- **Execution Model**: `immediate (control plane)`
+- **Feature Flag (`#ifdef`)**: `KSYNTH`
+- **Summary**: append KSynth result vector to data array
+
+**Description & Details**:
+
+```text
+Appends the most recent KSynth vector result to the data array instead of replacing it.
+Usage: k>>d
 ```
 
 ---
@@ -9599,11 +9622,18 @@ Usage: [program] e>slot (or [program] macro_store slot)
 
 | Command | Alias | Clauses | Arity | Execution | Summary |
 |:---|:---|:---:|:---:|:---:|:---|
+| [`args_append_data`](#args_append_data) | `a>>d` | 8 | 1..8 | Immediate | append arguments to the data array |
+| [`args_to_data`](#args_to_data) | `a>d` | 8 | 1..8 | Immediate | arguments become the data array |
 | [`data_buffer`](#data_buffer) | `D` | 2 | 0..1 | Immediate | query data buffer capacity |
 | [`data_clear`](#data_clear) | `/D` | 1 | 0 | Immediate | clear or print data buffer allocation |
+| [`data_concat`](#data_concat) | `d>>d` | 1 | 0 | Immediate | append current data array to previous, result becomes current |
 | [`data_fill`](#data_fill) | `d!` | 1 | 2 | Immediate | store value at data buffer index |
+| [`data_length`](#data_length) | `dlen` | 1 | 0 | Immediate | report data array length |
 | [`data_query`](#data_query) | `?d` | 1 | 0 | Immediate | dump data array contents |
 | [`data_scale`](#data_scale) | `d*` | 1 | 1 | Immediate | get value at data buffer index |
+| [`data_slice_to_args`](#data_slice_to_args) | `ds>a` | 1 | 2 | Immediate | replace argument list with a slice of the data array |
+| [`data_swap`](#data_swap) | `d<>d` | 1 | 0 | Immediate | swap current and previous data arrays |
+| [`data_to_args`](#data_to_args) | `d>a` | 5 | 0..4 | Immediate | push data array onto the argument list |
 | [`query_string`](#query_string) | `?s` | 3 | 0..2 | Immediate | print current string argument |
 | [`stack_clear`](#stack_clear) | `clr` | 5 | 0..4 | Immediate | clear argument stack |
 | [`stack_drop`](#stack_drop) | `drop` | 5 | 0..4 | Immediate | drop argument from stack |
@@ -9611,17 +9641,244 @@ Usage: [program] e>slot (or [program] macro_store slot)
 | [`stack_over`](#stack_over) | `over` | 5 | 0..4 | Immediate | duplicate second stack argument to top |
 | [`stack_rot`](#stack_rot) | `rot` | 5 | 0..4 | Immediate | rotate top three stack arguments |
 | [`stack_swap`](#stack_swap) | `swap` | 5 | 0..4 | Immediate | swap top two stack arguments |
+| [`string_concat`](#string_concat) | `s>>s` | 1 | 0 | Immediate | append current string to previous, result becomes current |
 | [`string_format`](#string_format) | `s%` | 5 | 0..4 | Immediate | format string template with arguments |
+| [`string_format_append`](#string_format_append) | `fmt>>s` | 5 | 0..4 | Immediate | format current string and append to previous string |
 | [`string_puts`](#string_puts) | `puts` | 2 | 0..1 | Immediate | print parser string buffer |
 | [`string_slot_load`](#string_slot_load) | `<s` | 1 | 1 | Immediate | load string from memory slot into parser buffer |
 | [`string_slot_query`](#string_slot_query) | `s?` | 2 | 0..1 | Immediate | query all string memory slots |
 | [`string_slot_store`](#string_slot_store) | `s>` | 1 | 1 | Immediate | save string from parser buffer into memory slot |
+| [`string_swap`](#string_swap) | `s<>s` | 1 | 0 | Immediate | swap current and previous strings |
 | [`var_add`](#var_add) | `a=` | 1 | 3 | Immediate | add two values and store in variable |
 | [`var_div`](#var_div) | `/=` | 1 | 3 | Immediate | divide two values and store in variable |
 | [`var_from_data`](#var_from_data) | `=d` | 1 | 2 | Immediate | copy data array element to variable |
 | [`var_mul`](#var_mul) | `*=` | 1 | 3 | Immediate | multiply two values and store in variable |
 | [`var_set`](#var_set) | `=` | 3 | 0..2 | Immediate | print all non-zero variables |
 | [`var_sub`](#var_sub) | `s=` | 1 | 3 | Immediate | subtract two values and store in variable |
+
+### `args_append_data`
+
+- **Alias**: `a>>d`
+- **Group**: `data`
+- **Clause Count**: 8
+
+#### Clause 1: `args_append_data(any)`
+
+- **Arity**: `1`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: append arguments to the data array
+
+**Description & Details**:
+
+```text
+Appends the arguments to the data array.
+Usage: 1 2 3 a>>d
+```
+
+#### Clause 2: `args_append_data(any, any)`
+
+- **Arity**: `2`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: append arguments to the data array
+
+**Description & Details**:
+
+```text
+Appends the arguments to the data array.
+Usage: 1 2 3 a>>d
+```
+
+#### Clause 3: `args_append_data(any, any, any)`
+
+- **Arity**: `3`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: append arguments to the data array
+
+**Description & Details**:
+
+```text
+Appends the arguments to the data array.
+Usage: 1 2 3 a>>d
+```
+
+#### Clause 4: `args_append_data(any, any, any, any)`
+
+- **Arity**: `4`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: append arguments to the data array
+
+**Description & Details**:
+
+```text
+Appends the arguments to the data array.
+Usage: 1 2 3 a>>d
+```
+
+#### Clause 5: `args_append_data(any, any, any, any, any)`
+
+- **Arity**: `5`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: append arguments to the data array
+
+**Description & Details**:
+
+```text
+Appends the arguments to the data array.
+Usage: 1 2 3 a>>d
+```
+
+#### Clause 6: `args_append_data(any, any, any, any, any, any)`
+
+- **Arity**: `6`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: append arguments to the data array
+
+**Description & Details**:
+
+```text
+Appends the arguments to the data array.
+Usage: 1 2 3 a>>d
+```
+
+#### Clause 7: `args_append_data(any, any, any, any, any, any, any)`
+
+- **Arity**: `7`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: append arguments to the data array
+
+**Description & Details**:
+
+```text
+Appends the arguments to the data array.
+Usage: 1 2 3 a>>d
+```
+
+#### Clause 8: `args_append_data(any, any, any, any, any, any, any, any)`
+
+- **Arity**: `8`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: append arguments to the data array
+
+**Description & Details**:
+
+```text
+Appends the arguments to the data array.
+Usage: 1 2 3 a>>d
+```
+
+---
+
+### `args_to_data`
+
+- **Alias**: `a>d`
+- **Group**: `data`
+- **Clause Count**: 8
+
+#### Clause 1: `args_to_data(any)`
+
+- **Arity**: `1`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: arguments become the data array
+
+**Description & Details**:
+
+```text
+Replaces the data array with the arguments (the previous array moves to the swap position).
+Usage: 1 2 3 a>d
+```
+
+#### Clause 2: `args_to_data(any, any)`
+
+- **Arity**: `2`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: arguments become the data array
+
+**Description & Details**:
+
+```text
+Replaces the data array with the arguments (the previous array moves to the swap position).
+Usage: 1 2 3 a>d
+```
+
+#### Clause 3: `args_to_data(any, any, any)`
+
+- **Arity**: `3`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: arguments become the data array
+
+**Description & Details**:
+
+```text
+Replaces the data array with the arguments (the previous array moves to the swap position).
+Usage: 1 2 3 a>d
+```
+
+#### Clause 4: `args_to_data(any, any, any, any)`
+
+- **Arity**: `4`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: arguments become the data array
+
+**Description & Details**:
+
+```text
+Replaces the data array with the arguments (the previous array moves to the swap position).
+Usage: 1 2 3 a>d
+```
+
+#### Clause 5: `args_to_data(any, any, any, any, any)`
+
+- **Arity**: `5`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: arguments become the data array
+
+**Description & Details**:
+
+```text
+Replaces the data array with the arguments (the previous array moves to the swap position).
+Usage: 1 2 3 a>d
+```
+
+#### Clause 6: `args_to_data(any, any, any, any, any, any)`
+
+- **Arity**: `6`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: arguments become the data array
+
+**Description & Details**:
+
+```text
+Replaces the data array with the arguments (the previous array moves to the swap position).
+Usage: 1 2 3 a>d
+```
+
+#### Clause 7: `args_to_data(any, any, any, any, any, any, any)`
+
+- **Arity**: `7`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: arguments become the data array
+
+**Description & Details**:
+
+```text
+Replaces the data array with the arguments (the previous array moves to the swap position).
+Usage: 1 2 3 a>d
+```
+
+#### Clause 8: `args_to_data(any, any, any, any, any, any, any, any)`
+
+- **Arity**: `8`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: arguments become the data array
+
+**Description & Details**:
+
+```text
+Replaces the data array with the arguments (the previous array moves to the swap position).
+Usage: 1 2 3 a>d
+```
+
+---
 
 ### `data_buffer`
 
@@ -9681,6 +9938,27 @@ Usage: /D (or data_clear)
 
 ---
 
+### `data_concat`
+
+- **Alias**: `d>>d`
+- **Group**: `data`
+- **Clause Count**: 1
+
+#### Clause 1: `data_concat()`
+
+- **Arity**: `0`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: append current data array to previous, result becomes current
+
+**Description & Details**:
+
+```text
+Concatenates the last two arrays: previous + current. The result is the current array.
+Usage: (1 2) (3 4) d>>d
+```
+
+---
+
 ### `data_fill`
 
 - **Alias**: `d!`
@@ -9699,6 +9977,27 @@ Usage: /D (or data_clear)
 ```text
 Sets data[index] = value in the internal data array.
 Usage: d! val index (or data_fill val index)
+```
+
+---
+
+### `data_length`
+
+- **Alias**: `dlen`
+- **Group**: `data`
+- **Clause Count**: 1
+
+#### Clause 1: `data_length()`
+
+- **Arity**: `0`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: report data array length
+
+**Description & Details**:
+
+```text
+Prints the data array length and returns it in @0. Use as an acknowledgement after piecewise uploads.
+Usage: dlen
 ```
 
 ---
@@ -9743,6 +10042,121 @@ Usage: ?d (or data_query)
 ```text
 Reads data[index] and pushes value onto argument stack.
 Usage: d* index (or data_scale index)
+```
+
+---
+
+### `data_slice_to_args`
+
+- **Alias**: `ds>a`
+- **Group**: `data`
+- **Clause Count**: 1
+
+#### Clause 1: `data_slice_to_args(finite, finite)`
+
+- **Arity**: `2`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: replace argument list with a slice of the data array
+
+**Description & Details**:
+
+```text
+Usage: start count ds>a word
+Replaces the argument list with count values of the data array starting at start.
+```
+
+---
+
+### `data_swap`
+
+- **Alias**: `d<>d`
+- **Group**: `data`
+- **Clause Count**: 1
+
+#### Clause 1: `data_swap()`
+
+- **Arity**: `0`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: swap current and previous data arrays
+
+**Description & Details**:
+
+```text
+Exchanges the current data array and the one in the swap position.
+Usage: (1 2) (3 4) d<>d
+```
+
+---
+
+### `data_to_args`
+
+- **Alias**: `d>a`
+- **Group**: `data`
+- **Clause Count**: 5
+
+#### Clause 1: `data_to_args()`
+
+- **Arity**: `0`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: push data array onto the argument list
+
+**Description & Details**:
+
+```text
+Pushes the data array onto the argument list (after any existing arguments, up to the argument limit) and keeps the list for the next word.
+Usage: (0.002 0.25 1 5) d>a t
+```
+
+#### Clause 2: `data_to_args(any)`
+
+- **Arity**: `1`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: push data array onto the argument list
+
+**Description & Details**:
+
+```text
+Pushes the data array onto the argument list (after any existing arguments, up to the argument limit) and keeps the list for the next word.
+Usage: (0.002 0.25 1 5) d>a t
+```
+
+#### Clause 3: `data_to_args(any, any)`
+
+- **Arity**: `2`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: push data array onto the argument list
+
+**Description & Details**:
+
+```text
+Pushes the data array onto the argument list (after any existing arguments, up to the argument limit) and keeps the list for the next word.
+Usage: (0.002 0.25 1 5) d>a t
+```
+
+#### Clause 4: `data_to_args(any, any, any)`
+
+- **Arity**: `3`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: push data array onto the argument list
+
+**Description & Details**:
+
+```text
+Pushes the data array onto the argument list (after any existing arguments, up to the argument limit) and keeps the list for the next word.
+Usage: (0.002 0.25 1 5) d>a t
+```
+
+#### Clause 5: `data_to_args(any, any, any, any)`
+
+- **Arity**: `4`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: push data array onto the argument list
+
+**Description & Details**:
+
+```text
+Pushes the data array onto the argument list (after any existing arguments, up to the argument limit) and keeps the list for the next word.
+Usage: (0.002 0.25 1 5) d>a t
 ```
 
 ---
@@ -10210,6 +10624,27 @@ Swaps top two arguments on parser stack.
 
 ---
 
+### `string_concat`
+
+- **Alias**: `s>>s`
+- **Group**: `data`
+- **Clause Count**: 1
+
+#### Clause 1: `string_concat()`
+
+- **Arity**: `0`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: append current string to previous, result becomes current
+
+**Description & Details**:
+
+```text
+Concatenates the last two strings: previous + current. The result is the current string.
+Usage: [a] [b] s>>s   (gives "ab")
+```
+
+---
+
 ### `string_format`
 
 - **Alias**: `s%`
@@ -10279,6 +10714,79 @@ Usage: [template] arg0 arg1 arg2 s%
 ```text
 Substitutes @0, @1, @2, @3 in template string with stack arguments.
 Usage: [template] arg0 arg1 arg2 arg3 s%
+```
+
+---
+
+### `string_format_append`
+
+- **Alias**: `fmt>>s`
+- **Group**: `data`
+- **Clause Count**: 5
+
+#### Clause 1: `string_format_append()`
+
+- **Arity**: `0`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: format current string and append to previous string
+
+**Description & Details**:
+
+```text
+Treats the current string as a template (@0, @1 ... as in s%), formats it with the arguments and appends the result to the previous string. The accumulation becomes the current string.
+Usage: [so far] [value @0 @1] 3 4 fmt>>s
+```
+
+#### Clause 2: `string_format_append(any)`
+
+- **Arity**: `1`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: format current string and append to previous string
+
+**Description & Details**:
+
+```text
+Treats the current string as a template (@0, @1 ... as in s%), formats it with the arguments and appends the result to the previous string. The accumulation becomes the current string.
+Usage: [so far] [value @0 @1] 3 4 fmt>>s
+```
+
+#### Clause 3: `string_format_append(any, any)`
+
+- **Arity**: `2`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: format current string and append to previous string
+
+**Description & Details**:
+
+```text
+Treats the current string as a template (@0, @1 ... as in s%), formats it with the arguments and appends the result to the previous string. The accumulation becomes the current string.
+Usage: [so far] [value @0 @1] 3 4 fmt>>s
+```
+
+#### Clause 4: `string_format_append(any, any, any)`
+
+- **Arity**: `3`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: format current string and append to previous string
+
+**Description & Details**:
+
+```text
+Treats the current string as a template (@0, @1 ... as in s%), formats it with the arguments and appends the result to the previous string. The accumulation becomes the current string.
+Usage: [so far] [value @0 @1] 3 4 fmt>>s
+```
+
+#### Clause 5: `string_format_append(any, any, any, any)`
+
+- **Arity**: `4`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: format current string and append to previous string
+
+**Description & Details**:
+
+```text
+Treats the current string as a template (@0, @1 ... as in s%), formats it with the arguments and appends the result to the previous string. The accumulation becomes the current string.
+Usage: [so far] [value @0 @1] 3 4 fmt>>s
 ```
 
 ---
@@ -10388,6 +10896,27 @@ Usage: s? slot
 ```text
 Stores string from active parser buffer into slot (0..15).
 Usage: [string] s> slot
+```
+
+---
+
+### `string_swap`
+
+- **Alias**: `s<>s`
+- **Group**: `data`
+- **Clause Count**: 1
+
+#### Clause 1: `string_swap()`
+
+- **Arity**: `0`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: swap current and previous strings
+
+**Description & Details**:
+
+```text
+Exchanges the current string and the one in the swap position.
+Usage: [a] [b] s<>s
 ```
 
 ---
