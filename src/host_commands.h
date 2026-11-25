@@ -378,7 +378,40 @@ static inline int skred_host_staging_get_files(skred_staged_file_t *out_files, i
     return count;
 }
 
-static inline void skred_host_cmd_help(const skred_host_env_t *env) {
+static inline void skred_host_cmd_help_midi(const skred_host_env_t *env) {
+    env->print(env->userdata,
+        "HOW-TO: VMPK & MIDI KEYBOARD SETUP\n"
+        "1. Configure VMPK (Virtual MIDI Piano Keyboard):\n"
+        "   - Open VMPK -> Edit -> MIDI Connections (Ctrl+C)\n"
+        "   - Linux: Set MIDI OUT Driver to 'ALSA'\n"
+        "     Set Output MIDI Connection to 'Midi Through Port-0' or 'Virtual Keyboard'\n"
+        "   - macOS/Windows: Set MIDI OUT to IAC Driver / loopMIDI / virtual port\n"
+        "2. Connect in sk3:\n"
+        "   - Type '-mls' to list detected MIDI input ports\n"
+        "   - Type '-min <idx>' to connect (e.g. -min 0 for Midi Through)\n"
+        "   - Type '-mstatus' to verify active connection\n"
+        "3. Patch an ADSR Voice & Route MIDI:\n"
+        "   - Configure voice 0 with saw wave and ADSR envelope (Attack, Decay, Sustain, Release):\n"
+        "       v0 w1 a-6 t 0.02 0.2 0.7 0.3\n"
+        "   - Route incoming MIDI (. = any channel) to voice 0:\n"
+        "       /mv . 0\n"
+        "4. Play:\n"
+        "   - Play keys in VMPK: Note-on triggers attack/decay/sustain at note velocity\n"
+        "   - Note-off sets velocity to 0 and enters release (0.3s)\n"
+        "   - Use '/mR' to view routes, '/mC' to clear, '-panic' to silence all\n");
+}
+
+static inline void skred_host_cmd_help(const skred_host_env_t *env, const char *topic) {
+    if (topic && *topic) {
+        if (strcasecmp(topic, "midi") == 0 || strcasecmp(topic, "vmpk") == 0 || strcasecmp(topic, "keyboard") == 0) {
+            skred_host_cmd_help_midi(env);
+            return;
+        }
+        char msg[128];
+        snprintf(msg, sizeof(msg), "Unknown help topic: \"%s\". Try: -help, -help midi\n", topic);
+        env->print(env->userdata, msg);
+        return;
+    }
     env->print(env->userdata,
         "HOST ENVIRONMENT COMMANDS:\n"
         "  -restart [voices] [bufsize]  Restart audio engine (e.g. -restart 32 256)\n"
@@ -405,8 +438,11 @@ static inline void skred_host_cmd_help(const skred_host_env_t *env) {
         "  -zip <archive.zip>           Pack current staging tray into zip (aliased: -pack)\n"
         "  -cd [dir]                    Change directory (defaults to home ~; supports spaces)\n"
         "  -pwd                         Display current working directory\n"
-        "  -help                        Show this cheat sheet\n"
-        "  -quit (or exit)              Exit application\n");
+        "  -help [topic]                Show cheat sheet or topic guide (e.g. -help midi)\n"
+        "  -howto <topic>               Step-by-step how-to guide (e.g. -howto midi)\n"
+        "  -quit (or exit)              Exit application\n"
+        "\nHOW-TO GUIDES:\n"
+        "  Type '-help midi' (or -howto midi) for VMPK keyboard setup & ADSR routing guide.\n");
 }
 
 /*
@@ -419,7 +455,10 @@ static inline int skred_host_execute(const char *cmd_line, const skred_host_env_
 
     /* Baseline rule: strings starting with . or - are host commands */
     bool is_dot_or_dash = (*cmd_line == '.' || *cmd_line == '-');
-    bool is_exit = (strcmp(cmd_line, "exit") == 0 || strcmp(cmd_line, "quit") == 0 || strcmp(cmd_line, "pwd") == 0 || strcmp(cmd_line, "help") == 0);
+    bool is_exit = (strcmp(cmd_line, "exit") == 0 || strcmp(cmd_line, "quit") == 0 || strcmp(cmd_line, "pwd") == 0 ||
+                    strcmp(cmd_line, "help") == 0 || strncmp(cmd_line, "help ", 5) == 0 ||
+                    strcmp(cmd_line, "howto") == 0 || strncmp(cmd_line, "howto ", 6) == 0 ||
+                    strcmp(cmd_line, "how-to") == 0 || strncmp(cmd_line, "how-to ", 7) == 0);
     bool is_slash_dev = (strncmp(cmd_line, "/als", 4) == 0 ||
                          strncmp(cmd_line, "/aout", 5) == 0 ||
                          strncmp(cmd_line, "/ain", 4) == 0 ||
@@ -430,7 +469,12 @@ static inline int skred_host_execute(const char *cmd_line, const skred_host_env_
                          strncmp(cmd_line, "/m?", 3) == 0 ||
                          strcmp(cmd_line, "/?") == 0 ||
                          strcmp(cmd_line, "/h") == 0 ||
-                         strcmp(cmd_line, "/help") == 0);
+                         strcmp(cmd_line, "/help") == 0 ||
+                         strncmp(cmd_line, "/help ", 6) == 0 ||
+                         strcmp(cmd_line, "/howto") == 0 ||
+                         strncmp(cmd_line, "/howto ", 7) == 0 ||
+                         strcmp(cmd_line, "/how-to") == 0 ||
+                         strncmp(cmd_line, "/how-to ", 8) == 0);
 
     if (!is_dot_or_dash && !is_exit && !is_slash_dev) {
         return 0; /* Forward to skred_command() */
@@ -477,8 +521,9 @@ static inline int skred_host_execute(const char *cmd_line, const skred_host_env_
         return 1;
     }
 
-    if (strcmp(norm, "help") == 0 || strcmp(norm, "h") == 0 || strcmp(norm, "?") == 0) {
-        skred_host_cmd_help(env);
+    if (strcmp(norm, "help") == 0 || strcmp(norm, "h") == 0 || strcmp(norm, "?") == 0 ||
+        strcmp(norm, "howto") == 0 || strcmp(norm, "how-to") == 0) {
+        skred_host_cmd_help(env, arg1);
         return 1;
     }
 

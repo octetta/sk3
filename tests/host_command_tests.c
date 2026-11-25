@@ -114,6 +114,23 @@ int main(void) {
     assert(strstr(g_last_output, "HOST ENVIRONMENT COMMANDS") != NULL);
 
     reset_test_state();
+    assert(skred_host_execute("-help midi", &env) == 1);
+    assert(strstr(g_last_output, "VMPK & MIDI KEYBOARD SETUP") != NULL);
+    assert(strstr(g_last_output, "v0 w1 a-6 t 0.02 0.2 0.7 0.3") != NULL);
+
+    reset_test_state();
+    assert(skred_host_execute("-howto midi", &env) == 1);
+    assert(strstr(g_last_output, "VMPK & MIDI KEYBOARD SETUP") != NULL);
+
+    reset_test_state();
+    assert(skred_host_execute("howto midi", &env) == 1);
+    assert(strstr(g_last_output, "VMPK & MIDI KEYBOARD SETUP") != NULL);
+
+    reset_test_state();
+    assert(skred_host_execute("-help invalid_topic_xyz", &env) == 1);
+    assert(strstr(g_last_output, "Unknown help topic") != NULL);
+
+    reset_test_state();
     assert(skred_host_execute("-quit", &env) == 1);
     assert(g_quit_called == 1);
 
