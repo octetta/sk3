@@ -981,6 +981,12 @@ int ands_consume(ands_t *s, char *line) {
                     s->state = START;
                 } else if (IS_NUMBER_EX(*ptr)) {
                     buffer_push(&s->num, *ptr);
+                } else if (IS_COMMENT(*ptr)) {
+                    action_finish_array(s);
+                    while (ptr < end && *ptr != '\n' && *ptr != '\r' && !IS_ARRAY_END(*ptr)) ptr++;
+                    if (ptr < end && IS_ARRAY_END(*ptr)) {
+                        ptr--;
+                    }
                 } else if (IS_VARIABLE(*ptr)) {
                     action_finish_array(s);
                     ptr++;

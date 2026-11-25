@@ -662,6 +662,20 @@ static void test_array_append_events(void) {
   expect_event(test, &r, 2, CHUNK_END, "----");
 }
 
+static void test_array_comments(void) {
+  const char *test = "array comments";
+  ands_t *s = new_plain(test);
+  feed(s, "( 10 20 # inline comment\n 30 40 )");
+  { double w[] = {10, 20, 30, 40}; expect_data(test, s, w, 4); }
+
+  feed(s, "( 1 2 3 # comment at end )");
+  { double w[] = {1, 2, 3}; expect_data(test, s, w, 3); }
+
+  feed(s, "(( 4 5 # appended with comment\n 6 )");
+  { double w[] = {1, 2, 3, 4, 5, 6}; expect_data(test, s, w, 6); }
+  ands_free(s);
+}
+
 static void test_array_growth_and_ceiling(void) {
   const char *test = "array growth and ceiling";
   ands_t *s = new_plain(test);
@@ -851,6 +865,7 @@ int main(void) {
   test_macro_management_api();
   test_array_append_form();
   test_array_append_events();
+  test_array_comments();
   test_array_growth_and_ceiling();
   test_ceiling_applies_within_capacity();
   test_truncated_append_is_rolled_back();

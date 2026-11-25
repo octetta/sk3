@@ -110,7 +110,7 @@ static int run_command(const char *line) {
     return handle_wave_command(line);
   }
 
-  char buf[4096];
+  char buf[8192];
   snprintf(buf, sizeof(buf), "%s", line);
   int r = skred_command(buf);
   char *log = skred_log();
@@ -272,7 +272,7 @@ int main(int argc, char **argv) {
   }
 
   while (1) {
-    char line[1024];
+    char line[8192];
     char *out = NULL;
     if (use_editor) {
       int r = uedit("# ", line, sizeof(line) - 1);

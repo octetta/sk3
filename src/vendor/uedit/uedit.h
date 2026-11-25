@@ -16,7 +16,7 @@
     #include <unistd.h>
 #endif
 
-#define UEDIT_MAX_LINE 1024
+#define UEDIT_MAX_LINE 8192
 #define CTRL_KEY(k) ((k) & 0x1f)
 #define UEDIT_EVENT (-2)
 #define UEDIT_KEY_LEFT (-10)
@@ -68,6 +68,7 @@ static int uedit_raw_enabled = 0;
 static int uedit_atexit_registered = 0;
 static void uedit_disable_raw_mode(void) {
     if (!uedit_raw_enabled) return;
+    printf("\033[?2004l"); fflush(stdout);
     tcsetattr(STDIN_FILENO, TCSANOW, &uedit_orig_termios);
     uedit_raw_enabled = 0;
 }
@@ -83,6 +84,7 @@ static int uedit_enable_raw_mode(void) {
     raw.c_cc[VMIN] = 1;
     raw.c_cc[VTIME] = 0;
     if (tcsetattr(STDIN_FILENO, TCSANOW, &raw) != 0) return -1;
+    printf("\033[?2004h"); fflush(stdout);
     uedit_raw_enabled = 1;
     return 0;
 }
@@ -92,6 +94,7 @@ static int uedit_raw_enabled = 0;
 static int uedit_atexit_registered = 0;
 static void uedit_disable_raw_mode(void) {
     if (!uedit_raw_enabled) return;
+    printf("\033[?2004l"); fflush(stdout);
     SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE),  uedit_orig_in_mode);
     SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), uedit_orig_out_mode);
     uedit_raw_enabled = 0;
@@ -107,6 +110,7 @@ static int uedit_enable_raw_mode(void) {
     }
     SetConsoleMode(hIn, uedit_orig_in_mode & ~(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT));
     SetConsoleMode(hOut, uedit_orig_out_mode | 0x0004);
+    printf("\033[?2004h"); fflush(stdout);
     uedit_raw_enabled = 1;
     return 0;
 }
@@ -278,6 +282,53 @@ static int uedit_with_event(const char *prompt, char *buf, int max_line,
             c = GETCH();
             if (c == '[') {
                 c = GETCH();
+                if (c == '2') {
+                    int c3 = GETCH();
+                    if (c3 == '0') {
+                        int c4 = GETCH();
+                        int c5 = GETCH();
+                        if (c4 == '0' && c5 == '~') {
+                            /* Bracketed paste start (\033[200~) */
+                            int has_nl = 0;
+                            while (1) {
+                                int ch = GETCH();
+                                if (ch == EOF) break;
+                                if (ch == 27) {
+                                    int p1 = GETCH();
+                                    if (p1 == '[') {
+                                        int p2 = GETCH();
+                                        if (p2 == '2') {
+                                            int p3 = GETCH();
+                                            int p4 = GETCH();
+                                            int p5 = GETCH();
+                                            if (p3 == '0' && p4 == '1' && p5 == '~') {
+                                                /* Bracketed paste end (\033[201~) */
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    continue;
+                                }
+                                if (ch == '\r') ch = '\n';
+                                if (ch == '\n') has_nl = 1;
+                                if ((ch == '\n' || (ch >= 32 && ch <= 126) || (unsigned char)ch >= 128) && len < max_line - 1) {
+                                    memmove(&buf[cur + 1], &buf[cur], len - cur);
+                                    buf[cur] = (char)ch;
+                                    len++;
+                                    cur++;
+                                }
+                            }
+                            buf[len] = '\0';
+                            if (has_nl) {
+                                putchar('\n');
+                                uedit_add_history(buf);
+                                break;
+                            }
+                            uedit_refresh_line(prompt, buf, cur);
+                            continue;
+                        }
+                    }
+                }
                 if (c == 'D' && cur > 0) cur--;
                 else if (c == 'C' && cur < len) cur++;
                 else if (c == 'A' || c == 'B') { /* Up / Down */
