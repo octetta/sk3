@@ -113,6 +113,64 @@ static inline const char *skred_host_basename(const char *path) {
     return base ? base + 1 : path;
 }
 
+static inline void skred_host_extract_path(const char *str, char *out, size_t out_sz) {
+    if (!out || out_sz == 0) return;
+    out[0] = '\0';
+    if (!str) return;
+
+    while (isspace((unsigned char)*str)) str++;
+    if (!*str) return;
+
+    char raw[1024];
+    size_t ri = 0;
+
+    if (*str == '"' || *str == '\'') {
+        char quote = *str++;
+        while (*str && *str != quote && ri < sizeof(raw) - 1) {
+            if (*str == '\\' && (*(str + 1) == quote || *(str + 1) == '\\')) {
+                str++;
+            }
+            raw[ri++] = *str++;
+        }
+    } else if (*str == '[') {
+        str++;
+        while (*str && *str != ']' && ri < sizeof(raw) - 1) {
+            raw[ri++] = *str++;
+        }
+    } else {
+        while (*str && ri < sizeof(raw) - 1) {
+            if (*str == '\\' && isspace((unsigned char)*(str + 1))) {
+                str++;
+            }
+            raw[ri++] = *str++;
+        }
+        while (ri > 0 && isspace((unsigned char)raw[ri - 1])) {
+            ri--;
+        }
+    }
+    raw[ri] = '\0';
+
+    /* Tilde (~) expansion */
+    if (raw[0] == '~' && (raw[1] == '/' || raw[1] == '\\' || raw[1] == '\0')) {
+#ifdef _WIN32
+        const char *home = getenv("USERPROFILE");
+        if (!home || !home[0]) home = getenv("HOME");
+#else
+        const char *home = getenv("HOME");
+#endif
+        if (home && home[0]) {
+            if (raw[1] == '\0') {
+                snprintf(out, out_sz, "%s", home);
+            } else {
+                snprintf(out, out_sz, "%s%s", home, raw + 1);
+            }
+            return;
+        }
+    }
+
+    snprintf(out, out_sz, "%s", raw);
+}
+
 static inline bool skred_host_copy_file(const char *src, const char *dst) {
     FILE *in = fopen(src, "rb");
     if (!in) return false;
@@ -151,8 +209,11 @@ static inline void skred_host_cmd_help(const skred_host_env_t *env) {
         "  -min <index|off>             Open MIDI input port (-min off to close)\n"
         "  -mout <index|off>            Open MIDI output port (-mout off to close)\n"
         "  -mstatus                     Display active MIDI port connections\n"
-        "  -add <path>                  Attach file/zip to virtual staging environment\n"
-        "  -del <name>                  Remove attached file from staging environment\n"
+        "  -add <path>                  Attach file/zip to staging area (supports spaces & ~)\n"
+        "  -del <name>                  Remove attached file from staging area (supports spaces)\n"
+        "  -ls                          List attached staged files and environment paths\n"
+        "  -cd [dir]                    Change directory (defaults to home ~; supports spaces)\n"
+        "  -pwd                         Display current working directory\n"
         "  -help                        Show this cheat sheet\n"
         "  -quit (or exit)              Exit application\n");
 }
@@ -167,7 +228,7 @@ static inline int skred_host_execute(const char *cmd_line, const skred_host_env_
 
     /* Baseline rule: strings starting with . or - are host commands */
     bool is_dot_or_dash = (*cmd_line == '.' || *cmd_line == '-');
-    bool is_exit = (strcmp(cmd_line, "exit") == 0 || strcmp(cmd_line, "quit") == 0);
+    bool is_exit = (strcmp(cmd_line, "exit") == 0 || strcmp(cmd_line, "quit") == 0 || strcmp(cmd_line, "pwd") == 0);
     bool is_slash_dev = (strncmp(cmd_line, "/als", 4) == 0 ||
                          strncmp(cmd_line, "/aout", 5) == 0 ||
                          strncmp(cmd_line, "/ain", 4) == 0 ||
@@ -181,17 +242,30 @@ static inline int skred_host_execute(const char *cmd_line, const skred_host_env_
         return 0; /* Forward to skred_command() */
     }
 
-    /* Tokenize command */
-    char line_copy[1024];
-    strncpy(line_copy, cmd_line, sizeof(line_copy) - 1);
-    line_copy[sizeof(line_copy) - 1] = '\0';
+    /* Extract action and remainder of the command line */
+    char action[64];
+    size_t ai = 0;
+    const char *p = cmd_line;
+    while (*p && !isspace((unsigned char)*p) && ai < sizeof(action) - 1) {
+        action[ai++] = *p++;
+    }
+    action[ai] = '\0';
 
-    char *saveptr = NULL;
-    char *action = strtok_r(line_copy, " \t\r\n", &saveptr);
-    if (!action) return 1;
+    while (isspace((unsigned char)*p)) p++;
+    const char *remainder = p;
 
-    char *arg1 = strtok_r(NULL, " \t\r\n", &saveptr);
-    char *arg2 = strtok_r(NULL, " \t\r\n", &saveptr);
+    char arg1_buf[256] = {0};
+    char arg2_buf[256] = {0};
+    char *arg1 = NULL;
+    char *arg2 = NULL;
+    if (*remainder) {
+        if (sscanf(remainder, "%255s %255s", arg1_buf, arg2_buf) >= 1) {
+            arg1 = arg1_buf;
+        }
+        if (arg2_buf[0]) {
+            arg2 = arg2_buf;
+        }
+    }
 
     /* Normalize leading . or - */
     const char *norm = action;
@@ -399,20 +473,11 @@ static inline int skred_host_execute(const char *cmd_line, const skred_host_env_
 
     /* --- File Attachment Staging Controls --- */
     if (strcmp(norm, "add") == 0) {
-        if (!arg1) {
+        char path_clean[1024] = {0};
+        skred_host_extract_path(remainder, path_clean, sizeof(path_clean));
+        if (path_clean[0] == '\0') {
             env->print(env->userdata, "Usage: -add <filepath>\n");
             return 1;
-        }
-        /* Strip surrounding brackets or quotes if present */
-        char path_clean[512];
-        strncpy(path_clean, arg1, sizeof(path_clean) - 1);
-        path_clean[sizeof(path_clean) - 1] = '\0';
-        size_t plen = strlen(path_clean);
-        if (plen >= 2 && ((path_clean[0] == '[' && path_clean[plen-1] == ']') ||
-                          (path_clean[0] == '"' && path_clean[plen-1] == '"') ||
-                          (path_clean[0] == '\'' && path_clean[plen-1] == '\''))) {
-            path_clean[plen-1] = '\0';
-            memmove(path_clean, path_clean + 1, plen - 1);
         }
 
         /* Check if zip file */
@@ -438,16 +503,130 @@ static inline int skred_host_execute(const char *cmd_line, const skred_host_env_
     }
 
     if (strcmp(norm, "del") == 0 || strcmp(norm, "rm") == 0 || strcmp(norm, "remove") == 0) {
-        if (!arg1) {
+        char del_name[1024] = {0};
+        skred_host_extract_path(remainder, del_name, sizeof(del_name));
+        if (del_name[0] == '\0') {
             env->print(env->userdata, "Usage: -del <filename>\n");
             return 1;
         }
         char target_path[1024];
-        snprintf(target_path, sizeof(target_path), "%s/%s", s_host_staging_dir, skred_host_basename(arg1));
+        snprintf(target_path, sizeof(target_path), "%s/%s", s_host_staging_dir, skred_host_basename(del_name));
         if (skred_unlink(target_path) == 0) {
-            env->print(env->userdata, "Removed [%s] from staging area.\n", skred_host_basename(arg1));
+            env->print(env->userdata, "Removed [%s] from staging area.\n", skred_host_basename(del_name));
         } else {
-            env->print(env->userdata, "Error: Could not find or delete [%s] in staging area.\n", skred_host_basename(arg1));
+            env->print(env->userdata, "Error: Could not find or delete [%s] in staging area.\n", skred_host_basename(del_name));
+        }
+        return 1;
+    }
+
+    /* --- Staging & Environment Inspection --- */
+    if (strcmp(norm, "ls") == 0 || strcmp(norm, "staged") == 0 || strcmp(norm, "files") == 0) {
+        skred_host_staging_init();
+        env->print(env->userdata, "# staging area: %s\n", s_host_staging_dir);
+        int count = 0;
+#ifdef _WIN32
+        char search_pattern[MAX_PATH];
+        snprintf(search_pattern, sizeof(search_pattern), "%s\\*.*", s_host_staging_dir);
+        WIN32_FIND_DATAA fd;
+        HANDLE hFind = FindFirstFileA(search_pattern, &fd);
+        if (hFind != INVALID_HANDLE_VALUE) {
+            do {
+                if (strcmp(fd.cFileName, ".") != 0 && strcmp(fd.cFileName, "..") != 0) {
+                    count++;
+                    uint64_t sz = ((uint64_t)fd.nFileSizeHigh << 32) | fd.nFileSizeLow;
+                    if (sz < 1024) env->print(env->userdata, "  %d. %s (%llu B)\n", count, fd.cFileName, (unsigned long long)sz);
+                    else if (sz < 1024 * 1024) env->print(env->userdata, "  %d. %s (%.1f KB)\n", count, fd.cFileName, (double)sz / 1024.0);
+                    else env->print(env->userdata, "  %d. %s (%.1f MB)\n", count, fd.cFileName, (double)sz / (1024.0 * 1024.0));
+                }
+            } while (FindNextFileA(hFind, &fd));
+            FindClose(hFind);
+        }
+#else
+        DIR *d = opendir(s_host_staging_dir);
+        if (d) {
+            struct dirent *dir;
+            while ((dir = readdir(d)) != NULL) {
+                if (strcmp(dir->d_name, ".") != 0 && strcmp(dir->d_name, "..") != 0) {
+                    count++;
+                    char filepath[1024];
+                    snprintf(filepath, sizeof(filepath), "%s/%s", s_host_staging_dir, dir->d_name);
+                    struct stat st;
+                    long long sz = 0;
+                    if (stat(filepath, &st) == 0) sz = (long long)st.st_size;
+                    if (sz < 1024) env->print(env->userdata, "  %d. %s (%lld B)\n", count, dir->d_name, sz);
+                    else if (sz < 1024 * 1024) env->print(env->userdata, "  %d. %s (%.1f KB)\n", count, dir->d_name, (double)sz / 1024.0);
+                    else env->print(env->userdata, "  %d. %s (%.1f MB)\n", count, dir->d_name, (double)sz / (1024.0 * 1024.0));
+                }
+            }
+            closedir(d);
+        }
+#endif
+        if (count == 0) {
+            env->print(env->userdata, "  (no files currently attached in staging area)\n");
+        }
+        if (skred_vfs_mode() != SKRED_VFS_DISK) {
+            env->print(env->userdata, "# mounted archive: %s (cwd: %s)\n", skred_vfs_root(), skred_getcwd());
+        }
+        char cwd[1024];
+        if (getcwd(cwd, sizeof(cwd))) {
+            env->print(env->userdata, "# working dir: %s\n", cwd);
+        }
+        return 1;
+    }
+
+    /* --- Directory Navigation --- */
+    if (strcmp(norm, "cd") == 0) {
+        char target_dir[1024] = {0};
+        skred_host_extract_path(remainder, target_dir, sizeof(target_dir));
+        if (target_dir[0] == '\0') {
+#ifdef _WIN32
+            const char *home = getenv("USERPROFILE");
+            if (!home || !home[0]) home = getenv("HOME");
+#else
+            const char *home = getenv("HOME");
+#endif
+            if (home && home[0]) {
+                snprintf(target_dir, sizeof(target_dir), "%s", home);
+            } else {
+                snprintf(target_dir, sizeof(target_dir), "/");
+            }
+        }
+
+        if (skred_vfs_mode() != SKRED_VFS_DISK) {
+            if (skred_chdir(target_dir)) {
+                env->print(env->userdata, "VFS directory changed: %s (cwd: %s)\n", skred_vfs_root(), skred_getcwd());
+            } else {
+                env->print(env->userdata, "Error: VFS directory '%s' not found in archive.\n", target_dir);
+            }
+            return 1;
+        }
+
+#ifdef _WIN32
+        int chdir_res = _chdir(target_dir);
+#else
+        int chdir_res = chdir(target_dir);
+#endif
+        if (chdir_res == 0) {
+            skred_chdir(target_dir);
+            char cwd[1024];
+            if (getcwd(cwd, sizeof(cwd))) {
+                env->print(env->userdata, "Current directory: %s\n", cwd);
+            } else {
+                env->print(env->userdata, "Current directory changed to %s\n", target_dir);
+            }
+        } else {
+            env->print(env->userdata, "Error: Cannot change directory to '%s'\n", target_dir);
+        }
+        return 1;
+    }
+
+    if (strcmp(norm, "pwd") == 0) {
+        char cwd[1024];
+        if (getcwd(cwd, sizeof(cwd))) {
+            env->print(env->userdata, "Working directory: %s\n", cwd);
+        }
+        if (skred_vfs_mode() != SKRED_VFS_DISK) {
+            env->print(env->userdata, "VFS root: %s (cwd: %s)\n", skred_vfs_root(), skred_getcwd());
         }
         return 1;
     }

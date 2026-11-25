@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <unistd.h>
 #include "../src/api.h"
 #include "../src/host_commands.h"
 #include "../src/exp-vfs/skred_vfs.h"
@@ -153,21 +154,107 @@ int main(void) {
     assert(strstr((char *)read_data, "Hello Staged World 42!") != NULL);
     free(read_data);
 
-    // Test -del
+    /* 7. Test -add and -del with SPACES in file path */
+    char tmp_space_src[256];
+    snprintf(tmp_space_src, sizeof(tmp_space_src), "/tmp/My Test Track %d.wav", (int)getpid());
+    FILE *fspace = fopen(tmp_space_src, "w");
+    assert(fspace != NULL);
+    fprintf(fspace, "AudioDataWithSpaces");
+    fclose(fspace);
+
+    // Test quoted add
+    char add_space_cmd[512];
+    snprintf(add_space_cmd, sizeof(add_space_cmd), "-add \"%s\"", tmp_space_src);
+    reset_test_state();
+    assert(skred_host_execute(add_space_cmd, &env) == 1);
+    assert(strstr(g_last_output, "Attached") != NULL);
+
+    // Read staged file with spaces
+    char space_bname[256];
+    snprintf(space_bname, sizeof(space_bname), "My Test Track %d.wav", (int)getpid());
+    read_data = NULL;
+    read_sz = 0;
+    read_ok = skred_vfs_read_file(space_bname, &read_data, &read_sz);
+    assert(read_ok == true);
+    assert(read_data != NULL);
+    assert(strstr((char *)read_data, "AudioDataWithSpaces") != NULL);
+    free(read_data);
+
+    /* 8. Test -ls (listing staged files) */
+    reset_test_state();
+    assert(skred_host_execute("-ls", &env) == 1);
+
+    /* 9. Test -del with spaces */
+    char del_space_cmd[512];
+    snprintf(del_space_cmd, sizeof(del_space_cmd), "-del \"%s\"", space_bname);
+    reset_test_state();
+    assert(skred_host_execute(del_space_cmd, &env) == 1);
+    assert(strstr(g_last_output, "Removed") != NULL);
+
+    // Verify deleted
+    read_data = NULL;
+    read_sz = 0;
+    assert(skred_vfs_read_file(space_bname, &read_data, &read_sz) == false);
+
+    // Delete normal staged file
     char del_cmd[512];
     snprintf(del_cmd, sizeof(del_cmd), "-del %s", bname);
     reset_test_state();
     assert(skred_host_execute(del_cmd, &env) == 1);
     assert(strstr(g_last_output, "Removed") != NULL);
 
-    // Verify it is no longer found
-    read_data = NULL;
-    read_sz = 0;
-    read_ok = skred_vfs_read_file(bname, &read_data, &read_sz);
-    assert(read_ok == false);
-
-    // Cleanup temp source
     unlink(tmp_src);
+    unlink(tmp_space_src);
+
+    /* 10. Test Tilde (~) expansion */
+    const char *home = getenv("HOME");
+    if (home && home[0]) {
+        char home_test_file[512];
+        snprintf(home_test_file, sizeof(home_test_file), "%s/sk3_tilde_test_%d.sk", home, (int)getpid());
+        FILE *fhome = fopen(home_test_file, "w");
+        if (fhome) {
+            fprintf(fhome, "TildeExpansionTest");
+            fclose(fhome);
+
+            char tilde_cmd[512];
+            snprintf(tilde_cmd, sizeof(tilde_cmd), "-add ~/sk3_tilde_test_%d.sk", (int)getpid());
+            reset_test_state();
+            assert(skred_host_execute(tilde_cmd, &env) == 1);
+            assert(strstr(g_last_output, "Attached") != NULL);
+
+            char tilde_bname[256];
+            snprintf(tilde_bname, sizeof(tilde_bname), "sk3_tilde_test_%d.sk", (int)getpid());
+            read_data = NULL;
+            read_sz = 0;
+            read_ok = skred_vfs_read_file(tilde_bname, &read_data, &read_sz);
+            assert(read_ok == true);
+            free(read_data);
+
+            // Cleanup
+            char tilde_del[512];
+            snprintf(tilde_del, sizeof(tilde_del), "-del %s", tilde_bname);
+            skred_host_execute(tilde_del, &env);
+            unlink(home_test_file);
+        }
+    }
+
+    /* 11. Test -cd and -pwd */
+    char orig_cwd[1024];
+    assert(getcwd(orig_cwd, sizeof(orig_cwd)) != NULL);
+
+    reset_test_state();
+    assert(skred_host_execute("-pwd", &env) == 1);
+
+    reset_test_state();
+    assert(skred_host_execute("-cd /tmp", &env) == 1);
+    char cur_cwd[1024];
+    assert(getcwd(cur_cwd, sizeof(cur_cwd)) != NULL);
+    assert(strstr(cur_cwd, "tmp") != NULL);
+
+    // Return to original cwd
+    char cd_back[1024];
+    snprintf(cd_back, sizeof(cd_back), "-cd %s", orig_cwd);
+    assert(skred_host_execute(cd_back, &env) == 1);
 
     // Cleanup staging
     skred_host_staging_cleanup();
