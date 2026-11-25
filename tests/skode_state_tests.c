@@ -3728,6 +3728,50 @@ static void test_stream_gen_and_dynamic_growth(void) {
   expect_float(test, (float)skode_stream_pull(NULL, 12), 70.0f, 1e-4f, "clamp pull 4 clamps at 70");
   expect_float(test, (float)skode_stream_pull(NULL, 12), 70.0f, 1e-4f, "clamp pull 5 stays at 70");
 
+  /* 3b. Test non-integer multiple bound /SG octave sequence and dynamic /SM switch */
+  consume(test, &ctx, "/SG 0 33 91 12");
+  expect_float(test, (float)skode_stream_pull(NULL, 0), 33.0f, 1e-4f, "octave pull 1 is 33");
+  expect_float(test, (float)skode_stream_pull(NULL, 0), 45.0f, 1e-4f, "octave pull 2 is 45");
+  expect_float(test, (float)skode_stream_pull(NULL, 0), 57.0f, 1e-4f, "octave pull 3 is 57");
+  /* Dynamically change to mode 2 (ping-pong) */
+  consume(test, &ctx, "/SM 0 2");
+  expect_float(test, (float)skode_stream_pull(NULL, 0), 69.0f, 1e-4f, "octave pp pull 4 is 69");
+  expect_float(test, (float)skode_stream_pull(NULL, 0), 81.0f, 1e-4f, "octave pp pull 5 is 81 (highest grid step)");
+  expect_float(test, (float)skode_stream_pull(NULL, 0), 69.0f, 1e-4f, "octave pp pull 6 bounces to 69");
+  expect_float(test, (float)skode_stream_pull(NULL, 0), 57.0f, 1e-4f, "octave pp pull 7 bounces to 57");
+  expect_float(test, (float)skode_stream_pull(NULL, 0), 45.0f, 1e-4f, "octave pp pull 8 bounces to 45");
+  expect_float(test, (float)skode_stream_pull(NULL, 0), 33.0f, 1e-4f, "octave pp pull 9 bounces to 33");
+  expect_float(test, (float)skode_stream_pull(NULL, 0), 45.0f, 1e-4f, "octave pp pull 10 bounces up to 45");
+
+  /* 3c. Test non-integer float /SG definitions and precision */
+  consume(test, &ctx, "/SG 14 0.25 0.9 0.2 2");
+  expect_float(test, (float)skode_stream_pull(NULL, 14), 0.25f, 1e-4f, "float pp pull 1 is 0.25");
+  expect_float(test, (float)skode_stream_pull(NULL, 14), 0.45f, 1e-4f, "float pp pull 2 is 0.45");
+  expect_float(test, (float)skode_stream_pull(NULL, 14), 0.65f, 1e-4f, "float pp pull 3 is 0.65");
+  expect_float(test, (float)skode_stream_pull(NULL, 14), 0.85f, 1e-4f, "float pp pull 4 is 0.85 (hits grid top)");
+  expect_float(test, (float)skode_stream_pull(NULL, 14), 0.65f, 1e-4f, "float pp pull 5 bounces to 0.65");
+  expect_float(test, (float)skode_stream_pull(NULL, 14), 0.45f, 1e-4f, "float pp pull 6 bounces to 0.45");
+  expect_float(test, (float)skode_stream_pull(NULL, 14), 0.25f, 1e-4f, "float pp pull 7 bounces to 0.25");
+  expect_float(test, (float)skode_stream_pull(NULL, 14), 0.45f, 1e-4f, "float pp pull 8 bounces up to 0.45");
+
+  /* 3d. Test exact IEEE boundary 0.3 / 0.1 wrap */
+  consume(test, &ctx, "/SG 15 0.0 0.3 0.1 0");
+  expect_float(test, (float)skode_stream_pull(NULL, 15), 0.0f, 1e-4f, "ieee pull 1 is 0.0");
+  expect_float(test, (float)skode_stream_pull(NULL, 15), 0.1f, 1e-4f, "ieee pull 2 is 0.1");
+  expect_float(test, (float)skode_stream_pull(NULL, 15), 0.2f, 1e-4f, "ieee pull 3 is 0.2");
+  expect_float(test, (float)skode_stream_pull(NULL, 15), 0.3f, 1e-4f, "ieee pull 4 is 0.3");
+  expect_float(test, (float)skode_stream_pull(NULL, 15), 0.0f, 1e-4f, "ieee pull 5 wraps to 0.0");
+
+  /* 3e. Test bipolar range and zero accumulation drift over 1000 pulls */
+  consume(test, &ctx, "/SG 16 -1.0 1.0 0.5 2");
+  for (int iter = 0; iter < 1000; iter++) {
+    (void)skode_stream_pull(NULL, 16);
+  }
+  /* Set pos back to 0 explicitly */
+  skode_stream_pos(NULL, 16, 0);
+  expect_float(test, (float)skode_stream_pull(NULL, 16), -1.0f, 1e-6f, "pos 0 after 1000 pulls is exactly -1.0");
+  expect_float(test, (float)skode_stream_pull(NULL, 16), -0.5f, 1e-6f, "pos 1 after 1000 pulls is exactly -0.5");
+
   /* 4. Test dynamic array growth past old 1024-element limit */
   double *large_arr = (double *)malloc(1500 * sizeof(double));
   for (int i = 0; i < 1500; i++) large_arr[i] = (double)(i * 2);

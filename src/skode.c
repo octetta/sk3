@@ -2667,6 +2667,19 @@ void skode_stream_copy(void *ctx, int dst, int src) {
     }
 }
 
+static inline int skode_stream_step_count(const skode_stream_t *s) {
+    double range = fabs(s->max - s->min);
+    double step = s->step > 0.0 ? s->step : 1.0;
+    int count = (int)floor((range / step) + 1e-7) + 1;
+    return (count < 1) ? 1 : count;
+}
+
+static inline double skode_stream_step_val(const skode_stream_t *s, int pos) {
+    double step = s->step > 0.0 ? s->step : 1.0;
+    double base_dir = (s->min <= s->max) ? 1.0 : -1.0;
+    return s->min + (double)pos * step * base_dir;
+}
+
 void skode_stream_mode(void *ctx, int n, int mode) {
     (void)ctx;
     if (n >= 0 && n < 128) global_stream[n].mode = mode;
@@ -2677,9 +2690,14 @@ void skode_stream_pos(void *ctx, int n, int pos) {
     if (n < 0 || n >= 128) return;
     skode_stream_t *s = &global_stream[n];
     if (s->len == -1) {
-        s->pos = pos;
-        s->val = s->min + (double)pos * s->step;
-        s->dir = (s->step >= 0.0) ? 1 : -1;
+        int count = skode_stream_step_count(s);
+        if (pos >= 0 && count > 0) {
+            s->pos = pos % count;
+        } else {
+            s->pos = 0;
+        }
+        s->val = skode_stream_step_val(s, s->pos);
+        s->dir = 1;
         return;
     }
     s->pos = pos;
@@ -2700,7 +2718,7 @@ void skode_stream_gen(void *ctx, int n, double min, double max, double step) {
     s->max = max;
     s->step = fabs(step);
     s->val = min;
-    s->dir = (step < 0.0 || min > max) ? -1 : 1;
+    s->dir = 1;
     s->pos = 0;
 }
 
@@ -2708,60 +2726,40 @@ double skode_stream_pull(void *ctx, int n) {
     (void)ctx;
     if (n < 0 || n >= 128) return NAN;
     skode_stream_t *s = &global_stream[n];
-    if (s->len == -1) {
-        double current = s->val;
-        if (s->mode == 4) {
-            double r = (double)rand() / (double)RAND_MAX;
-            s->val = s->min + r * (s->max - s->min);
-            return current;
-        }
-        double step = (s->step == 0.0) ? 1.0 : s->step;
-        double next = s->val + (step * (double)s->dir);
-        double range_min = (s->min <= s->max) ? s->min : s->max;
-        double range_max = (s->min <= s->max) ? s->max : s->min;
+    int count = 0;
+    double val = 0.0;
 
-        if (s->mode == 0) {
-            if (next > range_max) next = range_min;
-            else if (next < range_min) next = range_max;
-        } else if (s->mode == 1) {
-            if (next < range_min) next = range_max;
-            else if (next > range_max) next = range_min;
-        } else if (s->mode == 2) {
-            if (next >= range_max) {
-                next = range_max;
-                s->dir = -1;
-            } else if (next <= range_min) {
-                next = range_min;
-                s->dir = 1;
-            }
-        } else if (s->mode == 3) {
-            if (next > range_max) next = range_max;
-            else if (next < range_min) next = range_min;
-        }
-        s->val = next;
-        return current;
+    if (s->len == -1) {
+        count = skode_stream_step_count(s);
+        if (s->pos < 0) s->pos = 0;
+        if (s->pos >= count) s->pos = count - 1;
+        val = skode_stream_step_val(s, s->pos);
+        s->val = val;
+    } else {
+        if (s->len <= 0 || !s->data) return 0.0;
+        count = s->len;
+        if (s->pos < 0) s->pos = 0;
+        if (s->pos >= count) s->pos = count - 1;
+        val = s->data[s->pos];
     }
-    if (s->len <= 0 || !s->data) return 0.0;
-    
-    double val = s->data[s->pos];
-    
+
     if (s->mode == 0) { // wrap forward
-        s->pos = (s->pos + 1) % s->len;
+        s->pos = (s->pos + 1) % count;
     } else if (s->mode == 1) { // wrap backward
-        s->pos = (s->pos - 1 + s->len) % s->len;
+        s->pos = (s->pos - 1 + count) % count;
     } else if (s->mode == 2) { // ping-pong
         s->pos += s->dir;
-        if (s->pos >= s->len) {
-            s->pos = s->len > 1 ? s->len - 2 : 0;
+        if (s->pos >= count) {
+            s->pos = count > 1 ? count - 2 : 0;
             s->dir = -1;
         } else if (s->pos < 0) {
-            s->pos = s->len > 1 ? 1 : 0;
+            s->pos = count > 1 ? 1 : 0;
             s->dir = 1;
         }
     } else if (s->mode == 3) { // clamp forward
-        if (s->pos < s->len - 1) s->pos++;
+        if (s->pos < count - 1) s->pos++;
     } else if (s->mode == 4) { // random pick
-        s->pos = rand() % s->len;
+        s->pos = rand() % count;
     }
     return val;
 }
