@@ -4156,6 +4156,17 @@ static void test_binary_rejection_and_text_validation(void) {
   expect_int(test, r, SK_OK, "skode_load_buffer succeeds on valid script");
   expect_int(test, skode_last_error(&ctx), SK_OK, "last_error is SK_OK");
 
+  /* 4b. Multiline string and array load successfully */
+  const char *multiline_script =
+      "v0\n"
+      "(\n  10 20\n  30 40\n)\n"
+      "0.25 p\n"
+      "[hello\nworld] 0 vt\n";
+  r = skode_load_buffer(&ctx, multiline_script, strlen(multiline_script), "multiline.sk", 0);
+  expect_int(test, r, SK_OK, "skode_load_buffer succeeds on multiline array script");
+  expect_float(test, sv.pan[0], 0.25f, 0.0001f, "pan set in multiline script");
+  expect_substr(test, sv.text[0], "hello\nworld", "multiline string set voice text");
+
   /* 5. ksynth_loader rejects binary */
   skode_clear_error(&ctx);
   r = ksynth_loader(&ctx, (const char *)zip_hdr, sizeof(zip_hdr), "bundle.zip", 0);

@@ -460,6 +460,7 @@ int skode_load_buffer(skode_t *ctx, const char *text, size_t text_len,
     while (pos < text_len) {
       size_t start = pos;
       int in_string = 0;
+      int in_array = 0;
       int in_comment = 0;
       
       while (pos < text_len) {
@@ -468,8 +469,11 @@ int skode_load_buffer(skode_t *ctx, const char *text, size_t text_len,
           if (c == '\n' || c == '\r') break;
         } else if (in_string) {
           if (c == ']') in_string = 0;
+        } else if (in_array) {
+          if (c == ')') in_array = 0;
         } else {
           if (c == '[') in_string = 1;
+          else if (c == '(') in_array = 1;
           else if (c == '#') in_comment = 1;
           else if (c == '\n' || c == '\r') break;
         }
