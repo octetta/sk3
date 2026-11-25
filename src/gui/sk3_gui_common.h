@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <stdarg.h>
 
 #ifdef _WIN32
   #include <direct.h>
@@ -19,8 +20,80 @@
   #include <strings.h>
 #endif
 
+#include "../host_commands.h"
+
 /* Forward declaration for engine API */
 int skred_set_string(const char *str);
+
+/* Host Command Bridge for GUI Platforms (Linux, macOS, Windows) */
+typedef struct {
+    void (*append_log)(void *ctx, const char *text);
+    void (*clear_log)(void *ctx);
+    void (*on_quit)(void *ctx);
+    void *ctx;
+} sk3_gui_host_bridge_t;
+
+static inline void sk3_gui_host_print(void *userdata, const char *fmt, ...) {
+    sk3_gui_host_bridge_t *bridge = (sk3_gui_host_bridge_t *)userdata;
+    if (!bridge || !bridge->append_log) return;
+    char buf[4096];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, ap);
+    va_end(ap);
+    bridge->append_log(bridge->ctx, buf);
+}
+
+static inline void sk3_gui_host_clear(void *userdata) {
+    sk3_gui_host_bridge_t *bridge = (sk3_gui_host_bridge_t *)userdata;
+    if (bridge && bridge->clear_log) {
+        bridge->clear_log(bridge->ctx);
+    }
+}
+
+static inline void sk3_gui_host_quit(void *userdata) {
+    sk3_gui_host_bridge_t *bridge = (sk3_gui_host_bridge_t *)userdata;
+    if (bridge && bridge->on_quit) {
+        bridge->on_quit(bridge->ctx);
+    }
+}
+
+/*
+ * Dispatches a command line in GUI:
+ * 1. If starts with '.' or '-' (or is quit/exit/als/etc), executed by host command processor.
+ *    NEVER passed to skred_command().
+ * 2. Otherwise forwarded to skred_command().
+ */
+static inline int sk3_gui_dispatch_command(const char *cmd_line, sk3_gui_host_bridge_t *bridge) {
+    if (!cmd_line) return 0;
+    while (isspace((unsigned char)*cmd_line)) cmd_line++;
+    if (!*cmd_line) return 0;
+
+    skred_host_env_t env = {0};
+    env.userdata = bridge;
+    env.print = sk3_gui_host_print;
+    env.clear = sk3_gui_host_clear;
+    env.quit = sk3_gui_host_quit;
+
+    if (skred_host_execute(cmd_line, &env)) {
+        return 1; /* Handled locally by host processor */
+    }
+
+    /* Pass to skred engine */
+    char buf[4096];
+    snprintf(buf, sizeof(buf), "%s", cmd_line);
+    int r = skred_command(buf);
+    char *engine_log = skred_log();
+    if (engine_log && engine_log[0] && bridge && bridge->append_log) {
+        bridge->append_log(bridge->ctx, engine_log);
+    }
+    if (r > 0 && bridge && bridge->append_log) {
+        char r_str[32];
+        snprintf(r_str, sizeof(r_str), "r = %d\n", r);
+        bridge->append_log(bridge->ctx, r_str);
+    }
+    return 0;
+}
 
 typedef enum {
     SK3_FONT_SIZE_SMALL = 0,   /* 11 pt */

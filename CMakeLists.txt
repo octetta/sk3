@@ -347,6 +347,11 @@ target_link_libraries(bop_tests PRIVATE api)
 target_include_directories(bop_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}/src/gen")
 add_test(NAME protocol.binary-opcode-bop COMMAND bop_tests)
 
+add_executable(host_command_tests tests/host_command_tests.c)
+target_link_libraries(host_command_tests PRIVATE api)
+target_include_directories(host_command_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src" "${CMAKE_CURRENT_SOURCE_DIR}/src/gen")
+add_test(NAME host.command-processor COMMAND host_command_tests)
+
 if(SKRED_SCOPE)
     add_executable(scope_ipc_tests tests/scope_ipc_tests.c)
     target_link_libraries(scope_ipc_tests PRIVATE api)

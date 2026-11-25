@@ -141,7 +141,25 @@
     });
 }
 
+static void macos_append_log(void *ctx, const char *text) {
+    Sk3GuiController *c = (__bridge Sk3GuiController *)ctx;
+    [c appendLog:[NSString stringWithUTF8String:text]];
+}
+static void macos_clear_log(void *ctx) {
+    Sk3GuiController *c = (__bridge Sk3GuiController *)ctx;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        c.logView.string = @"";
+    });
+}
+static void macos_quit(void *ctx) {
+    (void)ctx;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [NSApp terminate:nil];
+    });
+}
+
 - (void)startEngine {
+    skred_host_staging_init();
     int udpPort = [self.udpField.stringValue intValue];
     int tcpPort = [self.tcpField.stringValue intValue];
     if (udpPort < 0) udpPort = 0;
@@ -206,16 +224,13 @@
 
     [self appendLog:[NSString stringWithFormat:@"\n> %@\n", trimmed]];
 
-    char cmd_copy[2048];
-    snprintf(cmd_copy, sizeof(cmd_copy), "%s", [trimmed UTF8String]);
-    int r = skred_command(cmd_copy);
-    char *log = skred_log();
-    if (log && strlen(log) > 0) {
-        [self appendLog:[NSString stringWithUTF8String:log]];
-    }
-    if (r > 0) {
-        [self appendLog:[NSString stringWithFormat:@"r = %d\n", r]];
-    }
+    sk3_gui_host_bridge_t bridge = {
+        .append_log = macos_append_log,
+        .clear_log = macos_clear_log,
+        .on_quit = macos_quit,
+        .ctx = (__bridge void *)self
+    };
+    sk3_gui_dispatch_command([trimmed UTF8String], &bridge);
 
     self.cmdInput.stringValue = @"";
 }
@@ -365,6 +380,7 @@
 - (void)applicationWillTerminate:(NSNotification *)notification {
     [self saveConfig];
     skred_stop();
+    skred_host_staging_cleanup();
 }
 
 - (void)macroClicked:(id)sender {

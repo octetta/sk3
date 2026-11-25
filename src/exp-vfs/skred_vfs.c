@@ -28,6 +28,21 @@ static VfsState g_vfs = {
     .cwd = ""
 };
 
+static char s_vfs_staging_dir[512] = {0};
+
+void skred_vfs_set_staging_dir(const char *path) {
+    if (path && path[0]) {
+        strncpy(s_vfs_staging_dir, path, sizeof(s_vfs_staging_dir) - 1);
+        s_vfs_staging_dir[sizeof(s_vfs_staging_dir) - 1] = '\0';
+    } else {
+        s_vfs_staging_dir[0] = '\0';
+    }
+}
+
+const char* skred_vfs_get_staging_dir(void) {
+    return s_vfs_staging_dir;
+}
+
 struct SkredFile {
     VfsMode mode;
     char resolved_path[512];
@@ -343,8 +358,19 @@ SkredFile* skred_fopen(const char *filepath, const char *mode) {
         }
         file->handle.disk_file = fopen(full_path, mode);
         if (!file->handle.disk_file) {
-            free(file);
-            return NULL;
+            if (!file->is_writing && s_vfs_staging_dir[0] != '\0') {
+                const char *bname = strrchr(filepath, '/');
+                bname = bname ? bname + 1 : filepath;
+                const char *b2 = strrchr(bname, '\\');
+                if (b2) bname = b2 + 1;
+                char stage_path[1024];
+                snprintf(stage_path, sizeof(stage_path), "%s/%s", s_vfs_staging_dir, bname);
+                file->handle.disk_file = fopen(stage_path, mode);
+            }
+            if (!file->handle.disk_file) {
+                free(file);
+                return NULL;
+            }
         }
     } 
     else {
@@ -360,7 +386,24 @@ SkredFile* skred_fopen(const char *filepath, const char *mode) {
             }
         } else {
             int idx = mz_zip_reader_locate_file(&g_vfs.archive, file->resolved_path, NULL, 0);
-            if (idx < 0) { free(file); return NULL; }
+            if (idx < 0) {
+                if (s_vfs_staging_dir[0] != '\0') {
+                    const char *bname = strrchr(filepath, '/');
+                    bname = bname ? bname + 1 : filepath;
+                    const char *b2 = strrchr(bname, '\\');
+                    if (b2) bname = b2 + 1;
+                    char stage_path[1024];
+                    snprintf(stage_path, sizeof(stage_path), "%s/%s", s_vfs_staging_dir, bname);
+                    FILE *sf = fopen(stage_path, mode);
+                    if (sf) {
+                        file->mode = VFS_MODE_DISK;
+                        file->handle.disk_file = sf;
+                        return file;
+                    }
+                }
+                free(file);
+                return NULL;
+            }
 
             size_t size;
             file->handle.mem.buffer = mz_zip_reader_extract_to_heap(&g_vfs.archive, idx, &size, 0);
@@ -571,6 +614,15 @@ bool skred_vfs_read_real_file(const char *filepath, void **data, size_t *size) {
     if (!filepath || filepath[0] == '\0') return false;
 
     f = fopen(filepath, "rb");
+    if (!f && s_vfs_staging_dir[0] != '\0') {
+        const char *bname = strrchr(filepath, '/');
+        bname = bname ? bname + 1 : filepath;
+        const char *b2 = strrchr(bname, '\\');
+        if (b2) bname = b2 + 1;
+        char stage_path[1024];
+        snprintf(stage_path, sizeof(stage_path), "%s/%s", s_vfs_staging_dir, bname);
+        f = fopen(stage_path, "rb");
+    }
     if (!f) return false;
     if (fseek(f, 0, SEEK_END) != 0) {
         fclose(f);

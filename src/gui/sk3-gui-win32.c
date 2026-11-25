@@ -174,6 +174,19 @@ static void copy_log_to_clipboard(HWND hLog) {
     }
 }
 
+static void win32_append_log(void *ctx, const char *text) {
+    (void)ctx;
+    append_log_normalized(g_hLogOutput, text);
+}
+static void win32_clear_log(void *ctx) {
+    (void)ctx;
+    SetWindowTextA(g_hLogOutput, "");
+}
+static void win32_quit(void *ctx) {
+    (void)ctx;
+    PostQuitMessage(0);
+}
+
 static void execute_command(HWND hwnd, const char *raw_cmd) {
     if (!raw_cmd || strlen(raw_cmd) == 0) return;
     
@@ -196,16 +209,13 @@ static void execute_command(HWND hwnd, const char *raw_cmd) {
     snprintf(prompt, sizeof(prompt), "\r\n> %s\r\n", buf);
     append_log(g_hLogOutput, prompt);
     
-    int r = skred_command(buf);
-    char *log = skred_log();
-    if (log && strlen(log) > 0) {
-        append_log_normalized(g_hLogOutput, log);
-    }
-    if (r > 0) {
-        char r_buf[64];
-        snprintf(r_buf, sizeof(r_buf), "r = %d\r\n", r);
-        append_log(g_hLogOutput, r_buf);
-    }
+    sk3_gui_host_bridge_t bridge = {
+        .append_log = win32_append_log,
+        .clear_log = win32_clear_log,
+        .on_quit = win32_quit,
+        .ctx = NULL
+    };
+    sk3_gui_dispatch_command(buf, &bridge);
     
     SetDlgItemTextA(hwnd, IDC_CMD_INPUT, "");
 }
@@ -258,6 +268,7 @@ static LRESULT CALLBACK CmdInputSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam
 }
 
 static void start_engine(HWND hwnd) {
+    skred_host_staging_init();
     char udp_str[32] = {0};
     char tcp_str[32] = {0};
     GetDlgItemTextA(hwnd, IDC_UDP_PORT, udp_str, sizeof(udp_str));
@@ -658,6 +669,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
         case WM_DESTROY: {
             save_win_config(hwnd);
             skred_stop();
+            skred_host_staging_cleanup();
             if (g_hFontUI) DeleteObject(g_hFontUI);
             if (g_hFontBold) DeleteObject(g_hFontBold);
             if (g_hFontMono) DeleteObject(g_hFontMono);

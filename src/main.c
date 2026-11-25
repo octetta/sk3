@@ -1,6 +1,7 @@
 #include "api.h"
 #include "skred.h"
 #include "synth-state.h"
+#include "host_commands.h"
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -105,9 +106,36 @@ static int is_zip_file(const char *path) {
           (hdr[2] == 3 || hdr[2] == 5 || hdr[2] == 7));
 }
 
+static void cli_host_print(void *userdata, const char *fmt, ...) {
+  (void)userdata;
+  va_list ap;
+  va_start(ap, fmt);
+  vprintf(fmt, ap);
+  va_end(ap);
+}
+
+static void cli_host_clear(void *userdata) {
+  (void)userdata;
+  printf("\033[H\033[2J");
+  fflush(stdout);
+}
+
+static void cli_host_quit(void *userdata) {
+  (void)userdata;
+  exit(0);
+}
+
 static int run_command(const char *line) {
   if (strncmp(line, "-wave", 5) == 0) {
     return handle_wave_command(line);
+  }
+
+  skred_host_env_t env = {0};
+  env.print = cli_host_print;
+  env.clear = cli_host_clear;
+  env.quit = cli_host_quit;
+  if (skred_host_execute(line, &env)) {
+    return 0;
   }
 
   char buf[8192];
@@ -220,6 +248,9 @@ int main(int argc, char **argv) {
     setvbuf(stdin,  NULL, _IOLBF, 0);
     setvbuf(stdout, NULL, _IOLBF, 0);
   }
+
+  skred_host_staging_init();
+  atexit(skred_host_staging_cleanup);
 
   printf("# sk3 v%s with %s\n", skred_version(), skred_features());
 

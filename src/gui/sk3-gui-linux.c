@@ -296,6 +296,27 @@ static void append_log(const char *text) {
     render_all();
 }
 
+static int s_gui_running = 1;
+
+static void linux_append_log_bridge(void *ctx, const char *text) {
+    (void)ctx;
+    append_log(text);
+}
+static void linux_clear_log_bridge(void *ctx) {
+    (void)ctx;
+    for (int i = 0; i < log_line_count; i++) {
+        if (log_lines[i]) free(log_lines[i]);
+        log_lines[i] = NULL;
+    }
+    log_line_count = 0;
+    scroll_offset = 0;
+    render_all();
+}
+static void linux_quit_bridge(void *ctx) {
+    (void)ctx;
+    s_gui_running = 0;
+}
+
 static void execute_command(const char *raw_cmd) {
     if (!raw_cmd) return;
     while (*raw_cmd == ' ' || *raw_cmd == '\t') raw_cmd++;
@@ -317,18 +338,13 @@ static void execute_command(const char *raw_cmd) {
     snprintf(prompt, sizeof(prompt), "> %s", raw_cmd);
     append_log(prompt);
 
-    char run_buf[MAX_CMD_LEN];
-    snprintf(run_buf, sizeof(run_buf), "%s", raw_cmd);
-    int r = skred_command(run_buf);
-    char *engine_log = skred_log();
-    if (engine_log && engine_log[0]) {
-        append_log(engine_log);
-    }
-    if (r > 0) {
-        char r_str[32];
-        snprintf(r_str, sizeof(r_str), "r = %d", r);
-        append_log(r_str);
-    }
+    sk3_gui_host_bridge_t bridge = {
+        .append_log = linux_append_log_bridge,
+        .clear_log = linux_clear_log_bridge,
+        .on_quit = linux_quit_bridge,
+        .ctx = NULL
+    };
+    sk3_gui_dispatch_command(raw_cmd, &bridge);
 
     cmd_buf[0] = '\0';
     cursor_pos = 0;
@@ -1187,6 +1203,8 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    skred_host_staging_init();
+
 
 
     screen = DefaultScreen(dpy);
@@ -1292,12 +1310,12 @@ int main(int argc, char **argv) {
     render_all();
     XFlush(dpy);
 
-    int running = 1;
+    s_gui_running = 1;
     int x11_fd = ConnectionNumber(dpy);
     struct timeval last_blink;
     gettimeofday(&last_blink, NULL);
 
-    while (running) {
+    while (s_gui_running) {
         while (XPending(dpy) > 0) {
             XEvent ev;
             XNextEvent(dpy, &ev);
@@ -1351,7 +1369,7 @@ int main(int argc, char **argv) {
                     } else if (clicked_btn == BTN_MODAL_CONFIRM_EXIT) {
                         confirm_exit_active = 0;
                         save_gui_config();
-                        running = 0;
+                        s_gui_running = 0;
                     } else if (clicked_btn == BTN_MODAL_CANCEL_RESTART || clicked_btn == BTN_MODAL_CANCEL_EXIT) {
                         confirm_restart_active = 0;
                         confirm_exit_active = 0;
@@ -1557,7 +1575,7 @@ int main(int argc, char **argv) {
                         if (confirm_exit_active) {
                             confirm_exit_active = 0;
                             save_gui_config();
-                            running = 0;
+                            s_gui_running = 0;
                         } else {
                             confirm_restart_active = 0;
                             start_engine();
@@ -1715,10 +1733,10 @@ int main(int argc, char **argv) {
                 }
                 break;
             }
-            if (!running) break;
+            if (!s_gui_running) break;
         }
 
-        if (!running) break;
+        if (!s_gui_running) break;
 
         // Check cursor blinking timer when no events are queued
         struct timeval now;
@@ -1743,6 +1761,7 @@ int main(int argc, char **argv) {
 
     save_gui_config();
     skred_stop();
+    skred_host_staging_cleanup();
 
     if (xft_font_ui) XftFontClose(dpy, xft_font_ui);
     if (xft_font_mono) XftFontClose(dpy, xft_font_mono);
