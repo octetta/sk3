@@ -253,11 +253,11 @@ static inline float osc_sample_at_phase(skred_engine_t *engine, int voice, doubl
      * @phase            osc_eval
      * @reads            [sv.cz_mode[voice], sv.cz_distortion[voice], sv.cz_mod_osc[voice], sv.cz_mod_depth[voice], sv.cz_envelope[voice], sv.cz_env_depth[voice], sv.sample]
      * @writes           []
-     * @opcodes          [c, C, ct, cd]
+     * @configures       [c, C, ct, cd]
      * @consumes         [phase, current_sample, active_start, active_end]
      * @produces         [final_phase]
      * @depends          []
-     * @condition        sv.cz_mode[voice] != 0
+     * @branch           sv.cz_mode[voice] != 0
      */
     if (sv.cz_mode[voice]) {
       float amount = sv.cz_distortion[voice];
@@ -282,11 +282,11 @@ static inline float osc_sample_at_phase(skred_engine_t *engine, int voice, doubl
      * @phase            osc_eval
      * @reads            []
      * @writes           []
-     * @opcodes          [F, FF]
+     * @configures       [F, FF]
      * @consumes         [final_phase, phase_offset, wave_range_start, wave_range_end]
      * @produces         [final_phase]
      * @depends          [osc_cz_phase_distort]
-     * @condition        phase_offset != 0.0f
+     * @guard            phase_offset != 0.0f
      */
     /*
      * FF2 phase modulation changes only the wavetable lookup position. The
@@ -310,11 +310,11 @@ static inline float osc_sample_at_phase(skred_engine_t *engine, int voice, doubl
      * @phase            osc_eval
      * @reads            [sv.source_type[voice], sv.wave_table_index[voice], sv.phase_inc[voice], sv.pulse_width[voice], sv.use_pwm_envelope[voice], sv.pwm_envelope[voice], sv.pwm_env_depth[voice], sv.pwm_mod_osc[voice], sv.pwm_mod_depth[voice], sv.sample, sv.sample_r]
      * @writes           [sv.sample_r[voice]]
-     * @opcodes          [pw, PW, pwt, pwd]
+     * @configures       [pw, PW, pwt, pwd]
      * @consumes         [final_phase, table_size, current_sample]
      * @produces         [s, sv.sample_r[voice]]
      * @depends          [osc_phase_mod_offset]
-     * @condition        sv.source_type && sv.source_type[voice] == OSC_SOURCE_POLYBLEP && table_size > 0
+     * @guard            sv.source_type && sv.source_type[voice] == OSC_SOURCE_POLYBLEP && table_size > 0
      */
     if (sv.source_type && sv.source_type[voice] == OSC_SOURCE_POLYBLEP && table_size > 0) {
         int w = sv.wave_table_index[voice];
@@ -368,10 +368,11 @@ static inline float osc_sample_at_phase(skred_engine_t *engine, int voice, doubl
      * @phase            osc_eval
      * @reads            [sv.interpolate[voice], sv.table[voice], sv.table_right[voice], sv.sample_r]
      * @writes           [sv.sample_r[voice]]
-     * @opcodes          [w, int]
+     * @configures       [w, int]
      * @consumes         [final_phase, wave_range_start, wave_range_end, one_shot]
      * @produces         [s_left, s_right, sv.sample_r[voice]]
      * @depends          [osc_phase_mod_offset]
+     * @branch           sv.interpolate[voice]
      */
     int idx = (int)final_phase;
     if (idx >= (int)wave_range_end) idx = (int)wave_range_end - 1;

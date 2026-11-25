@@ -222,11 +222,11 @@ static int seq_q_ready = 0;
  * @phase            sequencer
  * @reads            [seq_q]
  * @writes           [seq_q]
- * @opcodes          [sched]
+ * @configures       [sched]
  * @consumes         [now, event_fn]
  * @produces         []
  * @depends          []
- * @condition        !queue_is_empty(&seq_q)
+ * @early_exit       queue_get_filtered(&seq_q, now, &item) == 0
  */
 void do_event(uint64_t now, void (*event_fn)(const event_t *event)) {
   // Run expired (ready) queued events.
@@ -248,11 +248,11 @@ void do_event(uint64_t now, void (*event_fn)(const event_t *event)) {
  * @phase            sequencer
  * @reads            [tempo_time_per_step, seq_sample_origin, seq_tick_origin, master_tick, seq_state, seq_modulo, seq_pattern_length, seq_pointer, seq_offset, seq_pending_state, seq_control_events, seq_mute]
  * @writes           [master_tick, seq_pointer, seq_offset, seq_state, seq_pending_state, seq_current_pattern]
- * @opcodes          [bpm, tempo, pat, play, stop]
+ * @configures       [bpm, tempo, pat, play, stop]
  * @consumes         [now, program_fn]
  * @produces         []
  * @depends          []
- * @condition        simple_mutex_trylock(&seq_edit_mutex)
+ * @early_exit       simple_mutex_trylock(&seq_edit_mutex) == 0
  */
 void do_pattern(uint64_t now,
     void (*program_fn)(int pattern, int step, const event_program_t *program)) {
