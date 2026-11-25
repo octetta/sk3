@@ -94,6 +94,26 @@ int main(void) {
     assert(g_clear_called == 1);
 
     reset_test_state();
+    assert(skred_host_execute("-help", &env) == 1);
+    assert(strstr(g_last_output, "HOST ENVIRONMENT COMMANDS") != NULL);
+
+    reset_test_state();
+    assert(skred_host_execute("-h", &env) == 1);
+    assert(strstr(g_last_output, "HOST ENVIRONMENT COMMANDS") != NULL);
+
+    reset_test_state();
+    assert(skred_host_execute("-?", &env) == 1);
+    assert(strstr(g_last_output, "HOST ENVIRONMENT COMMANDS") != NULL);
+
+    reset_test_state();
+    assert(skred_host_execute(".?", &env) == 1);
+    assert(strstr(g_last_output, "HOST ENVIRONMENT COMMANDS") != NULL);
+
+    reset_test_state();
+    assert(skred_host_execute("--help", &env) == 1);
+    assert(strstr(g_last_output, "HOST ENVIRONMENT COMMANDS") != NULL);
+
+    reset_test_state();
     assert(skred_host_execute("-quit", &env) == 1);
     assert(g_quit_called == 1);
 

@@ -416,7 +416,7 @@ static inline int skred_host_execute(const char *cmd_line, const skred_host_env_
 
     /* Baseline rule: strings starting with . or - are host commands */
     bool is_dot_or_dash = (*cmd_line == '.' || *cmd_line == '-');
-    bool is_exit = (strcmp(cmd_line, "exit") == 0 || strcmp(cmd_line, "quit") == 0 || strcmp(cmd_line, "pwd") == 0);
+    bool is_exit = (strcmp(cmd_line, "exit") == 0 || strcmp(cmd_line, "quit") == 0 || strcmp(cmd_line, "pwd") == 0 || strcmp(cmd_line, "help") == 0);
     bool is_slash_dev = (strncmp(cmd_line, "/als", 4) == 0 ||
                          strncmp(cmd_line, "/aout", 5) == 0 ||
                          strncmp(cmd_line, "/ain", 4) == 0 ||
@@ -424,7 +424,10 @@ static inline int skred_host_execute(const char *cmd_line, const skred_host_env_
                          strncmp(cmd_line, "/mls", 4) == 0 ||
                          strncmp(cmd_line, "/mout", 5) == 0 ||
                          strncmp(cmd_line, "/min", 4) == 0 ||
-                         strncmp(cmd_line, "/m?", 3) == 0);
+                         strncmp(cmd_line, "/m?", 3) == 0 ||
+                         strcmp(cmd_line, "/?") == 0 ||
+                         strcmp(cmd_line, "/h") == 0 ||
+                         strcmp(cmd_line, "/help") == 0);
 
     if (!is_dot_or_dash && !is_exit && !is_slash_dev) {
         return 0; /* Forward to skred_command() */
@@ -455,9 +458,9 @@ static inline int skred_host_execute(const char *cmd_line, const skred_host_env_
         }
     }
 
-    /* Normalize leading . or - */
+    /* Normalize leading ., -, or / */
     const char *norm = action;
-    if (norm[0] == '.' || norm[0] == '-' || norm[0] == '/') {
+    while (*norm == '.' || *norm == '-' || *norm == '/') {
         norm++;
     }
 
@@ -471,7 +474,7 @@ static inline int skred_host_execute(const char *cmd_line, const skred_host_env_
         return 1;
     }
 
-    if (strcmp(norm, "help") == 0) {
+    if (strcmp(norm, "help") == 0 || strcmp(norm, "h") == 0 || strcmp(norm, "?") == 0) {
         skred_host_cmd_help(env);
         return 1;
     }
