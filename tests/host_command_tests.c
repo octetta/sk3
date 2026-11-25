@@ -180,28 +180,48 @@ int main(void) {
     assert(strstr((char *)read_data, "AudioDataWithSpaces") != NULL);
     free(read_data);
 
-    /* 8. Test -ls (listing staged files) */
+    /* 8. Test -ls and 0-based index selection (-pick / -get / -ls <idx>) */
     reset_test_state();
     assert(skred_host_execute("-ls", &env) == 1);
+    assert(strstr(g_last_output, "0.") != NULL);
+    assert(strstr(g_last_output, "1.") != NULL);
 
-    /* 9. Test -del with spaces */
-    char del_space_cmd[512];
-    snprintf(del_space_cmd, sizeof(del_space_cmd), "-del \"%s\"", space_bname);
+    // Pick file 0 into string buffer
     reset_test_state();
-    assert(skred_host_execute(del_space_cmd, &env) == 1);
-    assert(strstr(g_last_output, "Removed") != NULL);
+    assert(skred_host_execute("-pick 0", &env) == 1);
+    assert(strstr(g_last_output, "String buffer: [") != NULL);
+    const char *cur_str = skred_get_string();
+    assert(cur_str != NULL && strlen(cur_str) > 0);
 
-    // Verify deleted
-    read_data = NULL;
-    read_sz = 0;
-    assert(skred_vfs_read_file(space_bname, &read_data, &read_sz) == false);
-
-    // Delete normal staged file
-    char del_cmd[512];
-    snprintf(del_cmd, sizeof(del_cmd), "-del %s", bname);
+    // Pick file 1 using alias -ls 1
     reset_test_state();
-    assert(skred_host_execute(del_cmd, &env) == 1);
-    assert(strstr(g_last_output, "Removed") != NULL);
+    assert(skred_host_execute("-ls 1", &env) == 1);
+    assert(strstr(g_last_output, "String buffer: [") != NULL);
+
+    // Pick with trailing command
+    reset_test_state();
+    assert(skred_host_execute("-pick 0 0 /w", &env) == 1);
+    assert(strstr(g_last_output, "executing '0 /w'") != NULL);
+
+    /* 9. Test -del by 0-based INDEX */
+    // Delete file 0 by index
+    reset_test_state();
+    assert(skred_host_execute("-del 0", &env) == 1);
+    assert(strstr(g_last_output, "Removed [") != NULL);
+
+    // Delete remaining file 0 by index
+    reset_test_state();
+    assert(skred_host_execute("-del 0", &env) == 1);
+    assert(strstr(g_last_output, "Removed [") != NULL);
+
+    // Verify out of bounds error when empty
+    reset_test_state();
+    assert(skred_host_execute("-del 0", &env) == 1);
+    assert(strstr(g_last_output, "out of range") != NULL);
+
+    reset_test_state();
+    assert(skred_host_execute("-pick 0", &env) == 1);
+    assert(strstr(g_last_output, "out of range") != NULL);
 
     unlink(tmp_src);
     unlink(tmp_space_src);

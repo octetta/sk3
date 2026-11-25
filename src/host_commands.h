@@ -193,6 +193,65 @@ static inline bool skred_host_copy_file(const char *src, const char *dst) {
     return true;
 }
 
+typedef struct {
+    char name[256];
+    size_t size;
+} skred_staged_file_t;
+
+static inline int skred_host_staging_cmp(const void *a, const void *b) {
+    const skred_staged_file_t *fa = (const skred_staged_file_t *)a;
+    const skred_staged_file_t *fb = (const skred_staged_file_t *)b;
+    return strcasecmp(fa->name, fb->name);
+}
+
+static inline int skred_host_staging_get_files(skred_staged_file_t *out_files, int max_files) {
+    if (!out_files || max_files <= 0) return 0;
+    skred_host_staging_init();
+    int count = 0;
+#ifdef _WIN32
+    char search_pattern[MAX_PATH];
+    snprintf(search_pattern, sizeof(search_pattern), "%s\\*.*", s_host_staging_dir);
+    WIN32_FIND_DATAA fd;
+    HANDLE hFind = FindFirstFileA(search_pattern, &fd);
+    if (hFind != INVALID_HANDLE_VALUE) {
+        do {
+            if (strcmp(fd.cFileName, ".") != 0 && strcmp(fd.cFileName, "..") != 0) {
+                if (count < max_files) {
+                    strncpy(out_files[count].name, fd.cFileName, sizeof(out_files[count].name) - 1);
+                    out_files[count].name[sizeof(out_files[count].name) - 1] = '\0';
+                    out_files[count].size = ((size_t)fd.nFileSizeHigh << 32) | fd.nFileSizeLow;
+                    count++;
+                }
+            }
+        } while (FindNextFileA(hFind, &fd));
+        FindClose(hFind);
+    }
+#else
+    DIR *d = opendir(s_host_staging_dir);
+    if (d) {
+        struct dirent *dir;
+        while ((dir = readdir(d)) != NULL) {
+            if (strcmp(dir->d_name, ".") != 0 && strcmp(dir->d_name, "..") != 0) {
+                if (count < max_files) {
+                    strncpy(out_files[count].name, dir->d_name, sizeof(out_files[count].name) - 1);
+                    out_files[count].name[sizeof(out_files[count].name) - 1] = '\0';
+                    char filepath[1024];
+                    snprintf(filepath, sizeof(filepath), "%s/%s", s_host_staging_dir, dir->d_name);
+                    struct stat st;
+                    out_files[count].size = (stat(filepath, &st) == 0) ? (size_t)st.st_size : 0;
+                    count++;
+                }
+            }
+        }
+        closedir(d);
+    }
+#endif
+    if (count > 1) {
+        qsort(out_files, count, sizeof(skred_staged_file_t), skred_host_staging_cmp);
+    }
+    return count;
+}
+
 static inline void skred_host_cmd_help(const skred_host_env_t *env) {
     env->print(env->userdata,
         "HOST ENVIRONMENT COMMANDS:\n"
@@ -210,8 +269,9 @@ static inline void skred_host_cmd_help(const skred_host_env_t *env) {
         "  -mout <index|off>            Open MIDI output port (-mout off to close)\n"
         "  -mstatus                     Display active MIDI port connections\n"
         "  -add <path>                  Attach file/zip to staging area (supports spaces & ~)\n"
-        "  -del <name>                  Remove attached file from staging area (supports spaces)\n"
-        "  -ls                          List attached staged files and environment paths\n"
+        "  -del <name|index>            Remove attached file by name or 0-based index\n"
+        "  -ls [index [cmd]]            List attached files, or select file by 0-based index\n"
+        "  -pick <index> [cmd]          Load file at 0-based index into string buffer (ready for /w, ks, etc.)\n"
         "  -cd [dir]                    Change directory (defaults to home ~; supports spaces)\n"
         "  -pwd                         Display current working directory\n"
         "  -help                        Show this cheat sheet\n"
@@ -506,63 +566,117 @@ static inline int skred_host_execute(const char *cmd_line, const skred_host_env_
         char del_name[1024] = {0};
         skred_host_extract_path(remainder, del_name, sizeof(del_name));
         if (del_name[0] == '\0') {
-            env->print(env->userdata, "Usage: -del <filename>\n");
+            env->print(env->userdata, "Usage: -del <filename|index>\n");
             return 1;
         }
+
+        const char *target_name = del_name;
+        char *endptr = NULL;
+        long num_idx = strtol(del_name, &endptr, 10);
+        skred_staged_file_t files[256];
+        if (endptr && *endptr == '\0' && num_idx >= 0) {
+            int count = skred_host_staging_get_files(files, 256);
+            if (num_idx < count) {
+                target_name = files[num_idx].name;
+            } else {
+                env->print(env->userdata, "Error: Index %ld out of range (0..%d). Run -ls to view files.\n",
+                           num_idx, count > 0 ? count - 1 : 0);
+                return 1;
+            }
+        }
+
         char target_path[1024];
-        snprintf(target_path, sizeof(target_path), "%s/%s", s_host_staging_dir, skred_host_basename(del_name));
+        snprintf(target_path, sizeof(target_path), "%s/%s", s_host_staging_dir, skred_host_basename(target_name));
         if (skred_unlink(target_path) == 0) {
-            env->print(env->userdata, "Removed [%s] from staging area.\n", skred_host_basename(del_name));
+            env->print(env->userdata, "Removed [%s] from staging area.\n", skred_host_basename(target_name));
         } else {
-            env->print(env->userdata, "Error: Could not find or delete [%s] in staging area.\n", skred_host_basename(del_name));
+            env->print(env->userdata, "Error: Could not find or delete [%s] in staging area.\n", skred_host_basename(target_name));
+        }
+        return 1;
+    }
+
+    /* --- File Selection Into String Buffer --- */
+    if (strcmp(norm, "pick") == 0 || strcmp(norm, "get") == 0 || strcmp(norm, "use") == 0 || strcmp(norm, "file") == 0) {
+        if (!arg1) {
+            env->print(env->userdata, "Usage: -pick <index> [command] (e.g. -pick 0 or -pick 0 /ws 900)\n");
+            return 1;
+        }
+        int idx = atoi(arg1);
+        skred_staged_file_t files[256];
+        int count = skred_host_staging_get_files(files, 256);
+        if (idx < 0 || idx >= count) {
+            env->print(env->userdata, "Error: Index %d out of range (0..%d). Run -ls to view files.\n",
+                       idx, count > 0 ? count - 1 : 0);
+            return 1;
+        }
+        const char *fname = files[idx].name;
+        skred_set_string(fname);
+
+        /* Check for trailing command after index */
+        const char *tail = remainder;
+        while (*tail && isspace((unsigned char)*tail)) tail++;
+        while (*tail && !isspace((unsigned char)*tail)) tail++;
+        while (*tail && isspace((unsigned char)*tail)) tail++;
+
+        if (*tail) {
+            env->print(env->userdata, "String buffer: [%s] -> executing '%s'\n", fname, tail);
+            char run_buf[4096];
+            snprintf(run_buf, sizeof(run_buf), "%s", tail);
+            int r = skred_command(run_buf);
+            char *log = skred_log();
+            if (log && log[0]) env->print(env->userdata, "%s", log);
+            if (r > 0) env->print(env->userdata, "r = %d\n", r);
+        } else {
+            env->print(env->userdata, "String buffer: [%s] (ready for /w, ks, /ls, etc.)\n", fname);
         }
         return 1;
     }
 
     /* --- Staging & Environment Inspection --- */
     if (strcmp(norm, "ls") == 0 || strcmp(norm, "staged") == 0 || strcmp(norm, "files") == 0) {
-        skred_host_staging_init();
-        env->print(env->userdata, "# staging area: %s\n", s_host_staging_dir);
-        int count = 0;
-#ifdef _WIN32
-        char search_pattern[MAX_PATH];
-        snprintf(search_pattern, sizeof(search_pattern), "%s\\*.*", s_host_staging_dir);
-        WIN32_FIND_DATAA fd;
-        HANDLE hFind = FindFirstFileA(search_pattern, &fd);
-        if (hFind != INVALID_HANDLE_VALUE) {
-            do {
-                if (strcmp(fd.cFileName, ".") != 0 && strcmp(fd.cFileName, "..") != 0) {
-                    count++;
-                    uint64_t sz = ((uint64_t)fd.nFileSizeHigh << 32) | fd.nFileSizeLow;
-                    if (sz < 1024) env->print(env->userdata, "  %d. %s (%llu B)\n", count, fd.cFileName, (unsigned long long)sz);
-                    else if (sz < 1024 * 1024) env->print(env->userdata, "  %d. %s (%.1f KB)\n", count, fd.cFileName, (double)sz / 1024.0);
-                    else env->print(env->userdata, "  %d. %s (%.1f MB)\n", count, fd.cFileName, (double)sz / (1024.0 * 1024.0));
+        skred_staged_file_t files[256];
+        int count = skred_host_staging_get_files(files, 256);
+
+        if (arg1 && isdigit((unsigned char)arg1[0])) {
+            int idx = atoi(arg1);
+            if (idx >= 0 && idx < count) {
+                const char *fname = files[idx].name;
+                skred_set_string(fname);
+
+                const char *tail = remainder;
+                while (*tail && isspace((unsigned char)*tail)) tail++;
+                while (*tail && !isspace((unsigned char)*tail)) tail++;
+                while (*tail && isspace((unsigned char)*tail)) tail++;
+
+                if (*tail) {
+                    env->print(env->userdata, "String buffer: [%s] -> executing '%s'\n", fname, tail);
+                    char run_buf[4096];
+                    snprintf(run_buf, sizeof(run_buf), "%s", tail);
+                    int r = skred_command(run_buf);
+                    char *log = skred_log();
+                    if (log && log[0]) env->print(env->userdata, "%s", log);
+                    if (r > 0) env->print(env->userdata, "r = %d\n", r);
+                } else {
+                    env->print(env->userdata, "String buffer: [%s] (ready for /w, ks, /ls, etc.)\n", fname);
                 }
-            } while (FindNextFileA(hFind, &fd));
-            FindClose(hFind);
-        }
-#else
-        DIR *d = opendir(s_host_staging_dir);
-        if (d) {
-            struct dirent *dir;
-            while ((dir = readdir(d)) != NULL) {
-                if (strcmp(dir->d_name, ".") != 0 && strcmp(dir->d_name, "..") != 0) {
-                    count++;
-                    char filepath[1024];
-                    snprintf(filepath, sizeof(filepath), "%s/%s", s_host_staging_dir, dir->d_name);
-                    struct stat st;
-                    long long sz = 0;
-                    if (stat(filepath, &st) == 0) sz = (long long)st.st_size;
-                    if (sz < 1024) env->print(env->userdata, "  %d. %s (%lld B)\n", count, dir->d_name, sz);
-                    else if (sz < 1024 * 1024) env->print(env->userdata, "  %d. %s (%.1f KB)\n", count, dir->d_name, (double)sz / 1024.0);
-                    else env->print(env->userdata, "  %d. %s (%.1f MB)\n", count, dir->d_name, (double)sz / (1024.0 * 1024.0));
-                }
+                return 1;
+            } else {
+                env->print(env->userdata, "Error: Index %d out of range (0..%d). Run -ls to view files.\n",
+                           idx, count > 0 ? count - 1 : 0);
+                return 1;
             }
-            closedir(d);
         }
-#endif
+
+        env->print(env->userdata, "# staging area: %s\n", s_host_staging_dir);
         if (count == 0) {
             env->print(env->userdata, "  (no files currently attached in staging area)\n");
+        } else {
+            for (int i = 0; i < count; i++) {
+                size_t sz = files[i].size;
+                if (sz < 1024) env->print(env->userdata, "  %d. %s (%zu B)\n", i, files[i].name, sz);
+                else if (sz < 1024 * 1024) env->print(env->userdata, "  %d. %s (%.1f KB)\n", i, files[i].name, (double)sz / 1024.0);
+                else env->print(env->userdata, "  %d. %s (%.1f MB)\n", i, files[i].name, (double)sz / (1024.0 * 1024.0));
+            }
         }
         if (skred_vfs_mode() != SKRED_VFS_DISK) {
             env->print(env->userdata, "# mounted archive: %s (cwd: %s)\n", skred_vfs_root(), skred_getcwd());
