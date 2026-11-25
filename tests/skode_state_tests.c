@@ -2824,7 +2824,7 @@ static void test_control_composition_primitives(void) {
 
   ctx.log[0] = '\0';
   ctx.log_len = 0;
-  consume(test, &ctx, "[slot-@0-@1] 3 4 s% ?s");
+  consume(test, &ctx, "[slot-@0-@1] 3 4 fmt ?s");
   if (!strstr(ctx.log, "# [slot-3-4]")) fail(test, "runtime string format failed");
 
   consume(test, &ctx, "0 3 4 a= a");

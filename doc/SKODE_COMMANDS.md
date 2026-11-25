@@ -480,8 +480,8 @@ Runtime string formatting replaces `@0`..`@7` in the current parser string
 with numeric arguments:
 
 ```skode
-[take-@0.wav] 12 s% /rg 10
-[voice @0 wave @1] 3 14 s% vt
+[take-@0.wav] 12 fmt /rg 10
+[voice @0 wave @1] 3 14 fmt vt
 ```
 
 ## String Buffers and Ksynth
@@ -496,7 +496,7 @@ Skode has `SKODE_EXTRA_MAX` (128) external string buffers of 256 bytes each.
 | `[text] s> index` | string | Copy parser string to a context-local string slot | `ctx->string_slot[]` |
 | `<s index` | numeric | Copy a context-local string slot to parser string | `ands_string_from_external()` |
 | `s? [index]` | optional numeric | Show one or all non-empty context-local string slots | direct slot inspection |
-| `[template] s% args...` | string and numeric | Replace `@0`..`@7` in parser string with numeric args | `skode_format_string_args()` |
+| `[template] fmt args...` | string and numeric | Replace `@0`..`@7` in parser string with numeric args | `skode_format_string_args()` |
 | `e! index` | literal numeric | Compile and inline a macro buffer; schedulable | `skode_extra_copy()`, `skode_compile_program()` |
 | `eR index,count,seconds[,tag]` | numeric | Repeat a compiled macro snapshot using seconds | `skode_repeat_macro()` |
 | `eRR index,count,beats[,tag]` | numeric | Repeat a compiled macro snapshot using tempo | `skode_repeat_macro()` |

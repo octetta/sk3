@@ -7,7 +7,7 @@
 @match    ()
 @summary  format current string and append to previous string
 @doc
-Treats the current string as a template (@0, @1 ... as in s%), formats it with the arguments and appends the result to the previous string. The accumulation becomes the current string.
+Treats the current string as a template (@0, @1 ... as in fmt), formats it with the arguments and appends the result to the previous string. The accumulation becomes the current string.
 Usage: [so far] [value @0 @1] 3 4 fmt>>s
 @code
     return skode_exec_fmt_append(ctx, s, args, argc);
@@ -22,7 +22,7 @@ Usage: [so far] [value @0 @1] 3 4 fmt>>s
 @match    (any)
 @summary  format current string and append to previous string
 @doc
-Treats the current string as a template (@0, @1 ... as in s%), formats it with the arguments and appends the result to the previous string. The accumulation becomes the current string.
+Treats the current string as a template (@0, @1 ... as in fmt), formats it with the arguments and appends the result to the previous string. The accumulation becomes the current string.
 Usage: [so far] [value @0 @1] 3 4 fmt>>s
 @code
     return skode_exec_fmt_append(ctx, s, args, argc);
@@ -37,7 +37,7 @@ Usage: [so far] [value @0 @1] 3 4 fmt>>s
 @match    (any, any)
 @summary  format current string and append to previous string
 @doc
-Treats the current string as a template (@0, @1 ... as in s%), formats it with the arguments and appends the result to the previous string. The accumulation becomes the current string.
+Treats the current string as a template (@0, @1 ... as in fmt), formats it with the arguments and appends the result to the previous string. The accumulation becomes the current string.
 Usage: [so far] [value @0 @1] 3 4 fmt>>s
 @code
     return skode_exec_fmt_append(ctx, s, args, argc);
@@ -52,7 +52,7 @@ Usage: [so far] [value @0 @1] 3 4 fmt>>s
 @match    (any, any, any)
 @summary  format current string and append to previous string
 @doc
-Treats the current string as a template (@0, @1 ... as in s%), formats it with the arguments and appends the result to the previous string. The accumulation becomes the current string.
+Treats the current string as a template (@0, @1 ... as in fmt), formats it with the arguments and appends the result to the previous string. The accumulation becomes the current string.
 Usage: [so far] [value @0 @1] 3 4 fmt>>s
 @code
     return skode_exec_fmt_append(ctx, s, args, argc);
@@ -67,7 +67,7 @@ Usage: [so far] [value @0 @1] 3 4 fmt>>s
 @match    (any, any, any, any)
 @summary  format current string and append to previous string
 @doc
-Treats the current string as a template (@0, @1 ... as in s%), formats it with the arguments and appends the result to the previous string. The accumulation becomes the current string.
+Treats the current string as a template (@0, @1 ... as in fmt), formats it with the arguments and appends the result to the previous string. The accumulation becomes the current string.
 Usage: [so far] [value @0 @1] 3 4 fmt>>s
 @code
     return skode_exec_fmt_append(ctx, s, args, argc);

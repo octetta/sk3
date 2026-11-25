@@ -9642,7 +9642,7 @@ Usage: [program] e>slot (or [program] macro_store slot)
 | [`stack_rot`](#stack_rot) | `rot` | 5 | 0..4 | Immediate | rotate top three stack arguments |
 | [`stack_swap`](#stack_swap) | `swap` | 5 | 0..4 | Immediate | swap top two stack arguments |
 | [`string_concat`](#string_concat) | `s>>s` | 1 | 0 | Immediate | append current string to previous, result becomes current |
-| [`string_format`](#string_format) | `s%` | 5 | 0..4 | Immediate | format string template with arguments |
+| [`string_format`](#string_format) | `fmt` | 5 | 0..4 | Immediate | format string template with arguments |
 | [`string_format_append`](#string_format_append) | `fmt>>s` | 5 | 0..4 | Immediate | format current string and append to previous string |
 | [`string_puts`](#string_puts) | `puts` | 2 | 0..1 | Immediate | print parser string buffer |
 | [`string_slot_load`](#string_slot_load) | `<s` | 1 | 1 | Immediate | load string from memory slot into parser buffer |
@@ -10647,7 +10647,7 @@ Usage: [a] [b] s>>s   (gives "ab")
 
 ### `string_format`
 
-- **Alias**: `s%`
+- **Alias**: `fmt`
 - **Group**: `data`
 - **Clause Count**: 5
 
@@ -10661,7 +10661,7 @@ Usage: [a] [b] s>>s   (gives "ab")
 
 ```text
 Substitutes format placeholders (@0, @1...) in string with stack arguments.
-Usage: [template] s%
+Usage: [template] fmt
 ```
 
 #### Clause 2: `string_format(any)`
@@ -10674,7 +10674,7 @@ Usage: [template] s%
 
 ```text
 Substitutes @0 in template string with stack argument.
-Usage: [template] arg0 s%
+Usage: [template] arg0 fmt
 ```
 
 #### Clause 3: `string_format(any, any)`
@@ -10687,7 +10687,7 @@ Usage: [template] arg0 s%
 
 ```text
 Substitutes @0, @1 in template string with stack arguments.
-Usage: [template] arg0 arg1 s%
+Usage: [template] arg0 arg1 fmt
 ```
 
 #### Clause 4: `string_format(any, any, any)`
@@ -10700,7 +10700,7 @@ Usage: [template] arg0 arg1 s%
 
 ```text
 Substitutes @0, @1, @2 in template string with stack arguments.
-Usage: [template] arg0 arg1 arg2 s%
+Usage: [template] arg0 arg1 arg2 fmt
 ```
 
 #### Clause 5: `string_format(any, any, any, any)`
@@ -10713,7 +10713,7 @@ Usage: [template] arg0 arg1 arg2 s%
 
 ```text
 Substitutes @0, @1, @2, @3 in template string with stack arguments.
-Usage: [template] arg0 arg1 arg2 arg3 s%
+Usage: [template] arg0 arg1 arg2 arg3 fmt
 ```
 
 ---
@@ -10733,7 +10733,7 @@ Usage: [template] arg0 arg1 arg2 arg3 s%
 **Description & Details**:
 
 ```text
-Treats the current string as a template (@0, @1 ... as in s%), formats it with the arguments and appends the result to the previous string. The accumulation becomes the current string.
+Treats the current string as a template (@0, @1 ... as in fmt), formats it with the arguments and appends the result to the previous string. The accumulation becomes the current string.
 Usage: [so far] [value @0 @1] 3 4 fmt>>s
 ```
 
@@ -10746,7 +10746,7 @@ Usage: [so far] [value @0 @1] 3 4 fmt>>s
 **Description & Details**:
 
 ```text
-Treats the current string as a template (@0, @1 ... as in s%), formats it with the arguments and appends the result to the previous string. The accumulation becomes the current string.
+Treats the current string as a template (@0, @1 ... as in fmt), formats it with the arguments and appends the result to the previous string. The accumulation becomes the current string.
 Usage: [so far] [value @0 @1] 3 4 fmt>>s
 ```
 
@@ -10759,7 +10759,7 @@ Usage: [so far] [value @0 @1] 3 4 fmt>>s
 **Description & Details**:
 
 ```text
-Treats the current string as a template (@0, @1 ... as in s%), formats it with the arguments and appends the result to the previous string. The accumulation becomes the current string.
+Treats the current string as a template (@0, @1 ... as in fmt), formats it with the arguments and appends the result to the previous string. The accumulation becomes the current string.
 Usage: [so far] [value @0 @1] 3 4 fmt>>s
 ```
 
@@ -10772,7 +10772,7 @@ Usage: [so far] [value @0 @1] 3 4 fmt>>s
 **Description & Details**:
 
 ```text
-Treats the current string as a template (@0, @1 ... as in s%), formats it with the arguments and appends the result to the previous string. The accumulation becomes the current string.
+Treats the current string as a template (@0, @1 ... as in fmt), formats it with the arguments and appends the result to the previous string. The accumulation becomes the current string.
 Usage: [so far] [value @0 @1] 3 4 fmt>>s
 ```
 
@@ -10785,7 +10785,7 @@ Usage: [so far] [value @0 @1] 3 4 fmt>>s
 **Description & Details**:
 
 ```text
-Treats the current string as a template (@0, @1 ... as in s%), formats it with the arguments and appends the result to the previous string. The accumulation becomes the current string.
+Treats the current string as a template (@0, @1 ... as in fmt), formats it with the arguments and appends the result to the previous string. The accumulation becomes the current string.
 Usage: [so far] [value @0 @1] 3 4 fmt>>s
 ```
 

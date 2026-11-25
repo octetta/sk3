@@ -2234,8 +2234,8 @@ float record_frame_mono(int frame) {
     summary: parser string to parser-local string slot
     @enddoc */
 
-    /* @doc(command.s%)
-    name: s%
+    /* @doc(command.fmt)
+    name: fmt
     category: macros
     summary: format parser string with numeric args
     @enddoc */

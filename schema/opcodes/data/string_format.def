@@ -1,5 +1,5 @@
 @name     string_format
-@alias    s%
+@alias    fmt
 @group    data
 @c_name   skode_clause_string_format_0
 @type     immediate
@@ -8,13 +8,13 @@
 @summary  format string template with arguments
 @doc
 Substitutes format placeholders (@0, @1...) in string with stack arguments.
-Usage: [template] s%
+Usage: [template] fmt
 @code
     return skode_exec_s_pct(ctx, s, args, argc);
 @end
 
 @name     string_format
-@alias    s%
+@alias    fmt
 @group    data
 @c_name   skode_clause_string_format_1
 @type     immediate
@@ -23,13 +23,13 @@ Usage: [template] s%
 @summary  format string template with 1 argument
 @doc
 Substitutes @0 in template string with stack argument.
-Usage: [template] arg0 s%
+Usage: [template] arg0 fmt
 @code
     return skode_exec_s_pct(ctx, s, args, argc);
 @end
 
 @name     string_format
-@alias    s%
+@alias    fmt
 @group    data
 @c_name   skode_clause_string_format_2
 @type     immediate
@@ -38,13 +38,13 @@ Usage: [template] arg0 s%
 @summary  format string template with 2 arguments
 @doc
 Substitutes @0, @1 in template string with stack arguments.
-Usage: [template] arg0 arg1 s%
+Usage: [template] arg0 arg1 fmt
 @code
     return skode_exec_s_pct(ctx, s, args, argc);
 @end
 
 @name     string_format
-@alias    s%
+@alias    fmt
 @group    data
 @c_name   skode_clause_string_format_3
 @type     immediate
@@ -53,13 +53,13 @@ Usage: [template] arg0 arg1 s%
 @summary  format string template with 3 arguments
 @doc
 Substitutes @0, @1, @2 in template string with stack arguments.
-Usage: [template] arg0 arg1 arg2 s%
+Usage: [template] arg0 arg1 arg2 fmt
 @code
     return skode_exec_s_pct(ctx, s, args, argc);
 @end
 
 @name     string_format
-@alias    s%
+@alias    fmt
 @group    data
 @c_name   skode_clause_string_format_4
 @type     immediate
@@ -68,7 +68,7 @@ Usage: [template] arg0 arg1 arg2 s%
 @summary  format string template with 4 arguments
 @doc
 Substitutes @0, @1, @2, @3 in template string with stack arguments.
-Usage: [template] arg0 arg1 arg2 arg3 s%
+Usage: [template] arg0 arg1 arg2 arg3 fmt
 @code
     return skode_exec_s_pct(ctx, s, args, argc);
 @end
