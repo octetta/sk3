@@ -251,21 +251,24 @@ int main(void) {
     chdir(tmp_dir);
 
     // -ls audio should find all 4 audio files (.wav, .WAV, .mp3, .FLAC) and omit notes.txt
+    // while maintaining absolute indices: 0. kick.wav, 1. loop.mp3, 3. perc.FLAC, 4. SNARE.WAV
     reset_test_state();
     assert(skred_host_execute("-ls audio", &env) == 1);
-    assert(strstr(g_last_output, "4 files") != NULL);
-    assert(strstr(g_last_output, "kick.wav") != NULL);
-    assert(strstr(g_last_output, "SNARE.WAV") != NULL);
-    assert(strstr(g_last_output, "loop.mp3") != NULL);
-    assert(strstr(g_last_output, "perc.FLAC") != NULL);
+    assert(strstr(g_last_output, "4 of 5 files") != NULL);
+    assert(strstr(g_last_output, "0. kick.wav") != NULL);
+    assert(strstr(g_last_output, "1. loop.mp3") != NULL);
+    assert(strstr(g_last_output, "3. perc.FLAC") != NULL);
+    assert(strstr(g_last_output, "4. SNARE.WAV") != NULL);
     assert(strstr(g_last_output, "notes.txt") == NULL);
 
-    // Test staging from disk listing by index (-add 0 2)
+    // Test staging from disk listing by maintained index (-add 0 4)
     reset_test_state();
-    assert(skred_host_execute("-add 0 2", &env) == 1);
+    assert(skred_host_execute("-add 0 4", &env) == 1);
     reset_test_state();
     assert(skred_host_execute("-tray", &env) == 1);
     assert(strstr(g_last_output, "2 files") != NULL);
+    assert(strstr(g_last_output, "kick.wav") != NULL);
+    assert(strstr(g_last_output, "SNARE.WAV") != NULL);
 
     // Test Random Pick (-pick ? audio /ws 0)
     reset_test_state();

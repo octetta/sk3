@@ -204,6 +204,7 @@ typedef struct {
 /* Cached disk directory files for indexed reference */
 static skred_staged_file_t s_dir_files[512];
 static int s_dir_count = 0;
+static char s_last_filter[128] = {0};
 
 static inline const char *skred_host_strcasestr(const char *haystack, const char *needle) {
     if (!haystack || !needle) return NULL;
@@ -275,7 +276,7 @@ static inline int skred_host_staging_cmp(const void *a, const void *b) {
     return strcasecmp(fa->name, fb->name);
 }
 
-static inline int skred_host_list_disk_dir(const char *filter, skred_staged_file_t *out_files, int max_files) {
+static inline int skred_host_scan_disk_dir(skred_staged_file_t *out_files, int max_files) {
     if (!out_files || max_files <= 0) return 0;
     int count = 0;
 #ifdef _WIN32
@@ -287,13 +288,11 @@ static inline int skred_host_list_disk_dir(const char *filter, skred_staged_file
         do {
             if (strcmp(fd.cFileName, ".") != 0 && strcmp(fd.cFileName, "..") != 0) {
                 if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
-                    if (skred_host_match_filter(fd.cFileName, filter)) {
-                        if (count < max_files) {
-                            strncpy(out_files[count].name, fd.cFileName, sizeof(out_files[count].name) - 1);
-                            out_files[count].name[sizeof(out_files[count].name) - 1] = '\0';
-                            out_files[count].size = ((size_t)fd.nFileSizeHigh << 32) | fd.nFileSizeLow;
-                            count++;
-                        }
+                    if (count < max_files) {
+                        strncpy(out_files[count].name, fd.cFileName, sizeof(out_files[count].name) - 1);
+                        out_files[count].name[sizeof(out_files[count].name) - 1] = '\0';
+                        out_files[count].size = ((size_t)fd.nFileSizeHigh << 32) | fd.nFileSizeLow;
+                        count++;
                     }
                 }
             }
@@ -308,13 +307,11 @@ static inline int skred_host_list_disk_dir(const char *filter, skred_staged_file
             if (strcmp(dir->d_name, ".") != 0 && strcmp(dir->d_name, "..") != 0) {
                 struct stat st;
                 if (stat(dir->d_name, &st) == 0 && !S_ISDIR(st.st_mode)) {
-                    if (skred_host_match_filter(dir->d_name, filter)) {
-                        if (count < max_files) {
-                            strncpy(out_files[count].name, dir->d_name, sizeof(out_files[count].name) - 1);
-                            out_files[count].name[sizeof(out_files[count].name) - 1] = '\0';
-                            out_files[count].size = (size_t)st.st_size;
-                            count++;
-                        }
+                    if (count < max_files) {
+                        strncpy(out_files[count].name, dir->d_name, sizeof(out_files[count].name) - 1);
+                        out_files[count].name[sizeof(out_files[count].name) - 1] = '\0';
+                        out_files[count].size = (size_t)st.st_size;
+                        count++;
                     }
                 }
             }
@@ -672,7 +669,7 @@ static inline int skred_host_execute(const char *cmd_line, const skred_host_env_
         /* Check for "all" keyword */
         if (strcasecmp(remainder, "all") == 0) {
             if (s_dir_count == 0) {
-                skred_host_list_disk_dir("", s_dir_files, 512);
+                skred_host_scan_disk_dir(s_dir_files, 512);
             }
             if (s_dir_count == 0) {
                 env->print(env->userdata, "No files in current directory to add.\n");
@@ -680,14 +677,21 @@ static inline int skred_host_execute(const char *cmd_line, const skred_host_env_
             }
             skred_host_staging_init();
             int added = 0;
+            const char *flt = s_last_filter[0] ? s_last_filter : NULL;
             for (int i = 0; i < s_dir_count; i++) {
-                char target[1024];
-                snprintf(target, sizeof(target), "%s/%s", s_host_staging_dir, s_dir_files[i].name);
-                if (skred_host_copy_file(s_dir_files[i].name, target)) {
-                    added++;
+                if (skred_host_match_filter(s_dir_files[i].name, flt)) {
+                    char target[1024];
+                    snprintf(target, sizeof(target), "%s/%s", s_host_staging_dir, s_dir_files[i].name);
+                    if (skred_host_copy_file(s_dir_files[i].name, target)) {
+                        added++;
+                    }
                 }
             }
-            env->print(env->userdata, "Added %d file(s) to staging tray.\n", added);
+            if (flt) {
+                env->print(env->userdata, "Added %d matching file(s) (filter: %s) to staging tray.\n", added, flt);
+            } else {
+                env->print(env->userdata, "Added %d file(s) to staging tray.\n", added);
+            }
             return 1;
         }
 
@@ -718,7 +722,7 @@ static inline int skred_host_execute(const char *cmd_line, const skred_host_env_
 
         if (is_index_list) {
             if (s_dir_count == 0) {
-                skred_host_list_disk_dir("", s_dir_files, 512);
+                skred_host_scan_disk_dir(s_dir_files, 512);
             }
             if (s_dir_count == 0) {
                 env->print(env->userdata, "No files available. Run -ls to browse files first.\n");
@@ -883,7 +887,7 @@ static inline int skred_host_execute(const char *cmd_line, const skred_host_env_
             } else {
                 /* Tray has no matches; fall back to disk browser */
                 if (s_dir_count == 0) {
-                    skred_host_list_disk_dir(filter, s_dir_files, 512);
+                    skred_host_scan_disk_dir(s_dir_files, 512);
                 }
                 int disk_cand[512];
                 int num_disk_cand = 0;
@@ -981,23 +985,39 @@ static inline int skred_host_execute(const char *cmd_line, const skred_host_env_
         }
 
         const char *filter = arg1;
-        skred_staged_file_t files[512];
-        int count = skred_host_list_disk_dir(filter, files, 512);
+        skred_host_scan_disk_dir(s_dir_files, 512);
 
         char cwd[1024];
         if (!getcwd(cwd, sizeof(cwd))) snprintf(cwd, sizeof(cwd), ".");
 
         if (filter && *filter) {
-            env->print(env->userdata, "# [disk: %s] (filter: %s, %d files)\n", cwd, filter, count);
+            strncpy(s_last_filter, filter, sizeof(s_last_filter) - 1);
+            s_last_filter[sizeof(s_last_filter) - 1] = '\0';
+            int match_count = 0;
+            for (int i = 0; i < s_dir_count; i++) {
+                if (skred_host_match_filter(s_dir_files[i].name, filter)) {
+                    match_count++;
+                }
+            }
+            env->print(env->userdata, "# [disk: %s] (filter: %s, %d of %d files)\n", cwd, filter, match_count, s_dir_count);
+            if (match_count == 0) {
+                env->print(env->userdata, "  (no matching files in working directory)\n");
+            } else {
+                for (int i = 0; i < s_dir_count; i++) {
+                    if (skred_host_match_filter(s_dir_files[i].name, filter)) {
+                        skred_host_print_file_entry(env, i, s_dir_files[i].name, s_dir_files[i].size);
+                    }
+                }
+            }
         } else {
-            env->print(env->userdata, "# [disk: %s] (%d files)\n", cwd, count);
-        }
-
-        if (count == 0) {
-            env->print(env->userdata, "  (no matching files in working directory)\n");
-        } else {
-            for (int i = 0; i < count; i++) {
-                skred_host_print_file_entry(env, i, files[i].name, files[i].size);
+            s_last_filter[0] = '\0';
+            env->print(env->userdata, "# [disk: %s] (%d files)\n", cwd, s_dir_count);
+            if (s_dir_count == 0) {
+                env->print(env->userdata, "  (no files in working directory)\n");
+            } else {
+                for (int i = 0; i < s_dir_count; i++) {
+                    skred_host_print_file_entry(env, i, s_dir_files[i].name, s_dir_files[i].size);
+                }
             }
         }
         if (skred_vfs_mode() != SKRED_VFS_DISK) {
@@ -1069,6 +1089,7 @@ static inline int skred_host_execute(const char *cmd_line, const skred_host_env_
         }
 
         s_dir_count = 0; /* Invalidate cached disk directory */
+        s_last_filter[0] = '\0';
 
         if (skred_vfs_mode() != SKRED_VFS_DISK) {
             if (skred_chdir(target_dir)) {
