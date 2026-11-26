@@ -123,12 +123,21 @@ extern float seq_pattern_hz[PATTERNS_MAX];
 
 typedef struct {
   int pattern[SCENE_LANES];
+  int next_scene;
+  int loop_count;
 } seq_scene_t;
 
 extern seq_scene_t seq_scenes[SCENE_MAX];
 extern int seq_active_scene;
 extern int seq_pending_scene;
 extern int seq_lane_pattern[SCENE_LANES];
+extern int seq_scene_loop_counter;
+
+int seq_pattern_copy(int src, int dst);
+void seq_scene_copy(int src, int dst);
+void seq_scene_chain(int scene_id, int repeats, int next_scene_id);
+int seq_scene_next_get(int scene_id);
+int seq_scene_loops_get(int scene_id);
 
 int seq_pattern_length_get(int pattern);
 void seq_pattern_length_set(int pattern, int len);

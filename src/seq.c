@@ -71,6 +71,7 @@ seq_scene_t seq_scenes[SCENE_MAX];
 int seq_active_scene = -1;
 int seq_pending_scene = -1;
 int seq_lane_pattern[SCENE_LANES];
+int seq_scene_loop_counter = 0;
 
 int scope_pattern_pointer = 0;
 int seq_pointer[PATTERNS_MAX] = {0};  // read-only derived value, kept for external inspection
@@ -305,7 +306,7 @@ void do_pattern(uint64_t now,
         target_tick - master_tick >= SEQ_MAX_CATCHUP_TICKS)
       master_tick = target_tick - (SEQ_MAX_CATCHUP_TICKS - 1);
     while (master_tick <= target_tick) {
-      if (seq_pending_scene >= 0) {
+      if (seq_pending_scene >= 0 || (seq_active_scene >= 0 && seq_scenes[seq_active_scene].next_scene >= 0)) {
         int mp = seq_master_pattern_get();
         int mp_running = (mp >= 0 && mp < PATTERNS_MAX &&
                           seq_state[mp] == SEQ_RUNNING);
@@ -323,7 +324,17 @@ void do_pattern(uint64_t now,
           scene_trigger = (master_tick % 16 == 0);
         }
         if (scene_trigger) {
-          seq_scene_apply_locked(seq_pending_scene, now);
+          if (seq_pending_scene >= 0) {
+            seq_scene_apply_locked(seq_pending_scene, now);
+            seq_scene_loop_counter = 0;
+          } else if (seq_active_scene >= 0 && seq_scenes[seq_active_scene].next_scene >= 0) {
+            seq_scene_loop_counter++;
+            if (seq_scenes[seq_active_scene].loop_count > 0 &&
+                seq_scene_loop_counter >= seq_scenes[seq_active_scene].loop_count) {
+              seq_scene_apply_locked(seq_scenes[seq_active_scene].next_scene, now);
+              seq_scene_loop_counter = 0;
+            }
+          }
         }
       }
       for (int p = 0; p < PATTERNS_MAX; p++) {
@@ -655,12 +666,15 @@ void seq_init(void) {
     for (int l = 0; l < SCENE_LANES; l++) {
       seq_scenes[s].pattern[l] = -1;
     }
+    seq_scenes[s].next_scene = -1;
+    seq_scenes[s].loop_count = 0;
   }
   for (int l = 0; l < SCENE_LANES; l++) {
     seq_lane_pattern[l] = -1;
   }
   seq_active_scene = -1;
   seq_pending_scene = -1;
+  seq_scene_loop_counter = 0;
   for (int p = 0; p < PATTERNS_MAX; p++) {
     atomic_store_int(&seq_generation[p], 0);
     pattern_reset_locked(p);
@@ -1006,4 +1020,73 @@ int seq_scene_active_get(void) {
 int seq_scene_pattern_get(int scene_id, int lane) {
   if (scene_id < 0 || scene_id >= SCENE_MAX || lane < 0 || lane >= SCENE_LANES) return -1;
   return seq_scenes[scene_id].pattern[lane];
+}
+
+int seq_pattern_copy(int src, int dst) {
+  if (src < 0 || src >= PATTERNS_MAX || dst < 0 || dst >= PATTERNS_MAX) return -1;
+  if (src == dst) return 0;
+  seq_edit_lock();
+  pattern_reset_locked(dst);
+
+  seq_pattern_storage_t *s_src = &seq_storage[src];
+  seq_pattern_storage_t *s_dst = &seq_storage[dst];
+
+  if (s_src->capacity > 0 && s_src->steps) {
+    s_dst->steps = calloc(s_src->capacity, sizeof(seq_step_t));
+    if (s_dst->steps) {
+      s_dst->capacity = s_src->capacity;
+      for (int s = 0; s < s_src->capacity; s++) {
+        if (s_src->steps[s].source) {
+          s_dst->steps[s].source = strdup(s_src->steps[s].source);
+        }
+        if (s_src->steps[s].program && s_src->steps[s].program->count > 0) {
+          size_t prog_bytes = sizeof(uint16_t) + (size_t)s_src->steps[s].program->count * sizeof(program_op_t);
+          s_dst->steps[s].program = malloc(prog_bytes);
+          if (s_dst->steps[s].program) {
+            memcpy(s_dst->steps[s].program, s_src->steps[s].program, prog_bytes);
+          }
+        }
+      }
+    }
+  }
+
+  seq_modulo[dst] = seq_modulo[src];
+  seq_mute[dst] = seq_mute[src];
+  seq_control_events[dst] = seq_control_events[src];
+  seq_pattern_length[dst] = seq_pattern_length[src];
+  seq_explicit_length[dst] = seq_explicit_length[src];
+  seq_pattern_rate[dst] = seq_pattern_rate[src];
+  seq_pattern_hz[dst] = seq_pattern_hz[src];
+  strncpy(seq_text[dst], seq_text[src], sizeof(seq_text[dst]) - 1);
+  seq_text[dst][sizeof(seq_text[dst]) - 1] = '\0';
+  atomic_fetch_add_int(&seq_generation[dst], 1);
+
+  seq_edit_unlock();
+  return 0;
+}
+
+void seq_scene_copy(int src, int dst) {
+  if (src < 0 || src >= SCENE_MAX || dst < 0 || dst >= SCENE_MAX) return;
+  if (src == dst) return;
+  seq_edit_lock();
+  seq_scenes[dst] = seq_scenes[src];
+  seq_edit_unlock();
+}
+
+void seq_scene_chain(int scene_id, int repeats, int next_scene_id) {
+  if (scene_id < 0 || scene_id >= SCENE_MAX) return;
+  seq_edit_lock();
+  seq_scenes[scene_id].loop_count = repeats > 0 ? repeats : 0;
+  seq_scenes[scene_id].next_scene = (next_scene_id >= 0 && next_scene_id < SCENE_MAX) ? next_scene_id : -1;
+  seq_edit_unlock();
+}
+
+int seq_scene_next_get(int scene_id) {
+  if (scene_id < 0 || scene_id >= SCENE_MAX) return -1;
+  return seq_scenes[scene_id].next_scene;
+}
+
+int seq_scene_loops_get(int scene_id) {
+  if (scene_id < 0 || scene_id >= SCENE_MAX) return 0;
+  return seq_scenes[scene_id].loop_count;
 }

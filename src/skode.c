@@ -195,6 +195,8 @@ static skode_t *skode_ctx[SKODE_CTX_MAX];
 
 char _skode_extra[STRING_BUF_IDX_MAX][STRING_BUF_LEN];
 static char _skode_extra_invalid[STRING_BUF_LEN];
+static event_program_t _skode_extra_program[STRING_BUF_IDX_MAX];
+static uint8_t _skode_extra_program_valid[STRING_BUF_IDX_MAX];
 simple_mutex_t skode_extra_mutex;
 #ifdef KSYNTH
 simple_mutex_t skode_ks_eval_mutex;
@@ -219,13 +221,35 @@ static void skode_global_init(void) {
     #endif
     for (int i = 0; i < SKODE_CTX_MAX; i++) skode_ctx[i] = NULL;
     _skode_extra_invalid[0] = '\0';
-    for (int i = 0; i < STRING_BUF_IDX_MAX; i++) _skode_extra[i][0] = '\0';
+    for (int i = 0; i < STRING_BUF_IDX_MAX; i++) {
+      _skode_extra[i][0] = '\0';
+      _skode_extra_program_valid[i] = 0;
+    }
     atomic_store_int(&skode_global_state, 2);
     return;
   }
 
   while (atomic_load_int(&skode_global_state) != 2) {
   }
+}
+
+void skode_extra_program_set(int index, const event_program_t *prog) {
+  if (!skode_extra_valid(index)) return;
+  skode_global_init();
+  simple_mutex_lock(&skode_extra_mutex);
+  if (prog && prog->count > 0) {
+    _skode_extra_program[index] = *prog;
+    _skode_extra_program_valid[index] = 1;
+  } else {
+    _skode_extra_program_valid[index] = 0;
+  }
+  simple_mutex_unlock(&skode_extra_mutex);
+}
+
+const event_program_t *skode_extra_program_get(int index) {
+  if (!skode_extra_valid(index)) return NULL;
+  skode_global_init();
+  return _skode_extra_program_valid[index] ? &_skode_extra_program[index] : NULL;
 }
 
 int skode_extra_copy(int index, char *dst, size_t dst_size) {

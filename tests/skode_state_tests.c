@@ -4505,6 +4505,27 @@ static void test_pattern_length_rate_hz_and_scenes(void) {
   consume(test, &ctx, "scene_cue 0");
   expect_int(test, seq_pending_scene, 0, "scene 0 queued for next downbeat");
 
+  /* 5. Test pattern_copy (ycp) */
+  consume(test, &ctx, "0 7 ycp");
+  expect_int(test, seq_pattern_length_get(7), seq_pattern_length_get(0), "pattern 7 length matches source");
+  expect_int(test, seq_modulo[7], seq_modulo[0], "pattern 7 modulo matches source");
+
+  /* 6. Test scene_chain and scene_copy */
+  consume(test, &ctx, "0 4 1 scene_chain");
+  expect_int(test, seq_scene_next_get(0), 1, "scene 0 chains to scene 1");
+  expect_int(test, seq_scene_loops_get(0), 4, "scene 0 loops 4 times before transition");
+
+  consume(test, &ctx, "0 2 scene_copy");
+  expect_int(test, seq_scene_pattern_get(2, 0), seq_scene_pattern_get(0, 0), "scene 2 copied lane 0");
+  expect_int(test, seq_scene_pattern_get(2, 1), seq_scene_pattern_get(0, 1), "scene 2 copied lane 1");
+  expect_int(test, seq_scene_next_get(2), 1, "scene 2 copied chain next");
+  expect_int(test, seq_scene_loops_get(2), 4, "scene 2 copied chain loop count");
+
+  /* 7. Test macro caching with e> */
+  consume(test, &ctx, "[v0 n64 l1] e> 10");
+  const event_program_t *cached = skode_extra_program_get(10);
+  expect_int(test, (cached != NULL && cached->count > 0) ? 1 : 0, 1, "macro slot 10 precompiled program cached");
+
   /* Cleanup */
   seq_state_all(0);
 }

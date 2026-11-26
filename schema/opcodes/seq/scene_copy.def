@@ -1,0 +1,16 @@
+@name     scene_copy
+@alias    scene_copy
+@group    seq
+@c_name   skode_clause_scene_copy
+@type     immediate
+@arity    2
+@match    (finite, finite)
+@summary  copy scene definition and chain to another scene slot
+@doc
+Copies all 8 lane pattern assignments, loop count, and next-scene chain from source to destination.
+Usage: src dst scene_copy
+@code
+    (void)ctx; (void)s; (void)argc;
+    seq_scene_copy((int)args[0], (int)args[1]);
+    return 0;
+@end

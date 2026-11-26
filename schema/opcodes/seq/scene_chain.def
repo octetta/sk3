@@ -1,0 +1,41 @@
+@name     scene_chain
+@alias    scene_chain
+@group    seq
+@c_name   skode_clause_scene_chain_3
+@type     immediate
+@arity    3
+@match    (finite, finite, finite)
+@summary  configure automated scene progression
+@doc
+Chains scene_id to automatically cue next_scene after repeats loops of the master pattern.
+Usage: scene_id repeats next_scene scene_chain
+@code
+    (void)ctx; (void)s; (void)argc;
+    seq_scene_chain((int)args[0], (int)args[1], (int)args[2]);
+    return 0;
+@end
+
+@name     scene_chain
+@alias    scene_chain
+@group    seq
+@c_name   skode_clause_scene_chain_1
+@type     immediate
+@arity    1
+@match    (finite)
+@summary  query scene chain configuration
+@doc
+Displays the chained next scene and loop count for scene_id.
+Usage: scene_id scene_chain
+@code
+    if (!ctx) return -1;
+    (void)s; (void)argc;
+    int sc = (int)args[0];
+    int next = seq_scene_next_get(sc);
+    int loops = seq_scene_loops_get(sc);
+    if (next >= 0 && loops > 0) {
+        ctx->printf(ctx, "# scene %d: -> %d after %d loops\n", sc, next, loops);
+    } else {
+        ctx->printf(ctx, "# scene %d: no chain (loop)\n", sc);
+    }
+    return 0;
+@end

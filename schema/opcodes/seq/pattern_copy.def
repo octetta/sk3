@@ -1,0 +1,15 @@
+@name     pattern_copy
+@alias    ycp
+@group    seq
+@c_name   skode_clause_pattern_copy
+@type     immediate
+@arity    2
+@match    (finite, finite)
+@summary  copy pattern to another pattern slot
+@doc
+Copies all steps, timing, settings, and code from source pattern to destination pattern.
+Usage: src dst ycp (or pattern_copy src dst)
+@code
+    (void)ctx; (void)s; (void)argc;
+    return seq_pattern_copy((int)args[0], (int)args[1]);
+@end

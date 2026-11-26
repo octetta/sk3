@@ -9,10 +9,10 @@ Generated automatically by `tools/mkopcodes` from modular opcode definitions in 
 
 ## Architecture & System Overview
 
-- **Total Command Words**: 351
-- **Total Dispatch Clauses**: 730
+- **Total Command Words**: 354
+- **Total Dispatch Clauses**: 734
 - **Real-Time Audio Opcode Handlers**: 169 (audio-thread safe, zero allocation, zero string lookup)
-- **Immediate / Control Plane Clauses**: 561 (REPL / parser / file system / diagnostics)
+- **Immediate / Control Plane Clauses**: 565 (REPL / parser / file system / diagnostics)
 
 ### Functional Command Groups
 
@@ -26,7 +26,7 @@ Generated automatically by `tools/mkopcodes` from modular opcode definitions in 
 | mod | `mod` | 15 | Cross-modulation, FM, AM, ring mod, sample & hold, glissando |
 | delay | `delay` | 9 | Stereo delay engine, feedback, pingpong, damping, grit |
 | poly | `poly` | 13 | Polyphonic voice pools, voice allocation, prototype groups |
-| seq | `seq` | 37 | Sequencer patterns, steps, tempo, ratchets, loop modulo |
+| seq | `seq` | 40 | Sequencer patterns, steps, tempo, ratchets, loop modulo |
 | ctrl | `ctrl` | 9 | Control plane events, event bus, responder bindings |
 | repeat | `repeat` | 11 | Scheduled repeats, tick loops, and deferred queues |
 | stream | `stream` | 6 | Step data streams and stream cursors |
@@ -298,7 +298,7 @@ Triggers voice gate on.
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `287` (`skode_clause_inst_note_c634`)
+- **Discrete Opcode ID**: `287` (`skode_clause_inst_note_c638`)
 - **Summary**: trigger instrument note
 
 **Description & Details**:
@@ -312,7 +312,7 @@ Usage: i note
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `288` (`skode_clause_inst_note_c635`)
+- **Discrete Opcode ID**: `288` (`skode_clause_inst_note_c639`)
 - **Summary**: trigger instrument note with velocity
 
 **Description & Details**:
@@ -326,7 +326,7 @@ Usage: i note velocity
 
 - **Arity**: `3`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `289` (`skode_clause_inst_note_c636`)
+- **Discrete Opcode ID**: `289` (`skode_clause_inst_note_c640`)
 - **Summary**: trigger instrument note with velocity and cents
 
 **Description & Details**:
@@ -5694,6 +5694,7 @@ Usage: gr pool key velocity
 | [`pattern_all`](#pattern_all) | `Z` | 2 | 0..1 | Immediate | display all pattern programs and tempo |
 | [`pattern_all_data`](#pattern_all_data) | `Z>` | 2 | 0..1 | Immediate | apply playback state to patterns in data array |
 | [`pattern_all_query`](#pattern_all_query) | `Z?` | 1 | 0 | Immediate | query all patterns summary |
+| [`pattern_copy`](#pattern_copy) | `ycp` | 1 | 2 | Immediate | copy pattern to another pattern slot |
 | [`pattern_goto`](#pattern_goto) | `zg` | 1 | 1 | Immediate | jump active pattern playback step |
 | [`pattern_goto_alt`](#pattern_goto_alt) | `-j` | 1 | 1 | Real-Time | jump active pattern playback step (-j alias) |
 | [`pattern_hz`](#pattern_hz) | `pattern_hz` | 2 | 1..2 | Immediate | set pattern rate in isochronous Hz |
@@ -5717,6 +5718,8 @@ Usage: gr pool key velocity
 | [`pattern_step_query`](#pattern_step_query) | `ys?` | 1 | 0 | Immediate | query pattern step details |
 | [`pattern_text`](#pattern_text) | `yt` | 2 | 0..1 | Immediate | set pattern text label from active string |
 | [`scene_active`](#scene_active) | `scene_active` | 1 | 0 | Immediate | query currently active scene index |
+| [`scene_chain`](#scene_chain) | `scene_chain` | 2 | 1..3 | Immediate | configure automated scene progression |
+| [`scene_copy`](#scene_copy) | `scene_copy` | 1 | 2 | Immediate | copy scene definition and chain to another scene slot |
 | [`scene_cue`](#scene_cue) | `scene_cue` | 1 | 1 | Real-Time | queue scene change at next downbeat |
 | [`scene_define`](#scene_define) | `scene_define` | 1 | 1 | Immediate | define or inspect scene pattern assignments |
 | [`scene_now`](#scene_now) | `scene_now` | 1 | 1 | Real-Time | switch scene immediately across all lanes |
@@ -5851,6 +5854,27 @@ Usage: (p1 p2 ...) Z> state
 ```text
 Prints comprehensive summary of all defined patterns.
 Usage: Z?
+```
+
+---
+
+### `pattern_copy`
+
+- **Alias**: `ycp`
+- **Group**: `seq`
+- **Clause Count**: 1
+
+#### Clause 1: `pattern_copy(finite, finite)`
+
+- **Arity**: `2`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: copy pattern to another pattern slot
+
+**Description & Details**:
+
+```text
+Copies all steps, timing, settings, and code from source pattern to destination pattern.
+Usage: src dst ycp (or pattern_copy src dst)
 ```
 
 ---
@@ -6443,6 +6467,61 @@ Usage: [label] yt num
 ```text
 Prints the currently active scene index.
 Usage: scene_active
+```
+
+---
+
+### `scene_chain`
+
+- **Alias**: `scene_chain`
+- **Group**: `seq`
+- **Clause Count**: 2
+
+#### Clause 1: `scene_chain(finite, finite, finite)`
+
+- **Arity**: `3`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: configure automated scene progression
+
+**Description & Details**:
+
+```text
+Chains scene_id to automatically cue next_scene after repeats loops of the master pattern.
+Usage: scene_id repeats next_scene scene_chain
+```
+
+#### Clause 2: `scene_chain(finite)`
+
+- **Arity**: `1`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: query scene chain configuration
+
+**Description & Details**:
+
+```text
+Displays the chained next scene and loop count for scene_id.
+Usage: scene_id scene_chain
+```
+
+---
+
+### `scene_copy`
+
+- **Alias**: `scene_copy`
+- **Group**: `seq`
+- **Clause Count**: 1
+
+#### Clause 1: `scene_copy(finite, finite)`
+
+- **Arity**: `2`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: copy scene definition and chain to another scene slot
+
+**Description & Details**:
+
+```text
+Copies all 8 lane pattern assignments, loop count, and next-scene chain from source to destination.
+Usage: src dst scene_copy
 ```
 
 ---
@@ -7401,7 +7480,7 @@ Usage: DO?
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `269` (`skode_clause_stream_copy_c485`)
+- **Discrete Opcode ID**: `269` (`skode_clause_stream_copy_c489`)
 - **Summary**: copy stream contents
 
 **Description & Details**:
@@ -7423,7 +7502,7 @@ Usage: /SC dst src
 
 - **Arity**: `3`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `272` (`skode_clause_stream_gen_c488`)
+- **Discrete Opcode ID**: `272` (`skode_clause_stream_gen_c492`)
 - **Summary**: configure virtual stream generator with default step 1.0
 
 **Description & Details**:
@@ -7437,7 +7516,7 @@ Usage: /SG stream_idx min max
 
 - **Arity**: `4`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `273` (`skode_clause_stream_gen_c489`)
+- **Discrete Opcode ID**: `273` (`skode_clause_stream_gen_c493`)
 - **Summary**: configure virtual stream generator with step
 
 **Description & Details**:
@@ -7451,7 +7530,7 @@ Usage: /SG stream_idx min max step
 
 - **Arity**: `5`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `274` (`skode_clause_stream_gen_c490`)
+- **Discrete Opcode ID**: `274` (`skode_clause_stream_gen_c494`)
 - **Summary**: configure virtual stream generator with step and mode
 
 **Description & Details**:
@@ -7473,7 +7552,7 @@ Usage: /SG stream_idx min max step mode
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `270` (`skode_clause_stream_mode_c486`)
+- **Discrete Opcode ID**: `270` (`skode_clause_stream_mode_c490`)
 - **Summary**: set stream playback mode
 
 **Description & Details**:
@@ -7495,7 +7574,7 @@ Usage: /SM stream_idx mode
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `271` (`skode_clause_stream_pos_c487`)
+- **Discrete Opcode ID**: `271` (`skode_clause_stream_pos_c491`)
 - **Summary**: set stream read position
 
 **Description & Details**:

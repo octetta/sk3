@@ -220,6 +220,8 @@ skode_compile_result_t skode_compile_program_ex(const char *text,
 skode_compile_result_t skode_compile_program_describe(const char *text,
   event_program_t *program, char *hint_buf, size_t hint_size);
 int skode_extra_copy(int index, char *dst, size_t dst_size);
+void skode_extra_program_set(int index, const event_program_t *prog);
+const event_program_t *skode_extra_program_get(int index);
 int skode_queue_program(const event_program_t *program, int voice,
   uint64_t when, int tag);
 int skode_queue_program_deferred(const event_program_t *program, int voice,

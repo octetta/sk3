@@ -61,6 +61,14 @@ void skode_repeat_macro(skode_t *ctx, const double *arg, int argc,
   int tag = 0;
   if (argc > 3 && !skode_double_to_int(arg[3], &tag)) return;
 
+  const event_program_t *cached = skode_extra_program_get(macro_index);
+  if (cached && cached->count > 0) {
+    double seconds = arg[2];
+    if (tempo_relative) seconds *= tempo_step_seconds_get() * 4.0f;
+    skode_queue_repeated(cached, ctx->voice, count, seconds, tag);
+    return;
+  }
+
   char macro[STRING_BUF_LEN];
   if (skode_extra_copy(macro_index, macro, sizeof(macro)) != 0 ||
       macro[0] == '\0') {
