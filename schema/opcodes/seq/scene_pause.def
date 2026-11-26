@@ -1,0 +1,16 @@
+@name     scene_pause
+@alias    scene_pause
+@alias    pause
+@group    seq
+@type     realtime
+@arity    0
+@match    ()
+@summary  pause playback of active scene in place
+@doc
+Freezes active scene playback and pattern steps in place without resetting positions.
+Usage: scene_pause (or pause)
+@code
+    (void)voice; (void)args; (void)argc;
+    seq_scene_pause();
+    return 0;
+@end

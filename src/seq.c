@@ -70,6 +70,7 @@ static uint64_t seq_pattern_step_count[PATTERNS_MAX] = {0};
 seq_scene_t seq_scenes[SCENE_MAX];
 int seq_active_scene = -1;
 int seq_pending_scene = -1;
+int seq_scene_stop_pending = 0;
 int seq_lane_pattern[SCENE_LANES];
 int seq_scene_loop_counter = 0;
 
@@ -310,7 +311,7 @@ void do_pattern(uint64_t now,
         target_tick - master_tick >= SEQ_MAX_CATCHUP_TICKS)
       master_tick = target_tick - (SEQ_MAX_CATCHUP_TICKS - 1);
     while (master_tick <= target_tick) {
-      if (seq_pending_scene >= 0 || (seq_active_scene >= 0 && (seq_scenes[seq_active_scene].next_scene >= 0 || seq_scenes[seq_active_scene].loop_count > 0))) {
+      if (seq_scene_stop_pending || seq_pending_scene >= 0 || (seq_active_scene >= 0 && (seq_scenes[seq_active_scene].next_scene >= 0 || seq_scenes[seq_active_scene].loop_count > 0))) {
         int mp = seq_master_pattern_get();
         int mp_running = (mp >= 0 && mp < PATTERNS_MAX &&
                           seq_state[mp] == SEQ_RUNNING);
@@ -337,7 +338,19 @@ void do_pattern(uint64_t now,
           }
         }
         if (scene_trigger) {
-          if (seq_pending_scene >= 0) {
+          if (seq_scene_stop_pending) {
+            /* Outro / scene_stop reached downbeat: clean musical stop */
+            for (int p = 0; p < PATTERNS_MAX; p++) {
+              seq_state_set_locked(p, SEQ_STOPPED);
+            }
+            seq_active_scene = -1;
+            seq_pending_scene = -1;
+            seq_scene_loop_counter = 0;
+            seq_scene_stop_pending = 0;
+            for (int l = 0; l < SCENE_LANES; l++) {
+              seq_lane_pattern[l] = -1;
+            }
+          } else if (seq_pending_scene >= 0) {
             seq_scene_apply_locked(seq_pending_scene, now);
           } else if (seq_active_scene >= 0 && seq_scenes[seq_active_scene].loop_count > 0) {
             if (seq_scene_apply_tick != master_tick) {
@@ -928,6 +941,7 @@ void seq_state_all(int state) {
     seq_active_scene = -1;
     seq_pending_scene = -1;
     seq_scene_loop_counter = 0;
+    seq_scene_stop_pending = 0;
     for (int l = 0; l < SCENE_LANES; l++) {
       seq_lane_pattern[l] = -1;
     }
@@ -1033,15 +1047,22 @@ void seq_scene_define(int scene_id, const int *patterns, int count) {
 }
 
 void seq_scene_cue(int scene_id) {
-  if (scene_id < 0 || scene_id >= SCENE_MAX) return;
+  if (scene_id < -1 || scene_id >= SCENE_MAX) return;
   seq_edit_lock();
-  seq_pending_scene = scene_id;
+  if (scene_id == -1) {
+    seq_scene_stop_pending = 1;
+    seq_pending_scene = -1;
+  } else {
+    seq_pending_scene = scene_id;
+    seq_scene_stop_pending = 0;
+  }
   seq_edit_unlock();
 }
 
 void seq_scene_now(int scene_id) {
   if (scene_id < 0 || scene_id >= SCENE_MAX) return;
   seq_edit_lock();
+  seq_scene_stop_pending = 0;
   seq_scene_apply_locked(scene_id, SAMPLE_COUNT_GET());
   seq_edit_unlock();
 }
@@ -1051,8 +1072,36 @@ void seq_scene_stop(void) {
   seq_active_scene = -1;
   seq_pending_scene = -1;
   seq_scene_loop_counter = 0;
+  seq_scene_stop_pending = 0;
   for (int l = 0; l < SCENE_LANES; l++) {
     seq_lane_pattern[l] = -1;
+  }
+  seq_edit_unlock();
+}
+
+void seq_scene_stop_cue(void) {
+  seq_edit_lock();
+  seq_scene_stop_pending = 1;
+  seq_pending_scene = -1;
+  seq_edit_unlock();
+}
+
+void seq_scene_pause(void) {
+  seq_edit_lock();
+  for (int p = 0; p < PATTERNS_MAX; p++) {
+    if (seq_state[p] == SEQ_RUNNING) {
+      seq_state_set_locked(p, SEQ_PAUSED);
+    }
+  }
+  seq_edit_unlock();
+}
+
+void seq_scene_resume(void) {
+  seq_edit_lock();
+  for (int p = 0; p < PATTERNS_MAX; p++) {
+    if (seq_state[p] == SEQ_PAUSED) {
+      seq_state_set_locked(p, 3);
+    }
   }
   seq_edit_unlock();
 }

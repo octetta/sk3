@@ -6,7 +6,7 @@
 @match    (finite)
 @summary  queue scene change at next downbeat
 @doc
-Queues scene change across all 8 lanes at next downbeat.
+Queues scene change across all 8 lanes at next downbeat. Pass -1 to queue a clean musical stop (same as scene_stop).
 Usage: scene_cue scene_id (or scene_id scene_cue)
 @code
     (void)voice;

@@ -1,0 +1,15 @@
+@name     scene_stop
+@alias    scene_stop
+@group    seq
+@type     realtime
+@arity    0
+@match    ()
+@summary  queue clean musical stop at end of current scene
+@doc
+Queues a clean musical stop across all lanes when the current scene reaches its last step / downbeat.
+Usage: scene_stop
+@code
+    (void)voice; (void)args; (void)argc;
+    seq_scene_stop_cue();
+    return 0;
+@end

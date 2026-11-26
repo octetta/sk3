@@ -4567,6 +4567,33 @@ static void test_pattern_length_rate_hz_and_scenes(void) {
   consume(test, &ctx, "scene_cue 0");
   expect_int(test, seq_pending_scene, 0, "scene 0 queued for next downbeat");
 
+  /* Test scene_pause and scene_resume */
+  extern int seq_scene_stop_pending;
+  consume(test, &ctx, "scene_pause");
+  expect_int(test, seq_state[4], SEQ_PAUSED, "pattern 4 paused via scene_pause");
+  expect_int(test, seq_state[2], SEQ_PAUSED, "pattern 2 paused via scene_pause");
+  consume(test, &ctx, "scene_resume");
+  expect_int(test, seq_state[4], SEQ_RUNNING, "pattern 4 resumed via scene_resume");
+  expect_int(test, seq_state[2], SEQ_RUNNING, "pattern 2 resumed via scene_resume");
+
+  /* Test pause and resume aliases */
+  consume(test, &ctx, "pause");
+  expect_int(test, seq_state[4], SEQ_PAUSED, "pattern 4 paused via pause alias");
+  consume(test, &ctx, "resume");
+  expect_int(test, seq_state[4], SEQ_RUNNING, "pattern 4 resumed via resume alias");
+
+  /* Test scene_stop and -1 scene_cue */
+  consume(test, &ctx, "scene_stop");
+  expect_int(test, seq_scene_stop_pending, 1, "scene_stop queues stop at downbeat");
+  expect_int(test, seq_pending_scene, -1, "pending scene reset to -1 on scene_stop");
+
+  consume(test, &ctx, "scene_cue 0");
+  expect_int(test, seq_scene_stop_pending, 0, "queueing scene 0 clears stop pending");
+  expect_int(test, seq_pending_scene, 0, "scene 0 queued");
+
+  consume(test, &ctx, "-1 scene_cue");
+  expect_int(test, seq_scene_stop_pending, 1, "-1 scene_cue queues stop at downbeat");
+
   /* 5. Test pattern_copy (ycp) */
   consume(test, &ctx, "0 7 ycp");
   expect_int(test, seq_pattern_length_get(7), seq_pattern_length_get(0), "pattern 7 length matches source");

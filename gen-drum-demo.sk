@@ -184,6 +184,30 @@ v16 w116 f440 a-2.0 p.10
 v17 w117 f440 a-3.5 p-.25
 [Space Laser] vt
 
+# --- CASIO VL-1 (1979) & SK-1 (1985) LO-FI POLYBLEP VOICES ---
+# Synthesized in real time via PolyBLEP square/pulse waves (w1) and clocked
+# LFSR digital noise (w5) with hardware-authentic pitch envelopes and filtering:
+
+# v18: Casio VL-1 Square Wave Pitch Chirp Kick ("Po" - 1-bit NEC MCU pulse)
+v18 w1 pw 0.50 f55 a-1.5 p0 t.001,.10,0,.01 pt.001,.065,0,.01 pd1600 j1 k400 q1.5
+[Casio VL1 Kick] vt
+
+# v19: Casio VL-1 Resonant Bandpass Noise Snare ("Ka" - Shift register burst)
+v19 w5 f440 a-3.0 p0 t.001,.06,0,.01 j3 k2400 q2.0
+[Casio VL1 Snare] vt
+
+# v20: Casio VL-1 Highpass Micro-Tick Hi-Hat ("Chi" - 22ms 1-bit tick)
+v20 w5 f440 a-5.0 p.20 t.001,.022,0,.01 j2 k6000 q1.2
+[Casio VL1 Hat] vt
+
+# v21: Casio SK-1 Lo-Fi High Bongo (9.38 kHz PCM character via resonant pulse)
+v21 w1 pw 0.28 f240 a-3.5 p-.25 t.001,.09,0,.01 pt.001,.045,0,.01 pd750 j1 k1400 q2.2
+[Casio SK1 HiBongo] vt
+
+# v22: Casio SK-1 Lo-Fi Low Bongo (9.38 kHz PCM character via resonant pulse)
+v22 w1 pw 0.28 f160 a-3.5 p.25 t.001,.11,0,.01 pt.001,.055,0,.01 pd500 j1 k1100 q2.0
+[Casio SK1 LoBongo] vt
+
 # ----------------------------------------------------------------------
 # 3. DISCRETE STEP SEQUENCER PATTERNS (y0..y69)
 # ----------------------------------------------------------------------
@@ -213,7 +237,7 @@ y3 %1
 yl 16
 [v11 l.8] x0,3,6,10,12
 
-# Pattern 4: CR-78 Congas (Low: 4, 11 and High: 2, 8, 14)
+# Pattern 4: CR-78 Congas - Low 4, 11 and High 2, 8, 14
 y4 %1
 [CR-78 Congas] yt
 yl 16
@@ -355,7 +379,7 @@ yl 16
 [v4 l.85] x4,12
 [v11 l.8] x0,3,7,10
 
-# Pattern 34: Freestyle Conga Tumble (Low: 4, 11 and High: 2, 5, 8, 14)
+# Pattern 34: Freestyle Conga Tumble - Low 4, 11 and High 2, 5, 8, 14
 y34 %1
 [Freestyle Congas] yt
 yl 16
@@ -493,7 +517,7 @@ yl 16
 [v4 l.85] x4,12
 [v11 l.8] x2,8,14
 
-# Pattern 64: Go-Go Conga Groove (Low: 4, 10 and High: 2, 6, 8, 14)
+# Pattern 64: Go-Go Conga Groove - Low 4, 10 and High 2, 6, 8, 14
 y64 %1
 [Go-Go Congas] yt
 yl 16
@@ -512,6 +536,41 @@ y66 %1
 yl 16
 [v14 l.8] x0
 
+# --- STYLE 8: CASIO VL-1 (1979) & SK-1 (1985) LO-FI TOY RHYTHM ---
+# The iconic VL-1 "Rock-1" groove (Trio "Da Da Da") layered with SK-1 crunchy bongos:
+
+# Pattern 70: VL-1 Kick "Po" (Steps 0, 8, and pickup on 14)
+y70 %1
+[VL-1 Po Kick] yt
+yl 16
+[v18 l.9] x0,8,14
+
+# Pattern 71: VL-1 Snare "Ka" (Backbeat steps 4, 12)
+y71 %1
+[VL-1 Ka Snare] yt
+yl 16
+[v19 l.85] x4,12
+
+# Pattern 72: VL-1 Hi-Hat "Chi" (Straight 8ths with 16th pickups)
+y72 %1
+[VL-1 Chi Hats] yt
+yl 16
+[v20 l.7] x0,2,4,6,8,10,12,14
+[v20 l.5] x7,15
+
+# Pattern 73: SK-1 Lo-Fi Bongos - High 2, 7, 10 and Low 4, 12, 15
+y73 %1
+[SK-1 LoFi Bongos] yt
+yl 16
+[v21 l.75] x2,7,10
+[v22 l.8] x4,12,15
+
+# Pattern 74: Space Laser Toy Zap Accents (Steps 6, 14)
+y74 %1
+[Casio Toy Zap] yt
+yl 16
+[v17 l.7] x6,14
+
 # ----------------------------------------------------------------------
 # 4. CONTROL PLANE EVENT RESPONDERS & CONDUCTOR PATTERNS
 # ----------------------------------------------------------------------
@@ -521,7 +580,7 @@ yl 16
 # Disable master pattern sync locking so 4-bar scenes advance smoothly
 yp -1
 
-# Responder macros triggered by control plane events (ce0..ce7) on step 0
+# Responder macros triggered by control plane events (ce0..ce8) on step 0
 [scene_bossa_puts]     : [>>> SCENE 0: ROLAND CR-78 (1978) BOSSA NOVA <<<] puts ;
 [scene_disco_puts]     : [>>> SCENE 1: 1970S SPACE DISCO FOUR-ON-THE-FLOOR <<<] puts ;
 [scene_electro_puts]   : [>>> SCENE 2: ROLAND TR-808 (1982) PLANET ROCK ELECTRO <<<] puts ;
@@ -530,8 +589,9 @@ yp -1
 [scene_simmons_puts]   : [>>> SCENE 5: 1981 SIMMONS SDS-V DISCO TOMS & LASERS <<<] puts ;
 [scene_gogo_puts]      : [>>> SCENE 6: 1985 D.C. GO-GO & BOOGIE FUNK <<<] puts ;
 [scene_climax_puts]    : [>>> SCENE 7: ALL-STAR VINTAGE HARDWARE CLIMAX <<<] puts ;
+[scene_casio_puts]     : [>>> SCENE 8: CASIO VL-1 (1979) & SK-1 (1985) LO-FI ROCK-1 & BONGO RHYTHM <<<] puts ;
 
-# Bind responders to user control event IDs 0..7
+# Bind responders to user control event IDs 0..8
 [scene_bossa_puts]     /ceb 4 0
 [scene_disco_puts]     /ceb 4 1
 [scene_electro_puts]   /ceb 4 2
@@ -540,6 +600,7 @@ yp -1
 [scene_simmons_puts]   /ceb 4 5
 [scene_gogo_puts]      /ceb 4 6
 [scene_climax_puts]    /ceb 4 7
+[scene_casio_puts]     /ceb 4 8
 
 # --- MASTER CONDUCTOR PATTERNS (Scene Announcement Events) ---
 # Each conductor pattern runs 64 steps (4 bars) with [ce<id>] on step 0
@@ -583,17 +644,22 @@ y127 %1
 yl 64
 [ce7] x0
 
+y128 %1
+[Conductor Scene 8] yt
+yl 64
+[ce8] x0
+
 # ----------------------------------------------------------------------
 # 5. SCENE MATRIX & ARRANGER DEFINITION
 # Lanes:
-#   Lane 0: Kick (v0/v1)
-#   Lane 1: Snare & Rimshot (v2/v3)
-#   Lane 2: Hi-Hats (v5/v6)
-#   Lane 3: Claps & Claves (v4/v11)
-#   Lane 4: Congas & Toms (v7/v8/v9/v10/v16)
-#   Lane 5: Cowbell & Maracas (v12/v13/v17)
+#   Lane 0: Kick (v0/v1/v18)
+#   Lane 1: Snare & Rimshot (v2/v3/v19)
+#   Lane 2: Hi-Hats (v5/v6/v20)
+#   Lane 3: Claps, Claves & Bongos (v4/v11/v21/v22)
+#   Lane 4: Congas, Toms & Zaps (v7/v8/v9/v10/v16/v17)
+#   Lane 5: Cowbell & Maracas (v12/v13)
 #   Lane 6: Cymbals (Crash & Ride) (v14/v15)
-#   Lane 7: Master Conductor / Scene Event (Patterns 120-127)
+#   Lane 7: Master Conductor / Scene Event (Patterns 120-128)
 # ----------------------------------------------------------------------
 
 # Scene 0: Roland CR-78 Bossa Nova (1978)
@@ -620,6 +686,9 @@ yl 64
 # Scene 7: All-Star Analog Drum Climax (Full Hardware Jam)
 ( 20 21 12 23 54 25 16 127 ) scene_define 7
 
+# Scene 8: Casio VL-1 & SK-1 Lo-Fi Toy Keyboard Rhythm (1979 / 1985)
+( 70 71 72 73 74 -1 -1 128 ) scene_define 8
+
 # ----------------------------------------------------------------------
 # 6. AUTOMATED SCENE PROGRESSION CHAIN
 # Structure:
@@ -630,7 +699,8 @@ yl 64
 #   Scene 4 (Synth-Pop)          - 4 bars -> Scene 5
 #   Scene 5 (Simmons Tom Solo)   - 4 bars -> Scene 6
 #   Scene 6 (Go-Go Cowbell Funk) - 4 bars -> Scene 7
-#   Scene 7 (All-Star Climax)    - 4 bars -> Loop back to Scene 0
+#   Scene 7 (All-Star Climax)    - 4 bars -> Scene 8
+#   Scene 8 (Casio VL-1 / SK-1)  - 4 bars -> Loop back to Scene 0
 # ----------------------------------------------------------------------
 0 4 1 scene_chain
 1 4 2 scene_chain
@@ -639,7 +709,8 @@ yl 64
 4 4 5 scene_chain
 5 4 6 scene_chain
 6 4 7 scene_chain
-7 4 0 scene_chain
+7 4 8 scene_chain
+8 4 0 scene_chain
 
 # ----------------------------------------------------------------------
 # 7. INTERACTIVE NAVIGATION MACROS & CONTROLS
@@ -652,6 +723,7 @@ yl 64
 [scene_simmons]   : 5 scene_cue ;
 [scene_gogo]      : 6 scene_cue ;
 [scene_climax]    : 7 scene_cue ;
+[scene_casio]     : 8 scene_cue ;
 
 # Jump to scene immediately without waiting for bar end:
 [now_bossa]       : 0 scene_now ;
@@ -662,12 +734,13 @@ yl 64
 [now_simmons]     : 5 scene_now ;
 [now_gogo]        : 6 scene_now ;
 [now_climax]      : 7 scene_now ;
+[now_casio]       : 8 scene_now ;
 
 # Master Play / Stop macros
 [play] : Z0 Z! scene_now 0 ;
 
 # Display directory of scenes
-[scenes] : [SCENES: 0:scene_bossa 1:scene_disco 2:scene_electro 3:scene_freestyle 4:scene_synthpop 5:scene_simmons 6:scene_gogo 7:scene_climax] puts ;
+[scenes] : [SCENES: 0:scene_bossa 1:scene_disco 2:scene_electro 3:scene_freestyle 4:scene_synthpop 5:scene_simmons 6:scene_gogo 7:scene_climax 8:scene_casio] puts ;
 
 # ----------------------------------------------------------------------
 # 8. STARTUP GUIDE BANNER
@@ -681,6 +754,8 @@ yl 64
 [  Scene 5: scene_simmons   (1981 Simmons SDS-V Disco Tom Solo & Laser Zaps)] puts
 [  Scene 6: scene_gogo      (1985 Washington D.C. Go-Go Cowbell & Congas)] puts
 [  Scene 7: scene_climax    (All-Star Vintage Analog Hardware Jam)] puts
+[  Scene 8: scene_casio     (Casio VL-1 1979 & SK-1 1985 Lo-Fi Toy Keyboard Rhythm)] puts
 [Type 'play' to start automated arrangement from Scene 0.] puts
-[Type 'scenes' to list scenes, or any scene macro (e.g. 'scene_electro') to cue live.] puts
+[Type 'scenes' to list scenes, or any scene macro (e.g. 'scene_casio') to cue live.] puts
+[Scene transport: 'scene_stop' (or -1 scene_cue) to stop at bar end; 'pause' / 'resume'] puts
 [===============================================================] puts

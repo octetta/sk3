@@ -1,0 +1,16 @@
+@name     scene_resume
+@alias    scene_resume
+@alias    resume
+@group    seq
+@type     realtime
+@arity    0
+@match    ()
+@summary  resume playback of paused scene
+@doc
+Resumes playback of paused scene from frozen steps with automatic downbeat alignment.
+Usage: scene_resume (or resume)
+@code
+    (void)voice; (void)args; (void)argc;
+    seq_scene_resume();
+    return 0;
+@end
