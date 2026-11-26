@@ -5,7 +5,7 @@
 
 #define SEQ_FRAMES_PER_CALLBACK (128)
 
-#define PATTERNS_MAX (128)
+#define PATTERNS_MAX (256)
 #define STEP_MAX (4096)
 
 enum {
@@ -118,7 +118,7 @@ extern int seq_explicit_length[PATTERNS_MAX];
 extern float seq_pattern_rate[PATTERNS_MAX];
 extern float seq_pattern_hz[PATTERNS_MAX];
 
-#define SCENE_MAX (32)
+#define SCENE_MAX (128)
 #define SCENE_LANES (8)
 
 typedef struct {
