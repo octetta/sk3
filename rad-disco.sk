@@ -259,7 +259,7 @@ yl 16
 #   Scene 4 (8 loops) -> Scene 5
 #   Scene 5 (4 loops) -> Scene 6
 #   Scene 6 (4 loops) -> Scene 7
-#   Scene 7 (4 loops) -> Scene 0 (seamless cycle)
+#   Scene 7 (4 loops) -> STOP (clean musical outro!)
 # ----------------------------------------------------------------------
 0 4 1 scene_chain
 1 4 2 scene_chain
@@ -268,7 +268,7 @@ yl 16
 4 8 5 scene_chain
 5 4 6 scene_chain
 6 4 7 scene_chain
-7 4 0 scene_chain
+7 4 -1 scene_chain
 
 # ----------------------------------------------------------------------
 # SCENE LABELS & USER NAVIGATION MACROS
@@ -282,6 +282,9 @@ yl 16
 [scene_climax]     : 5 scene_cue ;
 [scene_drop_lead]  : 6 scene_cue ;
 [scene_outro]      : 7 scene_cue ;
+[outro]            : 7 scene_cue ;
+[loop_disco]       : 7 4 0 scene_chain ;
+[end_disco]        : 7 4 -1 scene_chain ;
 
 # Helper macro to display labeled scene roster on demand
 [scenes] : [SCENES: 0:scene_kick_snare 1:scene_add_hats 2:scene_add_bass 3:scene_open_hats 4:scene_melody 5:scene_climax 6:scene_drop_lead 7:scene_outro] puts ;

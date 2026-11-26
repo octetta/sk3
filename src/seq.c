@@ -256,6 +256,8 @@ void do_event(uint64_t now, void (*event_fn)(const event_t *event)) {
 }
 /* @end seq_event_dispatch */
 
+static uint64_t seq_scene_apply_tick = UINT64_MAX;
+
 static void seq_scene_apply_locked(int scene_id, uint64_t now) {
   if (scene_id < 0 || scene_id >= SCENE_MAX) return;
   seq_scene_t *sc = &seq_scenes[scene_id];
@@ -278,6 +280,8 @@ static void seq_scene_apply_locked(int scene_id, uint64_t now) {
   }
   seq_active_scene = scene_id;
   seq_pending_scene = -1;
+  seq_scene_loop_counter = 0;
+  seq_scene_apply_tick = master_tick;
 }
 
 /* @stage seq_pattern_clock
@@ -306,7 +310,7 @@ void do_pattern(uint64_t now,
         target_tick - master_tick >= SEQ_MAX_CATCHUP_TICKS)
       master_tick = target_tick - (SEQ_MAX_CATCHUP_TICKS - 1);
     while (master_tick <= target_tick) {
-      if (seq_pending_scene >= 0 || (seq_active_scene >= 0 && seq_scenes[seq_active_scene].next_scene >= 0)) {
+      if (seq_pending_scene >= 0 || (seq_active_scene >= 0 && (seq_scenes[seq_active_scene].next_scene >= 0 || seq_scenes[seq_active_scene].loop_count > 0))) {
         int mp = seq_master_pattern_get();
         int mp_running = (mp >= 0 && mp < PATTERNS_MAX &&
                           seq_state[mp] == SEQ_RUNNING);
@@ -335,13 +339,25 @@ void do_pattern(uint64_t now,
         if (scene_trigger) {
           if (seq_pending_scene >= 0) {
             seq_scene_apply_locked(seq_pending_scene, now);
-            seq_scene_loop_counter = 0;
-          } else if (seq_active_scene >= 0 && seq_scenes[seq_active_scene].next_scene >= 0) {
-            seq_scene_loop_counter++;
-            if (seq_scenes[seq_active_scene].loop_count > 0 &&
-                seq_scene_loop_counter >= seq_scenes[seq_active_scene].loop_count) {
-              seq_scene_apply_locked(seq_scenes[seq_active_scene].next_scene, now);
-              seq_scene_loop_counter = 0;
+          } else if (seq_active_scene >= 0 && seq_scenes[seq_active_scene].loop_count > 0) {
+            if (seq_scene_apply_tick != master_tick) {
+              seq_scene_loop_counter++;
+              if (seq_scene_loop_counter >= seq_scenes[seq_active_scene].loop_count) {
+                if (seq_scenes[seq_active_scene].next_scene >= 0) {
+                  seq_scene_apply_locked(seq_scenes[seq_active_scene].next_scene, now);
+                } else {
+                  /* Outro reached end of repeat count without a next scene: clean musical stop */
+                  for (int p = 0; p < PATTERNS_MAX; p++) {
+                    seq_state_set_locked(p, SEQ_STOPPED);
+                  }
+                  seq_active_scene = -1;
+                  seq_pending_scene = -1;
+                  seq_scene_loop_counter = 0;
+                  for (int l = 0; l < SCENE_LANES; l++) {
+                    seq_lane_pattern[l] = -1;
+                  }
+                }
+              }
             }
           }
         }
