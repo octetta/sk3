@@ -35,6 +35,12 @@ Usage: e! slot (or macro_exec slot)
     if (!ctx) return -1;
     (void)s; (void)argc;
     int slot = (int)args[0];
+    const event_program_t *cached = skode_extra_program_get(slot);
+    if (cached && cached->count > 0) {
+        uint64_t now = SAMPLE_COUNT_GET();
+        skode_queue_program(cached, ctx->voice, now, 0);
+        return 0;
+    }
     char macro[STRING_BUF_LEN] = "";
     if (skode_extra_copy(slot, macro, sizeof(macro)) == 0 && macro[0] != '\0') {
         event_program_t program;

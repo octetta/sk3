@@ -18,6 +18,13 @@ Usage: [program] e>slot (or [program] macro_store slot)
         simple_mutex_lock(&skode_extra_mutex);
         skode_copy_string(EXTRA_PTR(slot), STRING_BUF_LEN, str);
         simple_mutex_unlock(&skode_extra_mutex);
+        event_program_t prog;
+        if (str && str[0] != '\0' &&
+            skode_compile_program_ex(str, &prog, ctx->vocab) == SKODE_COMPILE_OK) {
+            skode_extra_program_set(slot, &prog);
+        } else {
+            skode_extra_program_set(slot, NULL);
+        }
     }
     return 0;
 @end

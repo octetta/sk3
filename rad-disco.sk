@@ -1,0 +1,165 @@
+# ======================================================================
+#  RAD DISCO (Showcase of Punk-Fad-Mello-Rad Architecture in sk3)
+#  124 BPM, F minor, 4-on-the-Floor, Punchy Slap Bass & Soaring Melody
+# ======================================================================
+
+[RAD DISCO - 4-ON-THE-FLOOR, PUNCH BASS & SCENE ARRANGER] puts
+V -7.0
+M 124 16
+
+# ----------------------------------------------------------------------
+# DELAY BUSES (Tempo-synced to 124 BPM)
+# ----------------------------------------------------------------------
+# Bus 1: Snappy 16th ping-pong slapback (Bass groove)
+DS 1 124 .25
+DL 1 - - 7 2 2 10
+DD 1 6 3
+DP 1 1
+
+# Bus 2: Dotted-eighth space echo (Melody & Lead)
+DS 2 124 .75
+DL 2 - - 8 3 3 11
+DD 2 7 3
+DP 2 1
+
+# ----------------------------------------------------------------------
+# SYNTHESIS VOICES
+# ----------------------------------------------------------------------
+# DRUMS
+v0 w82 f440 a5.0 p0                          # Munich 4-on-the-floor punch kick
+v1 w83 f440 a5.5 r1 p0 ds.25                 # Crisp disco snare
+v2 w84 f440 a-4.0 p.2                        # 16th closed hi-hat
+v3 w85 f440 a-2.0 p-.25                      # Sizzling offbeat open hi-hat
+v4 w86 f440 a4.5 r1 p0 ds.3                  # Stereo disco clap
+
+# BASS: Punchy Filter-Swept Moog/Funk Bass
+# Ladder low-pass filter with snappy envelope + resonance + phase distortion
+v6 w15 a-2.5 p0 t.002,.15,0,.04 j1,1 k580 q4.0 ft.001,.12,0,.04 fd2600 c4,.3 r1 ds.35
+v6 >7
+v7 w16 a-4.5 N12,7 p0 r1 ds.35
+v6 G7 H7
+
+# DISCO FM STAB
+v11 w0 a-6.0 p-.35 t.001,.22,0,.1 FF2 FB3 F12,2.0 G12 H12 r2 ds.3
+v12 w0 a-6.0 t.001,.18,0,.1 N19 m1
+
+# COOL SOARING DISCO LEAD
+# Detuned dual-saw with filter envelope + space delay
+v13 w15 a-7.0 p0 t.004,.25,.35,.12 j1,1 k4200 q1.6 c4,.25 ct.001,.22,0,.1 cd.35 r2 ds.35
+v13 >14
+v14 w16 a-9.0 p-.5 N0,7 r0
+v13 G14 H14
+
+# ----------------------------------------------------------------------
+# NOTE STREAMS
+# ----------------------------------------------------------------------
+# Stream 0: Punchy 16-step Octave Disco Bassline in F minor
+# F1 F2 F1 F2  F1 F2 Ab2 F2  F1 F2 Bb2 F2  C3 Bb2 Ab2 F2
+[
+  F1 F2 F1 F2  F1 F2 Ab2 F2  F1 F2 Bb2 F2  C3 Bb2 Ab2 F2
+] n>d /SS 0
+
+# Stream 1: Funky Bass Variation (Fm -> Eb -> Db -> C7)
+[
+  F1 F2 F1 F2  Ab2 F2 F1 F2  Eb1 Eb2 Eb1 Eb2 G2 Eb2 Eb1 Eb2
+  Db1 Db2 Db1 Db2 F2 Db2 Db1 Db2 C1 C2 C1 C2  E2 G2 Bb2 C3
+] n>d /SS 1
+
+# Stream 2: Soaring Euro-Disco Melody Hook (Catchy 32-step phrase)
+[
+  C4 F4 G4 Ab4  G4 F4 Eb4 F4  Ab4 Bb4 C5 Bb4  Ab4 G4 F4 G4
+  C5 Bb4 Ab4 G4  Ab4 G4 F4 Eb4 F4 Ab4 C5 Eb5  D5 C5 Bb4 C5
+] n>d /SS 2
+
+# ----------------------------------------------------------------------
+# PATTERNS (Demonstrating yl explicit lengths & ycp cloning)
+# ----------------------------------------------------------------------
+
+# Pattern 0: Four-on-the-Floor Kick
+y0 %1
+yl 16
+[v0] x0,4,8,12
+
+# Pattern 1: Disco Snare on 2 and 4 + Claps
+y1 %1
+yl 16
+[v1 v4] x4,12
+
+# Pattern 2: Sizzling Disco Hats (16th closed hats + offbeat open hats)
+y2 %1
+yl 16
+[v2] x0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
+[v3] x2,6,10,14
+
+# Pattern 3: Punchy 16th Gallop Bass (Pulls dynamically from Stream 0 via &0)
+y3 %1
+yl 16
+[v6 n&0 l1] x0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
+
+# Pattern 4: Kick Variation (Cloned from Pattern 0 using ycp, then accented)
+0 4 ycp
+4 y
+[v0] x0,4,8,10,12,14
+
+# Pattern 5: Snare Roll Fill (Cloned from Pattern 1, then with 16th roll)
+1 5 ycp
+5 y
+[v1] x12,13,14,15
+
+# Pattern 6: Disco FM Chords (Syncopated stabs on the offbeats)
+y6 %1
+yl 16
+[v11 i65, 1] x2,8,14
+[v11 i63, 1] x5,11
+
+# Pattern 7: Soaring Anthem Melody (Pulls dynamically from Stream 2 via &2)
+y7 %1
+yl 16
+[v13 n&2 l1] x0,2,4,6,8,10,12,14
+
+# Pattern 127: The Master Conductor (16 steps per bar)
+y127 %1
+yl 16
+[v0] x15 yp127
+
+# ----------------------------------------------------------------------
+# SCENE MATRIX & ARRANGER (Lanes: 0:Kick 1:Snare 2:Hats 3:Bass 4:Chord 5:Lead)
+# ----------------------------------------------------------------------
+# Scene 0: Introduction / The Groove Build (Kick, Hats, Octave Bass)
+( 0 -1 2 3 -1 -1 -1 127 ) scene_define 0
+
+# Scene 1: The Full Disco Anthem (Kick, Snare/Clap, Hats, Bass, FM Stabs, Lead)
+( 0 1 2 3 6 7 -1 127 ) scene_define 1
+
+# Scene 2: High Energy Climax / Fill (Kick Variation, Snare Roll, Hats, Bass, Lead)
+( 4 5 2 3 6 7 -1 127 ) scene_define 2
+
+# ----------------------------------------------------------------------
+# AUTOMATED SCENE CHAINING
+# Scene 0 loops 4 times -> auto-transitions to Scene 1
+# Scene 1 loops 8 times -> auto-transitions to Scene 2
+# Scene 2 loops 4 times -> auto-loops back to Scene 1
+# ----------------------------------------------------------------------
+0 4 1 scene_chain
+1 8 2 scene_chain
+2 4 1 scene_chain
+
+# ----------------------------------------------------------------------
+# PRECOMPILED REALTIME MACROS (Instant e! trigger)
+# ----------------------------------------------------------------------
+# Slot 0: Big crash / kick accent on downbeat
+[v0 a6.5 n36 v1 a6.0] e> 0
+
+# Slot 1: Filter sweep / breakdown on bass
+[v6 k180] e> 1
+
+# Slot 2: Reset filter to bright
+[v6 k580] e> 2
+
+# === PLAYBACK CONTROLS ===
+[play] : ?ce! /cer 1 Z0 Z! scene_now 0 ;
+[stop] : /cer 0 Z0 O DQ ?ce! ;
+
+[RAD DISCO READY - Type 'play' to launch the automated scene arrangement!] puts
+[Commands: scene_cue 0 (groove), scene_cue 1 (main), scene_cue 2 (climax)] puts
+[Live tweaks: 0 4 ycp (re-clone kick), e! 0 (crash drop), e! 1 (muffled bass)] puts
