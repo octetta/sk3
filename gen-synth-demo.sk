@@ -1,0 +1,207 @@
+# ======================================================================
+#  SK3 SYNTHESIS CAPABILITY DEMO (SCENE-BASED SYNTH SHOWCASE)
+#  File: gen-synth-demo.sk
+#
+#  Scene 0: scene_moog_bass
+#    - Architecture: Minimoog Model D / Taurus Style 3-Oscillator Bass
+#    - Osc 1 (v0): PolyBLEP Sawtooth (w3) with initial pitch transient snap (pt/pd)
+#    - Osc 2 (v1): PolyBLEP Pulse (w1) with dynamic PWM envelope (pwt/pwd),
+#                  continuous LFO pulse-width modulation (PW), +5 cents detune (N0,5)
+#    - Osc 3 (v2): Sub-Bass Square (w1 pw 0.50) transposed down 1 octave (N-12,0)
+#    - LFO (v3)  : 0.85 Hz Sine Modulator (w0) routing to PWM (m1 master mute)
+#    - Filter    : 24dB/oct Driven Ladder Lowpass (j1,1) with cubic soft-clip
+#                  drive (jd 2.2), resonant bite (q 3.8), and snappy envelope (kt/kd)
+#    - Modulations: Amp (t), Pitch (pt/pd), Filter (kt/kd), PWM (pwt/pwd/PW), Glide (g)
+#    - Pocket    : Minimal procedural analog kick & hat for tight funk groove
+# ======================================================================
+
+[===============================================================] puts
+[   SK3 SYNTHESIS CAPABILITY SHOWCASE - SCENE ARRANGEMENT       ] puts
+[===============================================================] puts
+
+V -2.5
+M 112 16
+
+# ----------------------------------------------------------------------
+# 1. PROCEDURAL PERCUSSION FOR GROOVE POCKET ([drum:xxx] gen!)
+# Generates tight analog percussion into wavetables 100..101
+# ----------------------------------------------------------------------
+# Slot 100: Tight 808-style analog bass drum for pocket
+[drum:kick p:140 end:42 d:0.28 c:0.25 drive:0.3] 100 gen!
+[Pocket Kick] wt 100
+
+# Slot 101: Crisp analog closed hi-hat
+[drum:hat open:0 d:0.038] 101 gen!
+[Closed Hat] wt 101
+
+# Pocket Drum Voices (sitting back in mix behind fat bass)
+v10 w100 f440 a-3.5 p0
+[Pocket Kick] vt
+
+v11 w101 f440 a-8.0 p.20
+[Pocket Hat] vt
+
+# ----------------------------------------------------------------------
+# 2. MOOG ANALOG BASS VOICES & MODULATION ARCHITECTURE
+# ----------------------------------------------------------------------
+
+# LFO Voice (Voice 3): 0.85 Hz Sine wave dedicated to pulse width modulation
+# Muted from master mix (m1) so it acts purely as a CV/LFO modulation source
+v3 w0 f0.85 a1.0 m1
+[PWM LFO Modulator] vt
+
+# Sub-Oscillator (Voice 2): 1 Octave Down Sub Square for bottom-end weight
+# Slaved to Voice 0 via G1,2 and H1,2
+v2 w1 pw 0.50 N-12,0 a-4.5 p0 t.002,.30,.55,.08 g0.045 j1 k240 q1.2
+[Moog Sub-Osc] vt
+
+# PWM Pulse Oscillator (Voice 1): PolyBLEP Pulse with Detune & Dynamic PWM
+# Features:
+#   - N0,5: Detuned by +5 cents for rich analog beating
+#   - pw 0.40: Baseline 40% pulse width
+#   - pwt .02,.32,.20,.05 pwd 0.25: Dynamic per-note pulse-width envelope sweep
+#   - PW 3 0.20: Continuous organic LFO pulse-width sweep from Voice 3
+#   - j1,1 k125 q3.5 jd2.2 kt.002,.24,.15,.08 kd1700: Driven ladder filter & env
+v1 w1 pw 0.40 N0,5 a-5.0 p0 t.002,.26,.45,.08 g0.045
+v1 pwt .02,.32,.20,.05 pwd 0.25 PW 3 0.20
+v1 j1,1 k125 q3.5 jd2.2 kt.002,.24,.15,.08 kd1700
+[Moog Pulse PWM] vt
+
+# Lead Core Oscillator (Voice 0): PolyBLEP Sawtooth with Pitch Snap & Master Links
+# Features:
+#   - w3: Band-limited PolyBLEP Sawtooth
+#   - pt.001,.035,0,.01 pd 0.08: Fast pitch snap transient on note attack
+#   - g 0.045: Slinky 45ms analog glissando portamento
+#   - j1,1 k115 q3.8 jd2.2: Driven ladder lowpass with cubic saturation
+#   - kt.002,.24,.15,.08 kd1850: Classic snappy Moog filter envelope
+#   - t.002,.26,.45,.08: Tight punchy amplitude envelope
+#   - G1,2 H1,2: Master link forwarding gate/pitch and velocity to Voices 1 & 2
+v0 w3 a-3.5 p0 t.002,.26,.45,.08 g0.045
+v0 pt.001,.035,0,.01 pd 0.08
+v0 j1,1 k115 q3.8 jd2.2 kt.002,.24,.15,.08 kd1850
+v0 G1,2 H1,2
+[Moog Saw Core] vt
+
+# ----------------------------------------------------------------------
+# 3. 4-BAR FUNK BASSLINE NOTE STREAM (Stream 0)
+# Key of D Minor (D1..D3). 64 steps total (4 bars x 16 steps).
+# Uses ties ('.') for sustained portamento glides and rests ('-') for funk pocket.
+# ----------------------------------------------------------------------
+[
+  # Bar 1: Downbeat sub drop & syncopated blues octave bounce
+  D2 . D1 .  . D2 F2 .  G2 . Ab2 A2  . D2 C2 .
+
+  # Bar 2: Rhythmic climb into screaming high octave rip
+  D2 . D1 .  . D2 F2 .  G2 . A2 C3   . D3 C3 A2
+
+  # Bar 3: Deep funky groove repetition with sub anchor
+  D2 . D1 .  . D2 F2 .  G2 . Ab2 A2  . D2 C2 .
+
+  # Bar 4: Chromatic turnaround climb and breathing space before loop
+  F2 . F2 .  G2 . Ab2 A2  . C3 . D3  . C2 D1 -
+] n>d /SS 0
+
+# ----------------------------------------------------------------------
+# 4. STEP SEQUENCER PATTERNS
+# ----------------------------------------------------------------------
+
+# Pattern 0: The Killer Moog Bass (pulls 64 steps continuously from Stream 0)
+y0 %1
+[Moog Bass Groove] yt
+yl 16
+[v0 i&0] x0,1,2,3,4,5,6,7
+[v0 i&0] x8,9,10,11,12,13,14,15
+
+# Pattern 1: Minimal Analog Pocket Kick (syncopated funk accents)
+y1 %1
+[Pocket Kick] yt
+yl 16
+[v10 l1] x0,6,10,14
+
+# Pattern 2: Sizzling 16th Closed Hi-Hats with Dynamic Accents
+y2 %1
+[16th Pocket Hats] yt
+yl 16
+[v11 l.42] x0,2,4,6,8,10,12,14
+[v11 l.25] x1,3,5,7,9,11,13,15
+
+# ----------------------------------------------------------------------
+# 5. CONTROL PLANE & REAL-TIME CLI CONSOLE BANNERS
+# ----------------------------------------------------------------------
+# Start the background control event dispatch thread
+/cer 1
+
+# Disable master pattern sync locking so 4-bar scenes advance smoothly
+yp -1
+
+# Responder macro triggered by control plane event ce0 on scene start
+[scene_moog_puts] : [>>> SCENE 0: MOOG ANALOG BASS (PolyBLEP Saw + Pulse PWM + Sub + 24dB Driven Ladder) <<<] puts ;
+[scene_moog_puts] /ceb 4 0
+
+# Master Conductor Pattern: Triggers ce0 on step 0 every 64 steps (4 bars)
+y127 %1
+[Conductor Scene 0] yt
+yl 64
+[ce0] x0
+
+# ----------------------------------------------------------------------
+# 6. SCENE DEFINITIONS & AUTOMATED PROGRESSION
+# ----------------------------------------------------------------------
+
+# Scene 0: "Moog Analog Bass Showcase"
+# Tracks: y0 (Bass), y1 (Kick), y2 (Hats), y127 (Conductor)
+( 0  1  2 -1 -1 -1 -1 127 ) scene_define 0
+
+# Scene progression: loop Scene 0 for 4 bars, ready for future scenes
+0 4 0 scene_chain
+
+# ----------------------------------------------------------------------
+# 7. PERFORMANCE MACROS & REALTIME PARAMETER TWEAKS
+# Explore the synthesizer's analog modulation engine live from the CLI:
+# ----------------------------------------------------------------------
+# Filter tweaks
+[filter_open]    : v0 k280 kd3200 v1 k300 kd3000 [Filter: Wide Open] puts ;
+[filter_deep]    : v0 k80 kd1100 v1 k90 kd1000 [Filter: Deep Sub] puts ;
+[filter_normal]  : v0 k115 kd1850 v1 k125 kd1700 [Filter: Standard Punch] puts ;
+[res_high]       : v0 q6.2 v1 q5.8 [Resonance: Singing Ladder Peak (Q 6.2)] puts ;
+[res_warm]       : v0 q3.8 v1 q3.5 [Resonance: Warm Analog (Q 3.8)] puts ;
+[drive_hot]      : v0 jd4.5 v1 jd4.5 [Filter Drive: Hot Saturation (Drive 4.5)] puts ;
+[drive_clean]    : v0 jd0.0 v1 jd0.0 [Filter Drive: Clean Bypass] puts ;
+[drive_warm]     : v0 jd2.2 v1 jd2.2 [Filter Drive: Warm Tape/Ladder (Drive 2.2)] puts ;
+
+# Glissando / Portamento tweaks
+[glide_long]     : v0 g0.12 v1 g0.12 v2 g0.12 [Glide: 120ms Long Slinky] puts ;
+[glide_tight]    : v0 g0.045 v1 g0.045 v2 g0.045 [Glide: 45ms Snappy Default] puts ;
+[glide_off]      : v0 g0 v1 g0 v2 g0 [Glide: Disabled (Staccato)] puts ;
+
+# PWM Tweaks
+[pwm_wide]       : v1 pwd 0.40 PW 3 0.35 [PWM: Wide Sweeping Chorus] puts ;
+[pwm_subtle]     : v1 pwd 0.15 PW 3 0.10 [PWM: Subtle Organic Movement] puts ;
+
+# Drum Pocket Mute / Solo
+[drums_off]      : v10 m1 v11 m1 [Pocket Drums: Muted (Pure Bass Solo)] puts ;
+[drums_on]       : v10 m0 v11 m0 [Pocket Drums: Enabled] puts ;
+
+# User Navigation & Transport
+[scene_moog_bass]: 0 scene_cue ;
+[play]           : Z0 Z! scene_now 0 ;
+[pause]          : scene_pause ;
+[resume]         : scene_resume ;
+[scenes]         : [SCENES: 0:scene_moog_bass (Moog 3-Osc Analog Bass)] puts ;
+[controls]       : [LIVE TWEAKS: filter_open, filter_deep, filter_normal, res_high, res_warm, drive_hot, drive_warm, drive_clean, glide_long, glide_tight, glide_off, pwm_wide, pwm_subtle, drums_off, drums_on] puts ;
+
+# ----------------------------------------------------------------------
+# 8. STARTUP BANNER & ROSTER
+# ----------------------------------------------------------------------
+[--- SYNTHESIS CAPABILITY SHOWCASE ---] puts
+[  Scene 0: scene_moog_bass (Minimoog Model D 3-Oscillator Analog Bass)] puts
+[    - Osc 1: PolyBLEP Saw (w3) + Pitch Snap Transient (pt/pd)] puts
+[    - Osc 2: PolyBLEP Pulse (w1) + Envelope PWM (pwt/pwd) + LFO PWM (PW) + Detune (N0,5)] puts
+[    - Osc 3: Sub-Bass Square (w1 pw 0.50) Transposed Down 1 Octave (N-12,0)] puts
+[    - Filter: 24dB Driven Ladder Lowpass (j1,1) + Cubic Drive (jd 2.2) + Snap (kt/kd)] puts
+[    - Glide : 45ms Analog Glissando Portamento (g 0.045)] puts
+[Type 'play' to start playback from Scene 0.] puts
+[Type 'controls' to view live realtime performance parameter macros.] puts
+[Type 'scenes' to list scenes, or 'scene_moog_bass' to cue.] puts
+[Scene transport: 'scene_stop' (or -1 scene_cue) to stop at bar end; 'pause' / 'resume'] puts
+[===============================================================] puts
