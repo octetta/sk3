@@ -5,7 +5,7 @@
 #  Featuring 4 Iconic Hardware Synthesizer Architectures:
 #    Scene 0: scene_moog_bass  (Minimoog Model D 1970 3-Oscillator Analog Bass)
 #    Scene 1: scene_prophet    (Sequential Prophet-5 1978 Hard Sync & Curtis Brass)
-#    Scene 2: scene_korg       (Korg MS-20 1978 Dual Screamer Filter & Ring Mod)
+#    Scene 2: scene_korg       (Korg MS20 1978 Dual Screamer Filter & Ring Mod)
 #    Scene 3: scene_jupiter    (Roland Jupiter-8 1981 Stereo Dual-Osc Arpeggio)
 #
 #  100% Native Synth Engine DSP:
@@ -86,10 +86,10 @@ v2 w1 pw 0.50 N-12,0 a-4.5 p0 t.002,.30,.55,.08 g0.045 j1 k240 q1.2
 #   - pw 0.40: Baseline 40% pulse width
 #   - pwt .02,.32,.20,.05 pwd 0.25: Dynamic per-note pulse-width envelope sweep
 #   - PW 3 0.20: Continuous organic LFO pulse-width sweep from Voice 3
-#   - j1,1 k125 q3.5 jd2.2 kt.002,.24,.15,.08 kd1700: Driven ladder filter & env
+#   - j1,1 k125 q3.5 jd 2.2 kt.002,.24,.15,.08 kd1700: Driven ladder filter & env
 v1 w1 pw 0.40 N0,5 a-5.0 p0 t.002,.26,.45,.08 g0.045
 v1 pwt .02,.32,.20,.05 pwd 0.25 PW 3 0.20
-v1 j1,1 k125 q3.5 jd2.2 kt.002,.24,.15,.08 kd1700
+v1 j1,1 k125 q3.5 jd 2.2 kt.002,.24,.15,.08 kd1700
 [Moog Pulse PWM] vt
 
 # Lead Core Oscillator (Voice 0): PolyBLEP Sawtooth with Pitch Snap & Master Links
@@ -97,54 +97,42 @@ v1 j1,1 k125 q3.5 jd2.2 kt.002,.24,.15,.08 kd1700
 #   - w3: Band-limited PolyBLEP Sawtooth
 #   - pt.001,.035,0,.01 pd 0.08: Fast pitch snap transient on note attack
 #   - g 0.045: Slinky 45ms analog glissando portamento
-#   - j1,1 k115 q3.8 jd2.2: Driven ladder lowpass with cubic saturation
+#   - j1,1 k115 q3.8 jd 2.2: Driven ladder lowpass with cubic saturation
 #   - kt.002,.24,.15,.08 kd1850: Classic snappy Moog filter envelope
 #   - t.002,.26,.45,.08: Tight punchy amplitude envelope
 #   - G1,2 H1,2: Master link forwarding gate/pitch and velocity to Voices 1 & 2
 v0 w3 a-3.5 p0 t.002,.26,.45,.08 g0.045
 v0 pt.001,.035,0,.01 pd 0.08
-v0 j1,1 k115 q3.8 jd2.2 kt.002,.24,.15,.08 kd1850
+v0 j1,1 k115 q3.8 jd 2.2 kt.002,.24,.15,.08 kd1850
 v0 G1,2 H1,2
 [Moog Saw Core] vt
 
 # ======================================================================
-# STYLE 2: SEQUENTIAL CIRCUITS PROPHET-5 HARD SYNC & CURTIS BRASS (Voices 4..6)
+# STYLE 2: SEQUENTIAL CIRCUITS PROPHET-5 CURTIS POLY-BRASS (Voices 4..6)
 # ======================================================================
-# Master Voice (Voice 4): PolyBLEP Sawtooth establishing root pitch.
-# Slaves Voice 5 phase via hard-sync (HS 5), and links gate/velo (G5,6 H5,6)
-v4 w3 a-4.5 p-.15 t.002,.28,.50,.10 j1,1 k450 q2.6 jd1.6 kt.002,.26,.20,.08 kd2600
-v4 HS 5 G5,6 H5,6
-[Prophet Master Saw] vt
+# Sub/Center Layer (Voice 6): Warm pulse with subtle PWM 1 octave down
+v6 w1 pw 0.38 N-12,0 a-5.0 p0 t.010,.35,.60,.15 j1,1 k240 q1.8 jd 1.4 kt.012,.32,.30,.12 kd1800
+[Prophet Sub-Pulse] vt
 
-# Slave Voice (Voice 5): PolyBLEP Sawtooth hard-synced to Voice 4.
-# Pitch envelope sweeps 1.8 octaves per note (pt/pd), creating the iconic tearing
-# harmonic laser sweep of "Cars" / "Let's Go" while pitch stays locked to Voice 4!
-v5 w3 a-4.5 p.15 t.002,.28,.50,.10 j1,1 k520 q2.8 jd1.6 kt.002,.26,.20,.08 kd2400
-v5 pt.002,.24,0,.06 pd 1.8 N0,7
-[Prophet Sync Slave] vt
+# Right Detuned Saw (Voice 5): PolyBLEP Saw detuned +6 cents for lush Curtis beating
+v5 w3 N0,6 a-4.5 p.20 t.010,.35,.60,.15 j1,1 k300 q2.2 jd 1.5 kt.012,.32,.30,.12 kd2400
+[Prophet Detune Saw] vt
 
-# Poly-Brass Detuned Voice (Voice 6): Warm Curtis CEM-style detuned saw layer
-v6 w3 a-6.0 p0 t.002,.30,.55,.10 j1,1 k380 q2.0 jd1.4 kt.002,.26,.25,.08 kd2200 N0,4
-[Prophet Poly-Brass] vt
+# Left Core Saw (Voice 4): PolyBLEP Saw establishing root pitch, slaving v5 & v6
+v4 w3 a-4.0 p-.20 t.010,.35,.60,.15 j1,1 k280 q2.2 jd 1.5 kt.012,.32,.30,.12 kd2400 G5,6 H5,6
+[Prophet Core Saw] vt
 
 # ======================================================================
-# STYLE 3: EARLY KORG MS-20 SCREAMER DUAL FILTER & RING MOD (Voices 7..8)
+# STYLE 3: EARLY KORG MS20 DUAL VCO SCREAMER (Voices 7..8)
 # ======================================================================
-# Modulator Oscillator (Voice 8): High square wave (+19 semitones)
-# Fed into Voice 7 ring modulator (XM 8) for raw metallic Korg grit
-v8 w1 pw 0.50 N19,0 a-9.0 p0 m1
-[Korg MS-20 Mod Ring] vt
+# VCO 2 (Voice 8): PolyBLEP Pulse (pw 0.45) tuned 1 octave up + 6 cents detune
+v8 w1 pw 0.45 N12,6 a-4.5 p.15 t.001,.18,.35,.04 g0.035 j1,2 k420 q5.2 jd 3.0 kt.001,.16,.10,.04 kd2800
+[Korg MS20 VCO2 Pulse] vt
 
-# Primary Voice (Voice 7): Raw PolyBLEP Sawtooth through Korg-35 Screamer Filter
-# Features:
-#   - j1,2: Filter character 2 ("screamer") narrowing resonant bandwidth
-#   - k 380 q 5.2 jd 3.2: Screaming self-oscillating peak + hot analog drive
-#   - XM 8 0.55: Audio-rate ring modulation from Voice 8
-#   - kt.001,.18,.10,.05 kd 2900: Spiky, biting attack envelope
-v7 w3 a-3.5 p0 t.001,.20,.35,.05 g0.035
-v7 j1,2 k380 q5.2 jd3.2 kt.001,.18,.10,.05 kd2900
-v7 XM 8 0.55
-[Korg MS-20 Screamer] vt
+# VCO 1 (Voice 7): PolyBLEP Sawtooth with aggressive KORG-35 Screamer Filter (j1,2)
+# Slaves Voice 8 via G8 H8
+v7 w3 a-3.5 p-.15 t.001,.18,.35,.04 g0.035 j1,2 k350 q5.8 jd 3.5 kt.001,.16,.10,.04 kd3200 G8 H8
+[Korg MS20 VCO1 Saw] vt
 
 # ======================================================================
 # STYLE 4: ROLAND JUPITER-8 STEREO DUAL-OSC ARPEGGIO (Voices 12..14)
@@ -177,19 +165,33 @@ v14 w4 N-12,0 p0 a-6.5 t.003,.30,.55,.12 j1,0 k380 q1.0
   F2 . F2 .  G2 . Ab2 A2  . C3 . D3  . C2 D1 -
 ] n>d /SS 0
 
-# Stream 1: Prophet-5 Hard Sync New Wave Lead (A Minor / F, 64 steps)
+# Stream 1: Prophet-5 Anthem Poly-Brass (F Major / D Minor, 64 steps)
 [
-  A2 . A2 .  C3 . D3 .  E3 . G3 .  E3 D3 C3 .
-  F2 . F2 .  A2 . C3 .  D3 . E3 .  G3 . A3 .
-  D3 . D3 .  F3 . G3 .  A3 . G3 .  F3 E3 D3 .
-  E3 . E3 .  G3 . F3 .  E3 . D3 .  C3 . B2 -
+  # Bar 1: Triumphant Prophet brass stabs (F major -> A minor)
+  F3 . F3 .  A3 . C4 .  D4 . C4 .  A3 . F3 .
+
+  # Bar 2: Uplifting syncopated brass swell
+  G3 . G3 .  Bb3 . D4 .  C4 . D4 .  E4 . D4 C4
+
+  # Bar 3: Powerful rhythmic chord accents
+  D3 . D3 .  F3 . A3 .  C4 . A3 .  G3 . F3 .
+
+  # Bar 4: Harmonic resolution & turnaround
+  Bb3 . Bb3 .  D4 . C4 .  A3 . G3 .  F3 . - -
 ] n>d /SS 1
 
-# Stream 2: Korg MS-20 Industrial Acid Sequence (E Minor, 64 steps)
+# Stream 2: Korg MS20 Screamer Acid / EBM Sequence (E Minor, 64 steps)
 [
-  E1 . E2 .  G2 . E1 .  Bb1 B1 . D2  . E2 D2 .
-  E1 . E2 .  G2 . A2 .  Bb2 B2 . D3  . E3 D3 B2
-  E1 . E2 .  G2 . E1 .  Bb1 B1 . D2  . E2 D2 .
+  # Bar 1: Punchy EBM bassline with octave snaps
+  E1 . E2 .  . E1 G2 .  A2 . Bb2 B2  . D2 E2 .
+
+  # Bar 2: Screaming resonant cutoff climb
+  E1 . E2 .  . E1 G2 .  A2 . B2 D3   . E3 D3 B2
+
+  # Bar 3: Relentless syncopated drive
+  E1 . E2 .  . E1 G2 .  A2 . Bb2 B2  . D2 E2 .
+
+  # Bar 4: Chromatic turnaround with biting screamer filter bite
   G2 . G2 .  Ab2 A2 . Bb2  B2 . D3 .  C3 B2 A1 -
 ] n>d /SS 2
 
@@ -253,7 +255,7 @@ y125 %1
 yl 64
 [ce1] x0
 
-# --- SCENE 2 PATTERNS: KORG MS-20 SCREAMER ---
+# --- SCENE 2 PATTERNS: KORG MS20 SCREAMER ---
 y20 %1
 [Korg Screamer Acid] yt
 yl 16
@@ -309,9 +311,9 @@ yl 64
 yp -1
 
 # Responder macros triggered by control plane events (ce0..ce3) on scene start
-[scene_moog_puts]    : [>>> SCENE 0: MINIMOOG MODEL D (3-Osc Bass + Driven Ladder + Portamento) <<<] puts ;
-[scene_prophet_puts] : [>>> SCENE 1: SEQUENTIAL PROPHET-5 (Hard Sync Tearing Lead & Curtis Brass) <<<] puts ;
-[scene_korg_puts]    : [>>> SCENE 2: EARLY KORG MS-20 (Dual Screamer Filter + Metallic Ring Mod) <<<] puts ;
+[scene_moog_puts] : [>>> SCENE 0: MINIMOOG MODEL D (3-Osc Bass + Driven Ladder + Portamento) <<<] puts ;
+[scene_prophet_puts] : [>>> SCENE 1: SEQUENTIAL PROPHET-5 (Iconic Curtis CEM3320 Poly-Brass Chords) <<<] puts ;
+[scene_korg_puts] : [>>> SCENE 2: EARLY KORG MS20 (Dual VCO Screamer 35 Filter & Hot Analog Drive) <<<] puts ;
 [scene_jupiter_puts] : [>>> SCENE 3: ROLAND JUPITER-8 (Lush Stereo Arpeggio + Roland Space Echo) <<<] puts ;
 
 # Bind responders to user control event IDs 0..3
@@ -332,10 +334,10 @@ yp -1
 # Scene 0: Minimoog Model D 3-Oscillator Analog Bass Showcase
 ( 0  1  2 -1 -1 -1 -1 124 ) scene_define 0
 
-# Scene 1: Sequential Circuits Prophet-5 Hard Sync Lead & Poly-Brass
+# Scene 1: Sequential Circuits Prophet-5 Curtis Poly-Brass Chords
 ( 10 11 12 -1 -1 -1 -1 125 ) scene_define 1
 
-# Scene 2: Early Korg MS-20 Screamer Filter & Ring Mod
+# Scene 2: Early Korg MS20 Dual VCO Screamer Filter & Drive
 ( 20 21 22 -1 -1 -1 -1 126 ) scene_define 2
 
 # Scene 3: Roland Jupiter-8 Stereo Dual-Osc Arpeggiator & Delay
@@ -351,56 +353,58 @@ yp -1
 # 8. PERFORMANCE MACROS & REALTIME PARAMETER TWEAKS
 # ----------------------------------------------------------------------
 # Filter tweaks
-[filter_open]    : v0 k280 kd3200 v1 k300 kd3000 v4 k800 kd3500 v7 k750 kd3800 v12 k1200 kd4500 [Filter: Wide Open] puts ;
-[filter_deep]    : v0 k80 kd1100 v1 k90 kd1000 v4 k250 kd1800 v7 k220 kd1800 v12 k450 kd2200 [Filter: Deep Sub] puts ;
-[filter_normal]  : v0 k115 kd1850 v1 k125 kd1700 v4 k450 kd2600 v7 k380 kd2900 v12 k650 kd3400 [Filter: Standard Punch] puts ;
-[res_high]       : v0 q6.2 v1 q5.8 v4 q5.5 v7 q7.5 v12 q4.5 [Resonance: High Peak] puts ;
-[res_warm]       : v0 q3.8 v1 q3.5 v4 q2.6 v7 q5.2 v12 q2.2 [Resonance: Warm Analog Default] puts ;
-[drive_hot]      : v0 jd4.5 v1 jd4.5 v4 jd3.5 v7 jd5.5 [Filter Drive: Hot Saturation] puts ;
-[drive_warm]     : v0 jd2.2 v1 jd2.2 v4 jd1.6 v7 jd3.2 [Filter Drive: Warm Analog Default] puts ;
-[drive_clean]    : v0 jd0.0 v1 jd0.0 v4 jd0.0 v7 jd0.0 [Filter Drive: Clean Bypass] puts ;
+[filter_open] : v0 k280 kd3200 v1 k300 kd3000 v4 k650 kd3500 v7 k650 kd3800 v12 k1200 kd4500 [Filter: Wide Open] puts ;
+[filter_deep] : v0 k80 kd1100 v1 k90 kd1000 v4 k200 kd1600 v7 k220 kd1800 v12 k450 kd2200 [Filter: Deep Sub] puts ;
+[filter_normal] : v0 k115 kd1850 v1 k125 kd1700 v4 k280 kd2400 v7 k350 kd3200 v12 k650 kd3400 [Filter: Standard Punch] puts ;
+[res_high] : v0 q6.2 v1 q5.8 v4 q4.5 v7 q7.5 v12 q4.5 [Resonance: High Peak] puts ;
+[res_warm] : v0 q3.8 v1 q3.5 v4 q2.2 v7 q5.8 v12 q2.2 [Resonance: Warm Analog Default] puts ;
+[drive_hot] : v0 jd 4.5 v1 jd 4.5 v4 jd 3.5 v7 jd 5.5 [Filter Drive: Hot Saturation] puts ;
+[drive_warm] : v0 jd 2.2 v1 jd 2.2 v4 jd 1.5 v7 jd 3.5 [Filter Drive: Warm Analog Default] puts ;
+[drive_clean] : v0 jd 0.0 v1 jd 0.0 v4 jd 0.0 v7 jd 0.0 [Filter Drive: Clean Bypass] puts ;
 
 # Glissando / Portamento tweaks
-[glide_long]     : v0 g0.12 v1 g0.12 v2 g0.12 v7 g0.09 [Glide: Long Slinky] puts ;
-[glide_tight]    : v0 g0.045 v1 g0.045 v2 g0.045 v7 g0.035 [Glide: Snappy Default] puts ;
-[glide_off]      : v0 g0 v1 g0 v2 g0 v7 g0 [Glide: Disabled (Staccato)] puts ;
+[glide_long] : v0 g0.12 v1 g0.12 v2 g0.12 v7 g0.09 [Glide: Long Slinky] puts ;
+[glide_tight] : v0 g0.045 v1 g0.045 v2 g0.045 v7 g0.035 [Glide: Snappy Default] puts ;
+[glide_off] : v0 g0 v1 g0 v2 g0 v7 g0 [Glide: Disabled (Staccato)] puts ;
 
-# PWM & Hard Sync Tweaks
-[pwm_wide]       : v1 pwd 0.40 PW 3 0.35 [PWM: Wide Sweeping Chorus] puts ;
-[pwm_subtle]     : v1 pwd 0.15 PW 3 0.10 [PWM: Subtle Organic Movement] puts ;
-[sync_wild]      : v5 pd 2.8 [Prophet Sync: Extreme Harmonic Range] puts ;
-[sync_tight]     : v5 pd 1.8 [Prophet Sync: Classic Cars Snap] puts ;
+# Synth-Specific Character Tweaks
+[brass_bright] : v4 k550 kd3500 v5 k580 kd3500 v6 k400 kd2800 [Prophet Bright Brass Swell] puts ;
+[brass_warm] : v4 k280 kd2400 v5 k300 kd2400 v6 k240 kd1800 [Prophet Warm Curtis Brass] puts ;
+[korg_screech] : v7 q7.8 jd 5.0 v8 q7.2 jd 4.5 [Korg MS20 Screaming Self-Oscillation] puts ;
+[korg_punch]   : v7 q5.8 jd 3.5 v8 q5.2 jd 3.0 [Korg MS20 Aggressive Industrial Punch] puts ;
+[pwm_wide] : v1 pwd 0.40 PW 3 0.35 [PWM: Wide Sweeping Chorus] puts ;
+[pwm_subtle] : v1 pwd 0.15 PW 3 0.10 [PWM: Subtle Organic Movement] puts ;
 
 # Drum Pocket Mute / Solo
-[drums_off]      : v9 m1 v10 m1 v11 m1 [Pocket Drums: Muted (Pure Synth Solo)] puts ;
-[drums_on]       : v9 m0 v10 m0 v11 m0 [Pocket Drums: Enabled] puts ;
+[drums_off] : v9 m1 v10 m1 v11 m1 [Pocket Drums: Muted (Pure Synth Solo)] puts ;
+[drums_on] : v9 m0 v10 m0 v11 m0 [Pocket Drums: Enabled] puts ;
 
 # User Navigation & Scene Cues (Quantized to next bar downbeat)
-[scene_moog_bass]: 0 scene_cue ;
-[scene_prophet]  : 1 scene_cue ;
-[scene_korg]     : 2 scene_cue ;
-[scene_jupiter]  : 3 scene_cue ;
+[scene_moog_bass] : 0 scene_cue ;
+[scene_prophet] : 1 scene_cue ;
+[scene_korg] : 2 scene_cue ;
+[scene_jupiter] : 3 scene_cue ;
 
 # Immediate Scene Jumps (Jump right now without waiting)
-[now_moog]       : 0 scene_now ;
-[now_prophet]    : 1 scene_now ;
-[now_korg]       : 2 scene_now ;
-[now_jupiter]    : 3 scene_now ;
+[now_moog] : 0 scene_now ;
+[now_prophet] : 1 scene_now ;
+[now_korg] : 2 scene_now ;
+[now_jupiter] : 3 scene_now ;
 
 # Transport Controls
-[play]           : Z0 Z! scene_now 0 ;
-[pause]          : scene_pause ;
-[resume]         : scene_resume ;
-[scenes]         : [SCENES: 0:scene_moog_bass 1:scene_prophet 2:scene_korg 3:scene_jupiter] puts ;
-[controls]       : [LIVE TWEAKS: filter_open, filter_deep, filter_normal, res_high, res_warm, drive_hot, drive_warm, drive_clean, glide_long, glide_tight, glide_off, pwm_wide, sync_wild, sync_tight, drums_off, drums_on] puts ;
+[play] : Z0 Z! scene_now 0 ;
+[pause] : scene_pause ;
+[resume] : scene_resume ;
+[scenes] : [SCENES: 0:scene_moog_bass 1:scene_prophet 2:scene_korg 3:scene_jupiter] puts ;
+[controls] : [LIVE TWEAKS: filter_open, filter_deep, filter_normal, res_high, res_warm, drive_hot, drive_warm, drive_clean, brass_bright, brass_warm, korg_screech, korg_punch, glide_long, glide_tight, glide_off, pwm_wide, drums_off, drums_on] puts ;
 
 # ----------------------------------------------------------------------
 # 9. STARTUP BANNER & ROSTER
 # ----------------------------------------------------------------------
 [--- VINTAGE ANALOG SYNTHESIZER CAPABILITY ROSTER ---] puts
 [  Scene 0: scene_moog_bass  (Minimoog Model D 1970 3-Oscillator Analog Bass)] puts
-[  Scene 1: scene_prophet    (Sequential Prophet-5 1978 Hard Sync & Curtis Brass)] puts
-[  Scene 2: scene_korg       (Korg MS-20 1978 Dual Screamer Filter & Ring Mod)] puts
+[  Scene 1: scene_prophet    (Sequential Prophet-5 1978 Curtis Poly-Brass Chords)] puts
+[  Scene 2: scene_korg       (Korg MS20 1978 Dual VCO Screamer Filter & Drive)] puts
 [  Scene 3: scene_jupiter    (Roland Jupiter-8 1981 Stereo Dual-Osc Arpeggio)] puts
 [Type 'play' to start automated 4-scene arrangement from Scene 0.] puts
 [Type 'scenes' to list scenes, or cue any scene macro (e.g. 'scene_prophet').] puts
