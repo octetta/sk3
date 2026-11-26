@@ -141,8 +141,30 @@ static int skred_control_event_key(const skred_control_event_t *event) {
   }
 }
 
+static int control_dispatch_printf(skode_t *ctx, const char *fmt, ...) {
+  (void)ctx;
+  if (!fmt) return 0;
+  va_list ap;
+  va_start(ap, fmt);
+  vprintf(fmt, ap);
+  va_end(ap);
+  fflush(stdout);
+  return 0;
+}
+
+static int control_dispatch_puts(skode_t *ctx, const char *s) {
+  (void)ctx;
+  if (!s) return 0;
+  printf("%s\n", s);
+  fflush(stdout);
+  return 0;
+}
+
 static void skred_control_dispatch_init(void) {
   if (control_dispatch_mutex_ready) return;
+  control_dispatch_ctx.printf = control_dispatch_printf;
+  control_dispatch_ctx.puts = control_dispatch_puts;
+  control_dispatch_ctx.log_enable = 1;
   simple_mutex_init(&control_dispatch_state_mutex);
   simple_mutex_init(&control_response_mutex);
   simple_mutex_init(&control_dispatch_exec_mutex);

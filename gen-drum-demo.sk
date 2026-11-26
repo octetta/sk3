@@ -512,15 +512,79 @@ y66 %1
 yl 16
 [v14 l.8] x0
 
-# --- MASTER CONDUCTOR PATTERN ---
-# Pattern 127: Master Conductor Lane (Advances measures & scenes)
+# ----------------------------------------------------------------------
+# 4. CONTROL PLANE EVENT RESPONDERS & CONDUCTOR PATTERNS
+# ----------------------------------------------------------------------
+# Start the background control event dispatch thread
+/cer 1
+
+# Disable master pattern sync locking so 4-bar scenes advance smoothly
+yp -1
+
+# Responder macros triggered by control plane events (ce0..ce7) on step 0
+[scene_bossa_puts]     : [>>> SCENE 0: ROLAND CR-78 (1978) BOSSA NOVA <<<] puts ;
+[scene_disco_puts]     : [>>> SCENE 1: 1970S SPACE DISCO FOUR-ON-THE-FLOOR <<<] puts ;
+[scene_electro_puts]   : [>>> SCENE 2: ROLAND TR-808 (1982) PLANET ROCK ELECTRO <<<] puts ;
+[scene_freestyle_puts] : [>>> SCENE 3: 1983 LATIN ELECTRO FREESTYLE <<<] puts ;
+[scene_synthpop_puts]  : [>>> SCENE 4: 1984 SYNTH-POP GATED SNARE & RIDE PING <<<] puts ;
+[scene_simmons_puts]   : [>>> SCENE 5: 1981 SIMMONS SDS-V DISCO TOMS & LASERS <<<] puts ;
+[scene_gogo_puts]      : [>>> SCENE 6: 1985 D.C. GO-GO & BOOGIE FUNK <<<] puts ;
+[scene_climax_puts]    : [>>> SCENE 7: ALL-STAR VINTAGE HARDWARE CLIMAX <<<] puts ;
+
+# Bind responders to user control event IDs 0..7
+[scene_bossa_puts]     /ceb 4 0
+[scene_disco_puts]     /ceb 4 1
+[scene_electro_puts]   /ceb 4 2
+[scene_freestyle_puts] /ceb 4 3
+[scene_synthpop_puts]  /ceb 4 4
+[scene_simmons_puts]   /ceb 4 5
+[scene_gogo_puts]      /ceb 4 6
+[scene_climax_puts]    /ceb 4 7
+
+# --- MASTER CONDUCTOR PATTERNS (Scene Announcement Events) ---
+# Each conductor pattern runs 64 steps (4 bars) with [ce<id>] on step 0
+y120 %1
+[Conductor Scene 0] yt
+yl 64
+[ce0] x0
+
+y121 %1
+[Conductor Scene 1] yt
+yl 64
+[ce1] x0
+
+y122 %1
+[Conductor Scene 2] yt
+yl 64
+[ce2] x0
+
+y123 %1
+[Conductor Scene 3] yt
+yl 64
+[ce3] x0
+
+y124 %1
+[Conductor Scene 4] yt
+yl 64
+[ce4] x0
+
+y125 %1
+[Conductor Scene 5] yt
+yl 64
+[ce5] x0
+
+y126 %1
+[Conductor Scene 6] yt
+yl 64
+[ce6] x0
+
 y127 %1
-[Master Conductor] yt
-yl 16
-[-] x15 yp127
+[Conductor Scene 7] yt
+yl 64
+[ce7] x0
 
 # ----------------------------------------------------------------------
-# 4. SCENE MATRIX & ARRANGER DEFINITION
+# 5. SCENE MATRIX & ARRANGER DEFINITION
 # Lanes:
 #   Lane 0: Kick (v0/v1)
 #   Lane 1: Snare & Rimshot (v2/v3)
@@ -529,35 +593,35 @@ yl 16
 #   Lane 4: Congas & Toms (v7/v8/v9/v10/v16)
 #   Lane 5: Cowbell & Maracas (v12/v13/v17)
 #   Lane 6: Cymbals (Crash & Ride) (v14/v15)
-#   Lane 7: Master Conductor (Pattern 127)
+#   Lane 7: Master Conductor / Scene Event (Patterns 120-127)
 # ----------------------------------------------------------------------
 
 # Scene 0: Roland CR-78 Bossa Nova (1978)
-( 0  1  2  3  4  5  6 127 ) scene_define 0
+( 0  1  2  3  4  5  6 120 ) scene_define 0
 
 # Scene 1: 1970s Space Disco (Moroder Four-on-the-Floor)
-( 10 11 12 13 14 15 16 127 ) scene_define 1
+( 10 11 12 13 14 15 16 121 ) scene_define 1
 
 # Scene 2: Roland TR-808 Electro Hip-Hop ("Planet Rock" 1982)
-( 20 21 22 23 24 25 26 127 ) scene_define 2
+( 20 21 22 23 24 25 26 122 ) scene_define 2
 
 # Scene 3: Latin Electro Freestyle (Shannon "Let The Music Play" 1983)
-( 30 31 32 33 34 35 36 127 ) scene_define 3
+( 30 31 32 33 34 35 36 123 ) scene_define 3
 
 # Scene 4: 1980s Synth-Pop (Gated Snare & Ride Cymbal Bell Ping 1984)
-( 40 41 42 43 44 45 46 127 ) scene_define 4
+( 40 41 42 43 44 45 46 124 ) scene_define 4
 
 # Scene 5: Simmons SDS-V Disco Tom Solo & Laser Zaps (1981)
-( 50 51 52 53 54 55 56 127 ) scene_define 5
+( 50 51 52 53 54 55 56 125 ) scene_define 5
 
 # Scene 6: Washington D.C. Go-Go & Cowbell Funk (1985)
-( 60 61 62 63 64 65 66 127 ) scene_define 6
+( 60 61 62 63 64 65 66 126 ) scene_define 6
 
 # Scene 7: All-Star Analog Drum Climax (Full Hardware Jam)
 ( 20 21 12 23 54 25 16 127 ) scene_define 7
 
 # ----------------------------------------------------------------------
-# 5. AUTOMATED SCENE PROGRESSION CHAIN
+# 6. AUTOMATED SCENE PROGRESSION CHAIN
 # Structure:
 #   Scene 0 (CR-78 Bossa Nova)   - 4 bars -> Scene 1
 #   Scene 1 (Space Disco)        - 4 bars -> Scene 2
@@ -578,7 +642,7 @@ yl 16
 7 4 0 scene_chain
 
 # ----------------------------------------------------------------------
-# 6. INTERACTIVE NAVIGATION MACROS & CONTROLS
+# 7. INTERACTIVE NAVIGATION MACROS & CONTROLS
 # ----------------------------------------------------------------------
 [scene_bossa]     : 0 scene_cue ;
 [scene_disco]     : 1 scene_cue ;
@@ -606,7 +670,7 @@ yl 16
 [scenes] : [SCENES: 0:scene_bossa 1:scene_disco 2:scene_electro 3:scene_freestyle 4:scene_synthpop 5:scene_simmons 6:scene_gogo 7:scene_climax] puts ;
 
 # ----------------------------------------------------------------------
-# 7. STARTUP GUIDE BANNER
+# 8. STARTUP GUIDE BANNER
 # ----------------------------------------------------------------------
 [--- 70S & 80S DRUM MACHINE PRESET ROSTER ---] puts
 [  Scene 0: scene_bossa     (Roland CR-78 1978 Bossa Nova / Latin Groove)] puts
