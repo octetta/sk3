@@ -75,12 +75,12 @@ v5 w0 a-6.0 p0 t.002,.20,0,.05 j1 k140 q.7
 
 # BASS: The Authentic Moroder Moog Modular Bass
 # Layer 1 (Voice 6): PolyBLEP Saw (w2) -> 24dB Moog ladder lowpass, punchy pluck
-v6 w2 a-4.5 p0 t.002,.11,0,.03 j1,1 k260 q2.2 ft.001,.09,0,.03 fd600 r1 ds.25
+v6 w2 a-4.5 p0 t.002,.10,0,.02 j1,1 k300 q2.4 ft.001,.08,0,.02 fd650 r1 ds.30
 [Moroder Saw Bass] vt
 v6 >7
 
 # Layer 2 (Voice 7): PolyBLEP Pulse (w1) with active PWM modulation
-v7 w1 a-6.5 p0 pw 0.38 pwt .01,.14,.2,.05 pwd 0.15 j1 k280 q1.8 ft.001,.09,0,.03 fd500 r1 ds.20
+v7 w1 a-6.0 p0 pw 0.40 pwt .01,.14,.2,.04 pwd 0.18 j1 k320 q2.0 ft.001,.08,0,.02 fd550 r1 ds.25
 [Moroder Pulse PWM] vt
 # Slave Voice 7 trigger and pitch to Voice 6
 v6 G7 H7
@@ -102,13 +102,13 @@ v13 G14 H14
 # NOTE STREAMS (Using /SS with rest '-', tie '.', and slur '~' options)
 # ----------------------------------------------------------------------
 
-# Stream 0: The Hypnotic 4-Bar Octave Bass (C -> Eb -> F -> C, 64 steps)
-# Played via i&0 on every 16th step. Rest '-' on step 15 gives rhythmic breath.
+# Stream 0: The Hypnotic 4-Bar Octave Bass (C -> Eb -> Bb -> F, 64 steps)
+# The authentic Giorgio Moroder chord progression with breathing rest '-' on step 15
 [
   C2 C3 C2 C3  C2 C3 C2 C3  C2 C3 C2 C3  C2 C3 C2 -
   Eb2 Eb3 Eb2 Eb3  Eb2 Eb3 Eb2 Eb3  Eb2 Eb3 Eb2 Eb3  Eb2 Eb3 Eb2 -
+  Bb1 Bb2 Bb1 Bb2  Bb1 Bb2 Bb1 Bb2  Bb1 Bb2 Bb1 Bb2  Bb1 Bb2 Bb1 -
   F2 F3 F2 F3  F2 F3 F2 F3  F2 F3 F2 F3  F2 F3 F2 -
-  C2 C3 C2 C3  C2 C3 C2 C3  C2 C3 C2 C3  C2 C3 C2 -
 ] n>d /SS 0
 
 # Stream 1: Syncopated Bass Variation with Ties '.' and Rests '-' (64 steps)
@@ -116,8 +116,8 @@ v13 G14 H14
 [
   C2 C3 . C2  . C3 C2 .  C2 C3 . C2  . C3 C2 -
   Eb2 Eb3 . Eb2  . Eb3 Eb2 .  Eb2 Eb3 . Eb2  . Eb3 Eb2 -
+  Bb1 Bb2 . Bb1  . Bb2 Bb1 .  Bb1 Bb2 . Bb1  . Bb2 Bb1 -
   F2 F3 . F2  . F3 F2 .  F2 F3 . F2  . F3 F2 -
-  C2 C3 . C2  . C3 C2 .  C2 C3 . C2  . C3 C2 -
 ] n>d /SS 1
 
 # Stream 2: Sultry Floating Minor Pentatonic Lead Hook (4-Bar Donna Summer Phrase, 64 steps)
@@ -125,7 +125,7 @@ v13 G14 H14
 [
   C5 . . .  Eb5 . . .  C5 . . -  Bb4 . . -
   Bb4 . . .  Eb5 . . .  D5 . . -  Bb4 . . -
-  C5 . . .  F5 . . .  Eb5 . . -  C5 . . -
+  F5 . . .  D5 . . .  Bb4 . . -  C5 . . -
   Eb5 . D5 .  C5 . . .  G4 . . -  - - - -
 ] n>d /SS 2
 
@@ -133,8 +133,8 @@ v13 G14 H14
 [
   C4 G4 C5 G4  C4 G4 C5 G4  C4 G4 C5 G4  C4 G4 C5 G4
   Eb4 Bb4 Eb5 Bb4  Eb4 Bb4 Eb5 Bb4  Eb4 Bb4 Eb5 Bb4  Eb4 Bb4 Eb5 Bb4
-  F4 C5 F5 C5  F4 C5 F5 C5  F4 C5 F5 C5  F4 C5 F5 C5
-  C4 G4 C5 G4  C4 G4 C5 G4  C4 G4 C5 G4  C4 G4 C5 G4
+  Bb3 F4 Bb4 F4  Bb3 F4 Bb4 F4  Bb3 F4 Bb4 F4  Bb3 F4 Bb4 F4
+  F3 C4 F4 C4  F3 C4 F4 C4  F3 C4 F4 C4  F3 C4 F4 C4
 ] n>d /SS 3
 
 # ----------------------------------------------------------------------
@@ -151,11 +151,11 @@ y1 %1
 yl 16
 [v1 l.5] x4,12
 
-# Pattern 2: Sizzling 16th Closed Hats
+# Pattern 2: Sizzling 16th Closed Hats with Disco Dynamics
 y2 %1
 yl 16
-[v2 l.35] x0,1,2,3,4,5,6,7
-[v2 l.35] x8,9,10,11,12,13,14,15
+[v2 l.38] x0,2,4,6,8,10,12,14
+[v2 l.22] x1,3,5,7,9,11,13,15
 
 # Pattern 3: The Hypnotic Octave Gallop Bass (Pulls dynamically via i&0)
 y3 %1
@@ -168,11 +168,11 @@ yl 16
 4 y
 [v0 l1 v5 g0 n48 g.06 n24 l1] x0,4,8,10,12,14
 
-# Pattern 5: Snare Roll Fill + Stereo Claps
+# Pattern 5: Snare Roll Fill (Climax builds into downbeat)
 1 5 ycp
 5 y
-[v1 l.4] x12,13,14,15
-[v4 l.7] x4,12
+[v1 l.5] x4,12
+[v1 l.35] x13,14,15
 
 # Pattern 6: 16th Shimmer Arpeggio (Pulls from Stream 3 via i&3)
 y6 %1
@@ -192,10 +192,16 @@ yl 16
 [v6 i&1] x0,1,2,3,4,5,6,7
 [v6 i&1] x8,9,10,11,12,13,14,15
 
-# Pattern 9: Open Hi-Hat Offbeat Sizzle
+# Pattern 9: Open Hi-Hat Offbeat Sizzle (Classic Disco Lift on the '&' of each beat)
 y9 %1
 yl 16
-[v3 l.6] x2,6,10,14
+[v3 l.55] x2,6,10,14
+
+# Pattern 10: Climax Open Hats + Stereo Claps on 2 and 4
+y10 %1
+yl 16
+[v3 l.55] x2,6,10,14
+[v4 l.7] x4,12
 
 # Pattern 127: The Master Conductor (16 steps per bar)
 y127 %1
@@ -210,26 +216,26 @@ yl 16
 # Scene 0: "Kick & Snare" (4 bars: foundation groove)
 ( 0  1 -1 -1 -1 -1 -1 127 ) scene_define 0
 
-# Scene 1: "Add Closed Hat" (4 bars: 16th hats join the groove)
+# Scene 1: "Add Closed Hat" (4 bars: 16th dynamic hats join the groove)
 ( 0  1  2 -1 -1 -1 -1 127 ) scene_define 1
 
-# Scene 2: "Add Bass" (4 bars: hypnotic octave bass drops in)
+# Scene 2: "Add Moroder Bass" (4 bars: hypnotic octave bass drops in)
 ( 0  1  2  3 -1 -1 -1 127 ) scene_define 2
 
-# Scene 3: "Melody Anthem" (8 bars: full Donna Summer lead & shimmer arp)
-( 0  1  2  3  6  7 -1 127 ) scene_define 3
+# Scene 3: "Add Offbeat Open Hats" (4 bars: disco lift with offbeat sizzle)
+( 0  1  2  3 -1 -1  9 127 ) scene_define 3
 
-# Scene 4: "Climax" (4 bars: high-energy kick accents, snare fill, claps, open hats, sync bass)
-( 4  5  2  8  6  7  9 127 ) scene_define 4
+# Scene 4: "Donna Summer Anthem" (8 bars: full lead hook & shimmer arp)
+( 0  1  2  3  6  7  9 127 ) scene_define 4
 
-# Scene 5: "Breakdown 1: Drop Lead" (4 bars: reverse step 1 - peel back lead and arp)
-( 0  1  2  3 -1 -1 -1 127 ) scene_define 5
+# Scene 5: "Climax" (4 bars: syncopated kicks, snare roll, stereo claps, open hats)
+( 4  5  2  3  6  7 10 127 ) scene_define 5
 
-# Scene 6: "Breakdown 2: Drop Bass" (4 bars: reverse step 2 - bass drops out, hats tick)
-( 0  1  2 -1 -1 -1 -1 127 ) scene_define 6
+# Scene 6: "Breakdown: Bass & Drums" (4 bars: peel back lead & arp, pure bass pump)
+( 0  1  2  3 -1 -1  9 127 ) scene_define 6
 
-# Scene 7: "Outro: Kick & Snare" (4 bars: reverse step 3 - return to raw kick & snare)
-( 0  1 -1 -1 -1 -1 -1 127 ) scene_define 7
+# Scene 7: "Outro: Kick & Hats" (4 bars: drop bass, deconstruct to kick, snare & hats)
+( 0  1  2 -1 -1 -1 -1 127 ) scene_define 7
 
 # ----------------------------------------------------------------------
 # AUTOMATED SCENE PROGRESSION
@@ -237,8 +243,8 @@ yl 16
 #   Scene 0 (4 loops) -> Scene 1
 #   Scene 1 (4 loops) -> Scene 2
 #   Scene 2 (4 loops) -> Scene 3
-#   Scene 3 (8 loops) -> Scene 4
-#   Scene 4 (4 loops) -> Scene 5
+#   Scene 3 (4 loops) -> Scene 4
+#   Scene 4 (8 loops) -> Scene 5
 #   Scene 5 (4 loops) -> Scene 6
 #   Scene 6 (4 loops) -> Scene 7
 #   Scene 7 (4 loops) -> Scene 0 (seamless cycle)
@@ -246,8 +252,8 @@ yl 16
 0 4 1 scene_chain
 1 4 2 scene_chain
 2 4 3 scene_chain
-3 8 4 scene_chain
-4 4 5 scene_chain
+3 4 4 scene_chain
+4 8 5 scene_chain
 5 4 6 scene_chain
 6 4 7 scene_chain
 7 4 0 scene_chain
@@ -259,14 +265,14 @@ yl 16
 [scene_kick_snare] : 0 scene_cue ;
 [scene_add_hats]   : 1 scene_cue ;
 [scene_add_bass]   : 2 scene_cue ;
-[scene_melody]     : 3 scene_cue ;
-[scene_climax]     : 4 scene_cue ;
-[scene_drop_lead]  : 5 scene_cue ;
-[scene_drop_bass]  : 6 scene_cue ;
+[scene_open_hats]  : 3 scene_cue ;
+[scene_melody]     : 4 scene_cue ;
+[scene_climax]     : 5 scene_cue ;
+[scene_drop_lead]  : 6 scene_cue ;
 [scene_outro]      : 7 scene_cue ;
 
 # Helper macro to display labeled scene roster on demand
-[scenes] : [SCENES: 0:scene_kick_snare 1:scene_add_hats 2:scene_add_bass 3:scene_melody 4:scene_climax 5:scene_drop_lead 6:scene_drop_bass 7:scene_outro] puts ;
+[scenes] : [SCENES: 0:scene_kick_snare 1:scene_add_hats 2:scene_add_bass 3:scene_open_hats 4:scene_melody 5:scene_climax 6:scene_drop_lead 7:scene_outro] puts ;
 
 # ----------------------------------------------------------------------
 # PRECOMPILED REALTIME MACRO EFFECTS (e> 0..5 / e! 0..5)
@@ -282,7 +288,7 @@ yl 16
 [v6 k580] e> 2
 
 # Slot 3: Bass filter reset to standard punch
-[v6 k260] e> 3
+[v6 k300] e> 3
 
 # Slot 4: Lead space echo dub wash (crank delay decay & send)
 [v13 ds.60] e> 4
@@ -309,14 +315,14 @@ yl 16
 
 # Display startup guide
 [--- RAD DISCO SCENE ROSTER ---] puts
-[  Scene 0: scene_kick_snare  (4 bars: Kick + Snare)] puts
-[  Scene 1: scene_add_hats    (4 bars: + 16th Closed Hats)] puts
-[  Scene 2: scene_add_bass    (4 bars: + Hypnotic Octave Bass)] puts
-[  Scene 3: scene_melody      (8 bars: + Shimmer Arp & Donna Lead)] puts
-[  Scene 4: scene_climax      (4 bars: Climax Fills, Open Hats & Claps)] puts
-[  Scene 5: scene_drop_lead   (4 bars: Breakdown 1 - Drop Lead/Arp)] puts
-[  Scene 6: scene_drop_bass   (4 bars: Breakdown 2 - Drop Bass)] puts
-[  Scene 7: scene_outro       (4 bars: Outro - Raw Kick & Snare)] puts
+[  Scene 0: scene_kick_snare  (4 bars: Kick + Snare Foundation)] puts
+[  Scene 1: scene_add_hats    (4 bars: + 16th Dynamic Closed Hats)] puts
+[  Scene 2: scene_add_bass    (4 bars: + Hypnotic Octave Bass C-Eb-Bb-F)] puts
+[  Scene 3: scene_open_hats   (4 bars: + Offbeat Open Hat Sizzle)] puts
+[  Scene 4: scene_melody      (8 bars: + Shimmer Arp & Donna Lead Hook)] puts
+[  Scene 5: scene_climax      (4 bars: + Syncopated Kicks, Snare Rolls & Claps)] puts
+[  Scene 6: scene_drop_lead   (4 bars: Breakdown - Pure Bass & Drums)] puts
+[  Scene 7: scene_outro       (4 bars: Outro - Deconstructed Kick & Hats)] puts
 [--- REALTIME MACRO EFFECTS ---] puts
 [  e! 0 or fx_kick_accent  : Accent kick punch on downbeat] puts
 [  e! 1 or fx_bass_muffle   : Muffled underwater bass filter] puts
