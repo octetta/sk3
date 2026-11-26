@@ -2047,6 +2047,14 @@ typedef enum {
   DSL_DRUM_TOM,
   DSL_DRUM_COWBELL,
   DSL_DRUM_MEMBRANE,
+  DSL_DRUM_CRASH,
+  DSL_DRUM_RIDE,
+  DSL_DRUM_RIM,
+  DSL_DRUM_CLAVE,
+  DSL_DRUM_MARACA,
+  DSL_DRUM_CONGA,
+  DSL_DRUM_SIMMONS,
+  DSL_DRUM_ZAP,
 
   DSL_BELL_CHURCH,
   DSL_BELL_TUBULAR,
@@ -2088,6 +2096,10 @@ typedef struct {
   float spread;       /* clap burst spacing ms */
   int bursts;         /* clap burst count */
   float drop;         /* tom pitch drop */
+  float tone;         /* cymbal spectral balance */
+  float sizzle;       /* cymbal noise sizzle mix */
+  float ping;         /* ride bell ping */
+  float slap;         /* conga slap transient */
   float blend;        /* kdrum membrane blend */
   float mallet;       /* bell mallet hardness */
   float brightness;   /* excitation brightness */
@@ -2572,6 +2584,73 @@ static int sk_gen_drum_render(skode_t *ctx, const char *domain, const char *inst
     float decay = (p->decay > 0.05f) ? p->decay : 0.80f;
     sk_drum_membrane_init(&mem, rate, base_f, decay, tension_drop, strike_pos);
     for (int i = 0; i < total_samples; i++) buf[i] = sk_drum_membrane_step(&mem);
+  } else if (p->preset == DSL_DRUM_CRASH || p->preset == DSL_DRUM_RIDE) {
+    sk_drum_cymbal_t cym;
+    int is_ride = (p->preset == DSL_DRUM_RIDE);
+    sk_drum_cymbal_init(&cym, rate, is_ride);
+    if (p->decay > 0.05f) {
+      float body_scale = is_ride ? 0.45f : 0.55f;
+      float sizzle_scale = 1.0f;
+      float wash_scale = is_ride ? 0.55f : 0.75f;
+      cym.amp_decay_body = expf(-1.0f / (p->decay * body_scale * rate));
+      cym.amp_decay_sizzle = expf(-1.0f / (p->decay * sizzle_scale * rate));
+      cym.amp_decay_wash = expf(-1.0f / (p->decay * wash_scale * rate));
+    }
+    if (p->tone >= 0.0f) cym.tone = sk_clampf(p->tone, 0.0f, 1.0f);
+    if (p->sizzle >= 0.0f) cym.sizzle = sk_clampf(p->sizzle, 0.0f, 1.0f);
+    if (is_ride && p->ping >= 0.0f) cym.ping_env = sk_clampf(p->ping, 0.0f, 1.0f);
+    sk_drum_cymbal_trigger(&cym, p->velocity > 0.0f ? p->velocity : 1.0f);
+    for (int i = 0; i < total_samples; i++) buf[i] = sk_drum_cymbal_step(&cym);
+  } else if (p->preset == DSL_DRUM_RIM) {
+    sk_drum_rimshot_t rm;
+    sk_drum_rimshot_init(&rm, rate, p->freq > 200.0f ? p->freq : 1750.0f);
+    if (p->decay > 0.005f) rm.decay_shell = expf(-1.0f / (p->decay * rate));
+    if (p->click >= 0.0f) rm.click_level = sk_clampf(p->click, 0.0f, 1.0f);
+    sk_drum_rimshot_trigger(&rm, p->velocity > 0.0f ? p->velocity : 1.0f);
+    for (int i = 0; i < total_samples; i++) buf[i] = sk_drum_rimshot_step(&rm);
+  } else if (p->preset == DSL_DRUM_CLAVE) {
+    sk_drum_clave_t clv;
+    sk_drum_clave_init(&clv, rate, p->freq > 100.0f ? p->freq : 2450.0f);
+    if (p->decay > 0.005f) clv.decay_coeff = expf(-1.0f / (p->decay * rate));
+    sk_drum_clave_trigger(&clv, p->velocity > 0.0f ? p->velocity : 1.0f);
+    for (int i = 0; i < total_samples; i++) buf[i] = sk_drum_clave_step(&clv);
+  } else if (p->preset == DSL_DRUM_MARACA) {
+    sk_drum_maraca_t mar;
+    sk_drum_maraca_init(&mar, rate, p->freq > 1000.0f ? p->freq : 7500.0f);
+    if (p->decay > 0.005f) mar.decay_coeff = expf(-1.0f / (p->decay * rate));
+    sk_drum_maraca_trigger(&mar, p->velocity > 0.0f ? p->velocity : 1.0f);
+    for (int i = 0; i < total_samples; i++) buf[i] = sk_drum_maraca_step(&mar);
+  } else if (p->preset == DSL_DRUM_CONGA) {
+    sk_drum_conga_t cg;
+    sk_drum_conga_init(&cg, rate, p->freq > 30.0f ? p->freq : 220.0f);
+    if (p->decay > 0.01f) cg.amp_decay = expf(-1.0f / (p->decay * rate));
+    if (p->drop >= 0.0f) cg.drop = sk_clampf(p->drop, 0.0f, 1.0f);
+    if (p->slap >= 0.0f) cg.slap_mix = sk_clampf(p->slap, 0.0f, 1.0f);
+    sk_drum_conga_trigger(&cg, p->velocity > 0.0f ? p->velocity : 1.0f);
+    for (int i = 0; i < total_samples; i++) buf[i] = sk_drum_conga_step(&cg);
+  } else if (p->preset == DSL_DRUM_SIMMONS) {
+    sk_drum_simmons_t sm;
+    sk_drum_simmons_init(&sm, rate);
+    if (p->freq > 20.0f) sm.start_freq = p->freq;
+    if (p->end_freq > 10.0f) sm.end_freq = p->end_freq;
+    if (p->decay > 0.01f) sm.amp_decay = expf(-1.0f / (p->decay * rate));
+    if (p->pdecay > 0.001f) sm.pitch_decay = expf(-1.0f / (p->pdecay * rate));
+    if (p->noise >= 0.0f) sm.noise_mix = sk_clampf(p->noise, 0.0f, 1.0f);
+    if (p->click >= 0.0f) sm.click_mix = sk_clampf(p->click, 0.0f, 1.0f);
+    sk_drum_simmons_trigger(&sm, p->velocity > 0.0f ? p->velocity : 1.0f);
+    for (int i = 0; i < total_samples; i++) buf[i] = sk_drum_simmons_step(&sm);
+  } else if (p->preset == DSL_DRUM_ZAP) {
+    sk_drum_zap_t zp;
+    sk_drum_zap_init(&zp, rate);
+    if (p->freq > 20.0f) zp.start_freq = p->freq;
+    if (p->end_freq > 10.0f) zp.end_freq = p->end_freq;
+    if (p->decay > 0.005f) {
+      zp.dt = 1.0f / (p->decay * rate);
+      zp.amp_decay = expf(-1.0f / (p->decay * rate));
+    }
+    if (p->drive > 0.0f) zp.drive = sk_clampf(p->drive, 0.1f, 10.0f);
+    sk_drum_zap_trigger(&zp, p->velocity > 0.0f ? p->velocity : 1.0f);
+    for (int i = 0; i < total_samples; i++) buf[i] = sk_drum_zap_step(&zp);
   } else {
     /* Kick drum */
     sk_drum_kick_t k;
@@ -2759,7 +2838,16 @@ int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int arg
           strcmp(pre_str, "clap") == 0 || strcmp(pre_str, "handclap") == 0 ||
           strcmp(pre_str, "tom") == 0 || strcmp(pre_str, "cowbell") == 0 ||
           strcmp(pre_str, "membrane") == 0 || strcmp(pre_str, "kdrum") == 0 ||
-          strcmp(pre_str, "bassdrum") == 0) {
+          strcmp(pre_str, "bassdrum") == 0 ||
+          strcmp(pre_str, "crash") == 0 || strcmp(pre_str, "cymbal") == 0 ||
+          strcmp(pre_str, "ride") == 0 ||
+          strcmp(pre_str, "rim") == 0 || strcmp(pre_str, "rimshot") == 0 ||
+          strcmp(pre_str, "clave") == 0 || strcmp(pre_str, "claves") == 0 ||
+          strcmp(pre_str, "maraca") == 0 || strcmp(pre_str, "maracas") == 0 ||
+          strcmp(pre_str, "shaker") == 0 ||
+          strcmp(pre_str, "conga") == 0 || strcmp(pre_str, "bongo") == 0 ||
+          strcmp(pre_str, "simmons") == 0 || strcmp(pre_str, "syntom") == 0 ||
+          strcmp(pre_str, "zap") == 0 || strcmp(pre_str, "laser") == 0) {
         p.family = DSL_FAM_DRUM;
         if (strcmp(pre_str, "snare") == 0) {
           p.preset = DSL_DRUM_SNARE;
@@ -2791,6 +2879,39 @@ int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int arg
           p.brightness = 0.25f;
           p.has_pitch = 1;
           p.midi_note = sk_ftom(p.freq);
+        } else if (strcmp(pre_str, "crash") == 0 || strcmp(pre_str, "cymbal") == 0) {
+          p.preset = DSL_DRUM_CRASH;
+          strcpy(p.preset_name, "drum:crash");
+          p.decay = 2.2f; p.tone = 0.5f; p.sizzle = 0.65f;
+        } else if (strcmp(pre_str, "ride") == 0) {
+          p.preset = DSL_DRUM_RIDE;
+          strcpy(p.preset_name, "drum:ride");
+          p.decay = 1.6f; p.tone = 0.6f; p.sizzle = 0.35f; p.ping = 0.5f;
+        } else if (strcmp(pre_str, "rim") == 0 || strcmp(pre_str, "rimshot") == 0) {
+          p.preset = DSL_DRUM_RIM;
+          strcpy(p.preset_name, "drum:rim");
+          p.freq = 1750.0f; p.decay = 0.038f; p.click = 0.50f;
+        } else if (strcmp(pre_str, "clave") == 0 || strcmp(pre_str, "claves") == 0) {
+          p.preset = DSL_DRUM_CLAVE;
+          strcpy(p.preset_name, "drum:clave");
+          p.freq = 2450.0f; p.decay = 0.040f; p.has_pitch = 1; p.midi_note = sk_ftom(p.freq);
+        } else if (strcmp(pre_str, "maraca") == 0 || strcmp(pre_str, "maracas") == 0 || strcmp(pre_str, "shaker") == 0) {
+          p.preset = DSL_DRUM_MARACA;
+          strcpy(p.preset_name, "drum:maraca");
+          p.freq = 7500.0f; p.decay = 0.045f;
+        } else if (strcmp(pre_str, "conga") == 0 || strcmp(pre_str, "bongo") == 0) {
+          p.preset = DSL_DRUM_CONGA;
+          strcpy(p.preset_name, "drum:conga");
+          p.freq = 220.0f; p.decay = 0.220f; p.drop = 0.25f; p.slap = 0.35f;
+          p.has_pitch = 1; p.midi_note = sk_ftom(p.freq);
+        } else if (strcmp(pre_str, "simmons") == 0 || strcmp(pre_str, "syntom") == 0) {
+          p.preset = DSL_DRUM_SIMMONS;
+          strcpy(p.preset_name, "drum:simmons");
+          p.freq = 550.0f; p.end_freq = 75.0f; p.decay = 0.450f; p.pdecay = 0.075f; p.noise = 0.25f; p.click = 0.40f;
+        } else if (strcmp(pre_str, "zap") == 0 || strcmp(pre_str, "laser") == 0) {
+          p.preset = DSL_DRUM_ZAP;
+          strcpy(p.preset_name, "drum:zap");
+          p.freq = 3200.0f; p.end_freq = 45.0f; p.decay = 0.085f; p.drive = 1.4f;
         } else {
           p.preset = DSL_DRUM_KICK;
           strcpy(p.preset_name, "drum:kick");
@@ -2895,7 +3016,15 @@ int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int arg
         for (size_t i = 0; i < strlen(key); i++) key[i] = (char)tolower((unsigned char)key[i]);
 
         if (strcmp(key, "f") == 0 || strcmp(key, "freq") == 0 || strcmp(key, "hz") == 0 || strcmp(key, "pitch") == 0) {
-          p.freq = parse_dsl_pitch(val, p.freq, &p.midi_note, &p.has_pitch);
+          if (strcasecmp(val, "low") == 0) {
+            p.freq = 200.0f; p.midi_note = sk_ftom(p.freq); p.has_pitch = 1;
+          } else if (strcasecmp(val, "mid") == 0) {
+            p.freq = 300.0f; p.midi_note = sk_ftom(p.freq); p.has_pitch = 1;
+          } else if (strcasecmp(val, "high") == 0 || strcasecmp(val, "hi") == 0) {
+            p.freq = 420.0f; p.midi_note = sk_ftom(p.freq); p.has_pitch = 1;
+          } else {
+            p.freq = parse_dsl_pitch(val, p.freq, &p.midi_note, &p.has_pitch);
+          }
         } else if (strcmp(key, "n") == 0 || strcmp(key, "note") == 0 || strcmp(key, "midi") == 0) {
           p.freq = parse_dsl_pitch(val, p.freq, &p.midi_note, &p.has_pitch);
         } else if (strcmp(key, "d") == 0 || strcmp(key, "decay") == 0 || strcmp(key, "t60") == 0) {
@@ -2927,6 +3056,14 @@ int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int arg
           p.bursts = atoi(val);
         } else if (strcmp(key, "drop") == 0) {
           p.drop = (float)atof(val);
+        } else if (strcmp(key, "tone") == 0) {
+          p.tone = (float)atof(val);
+        } else if (strcmp(key, "sizzle") == 0) {
+          p.sizzle = (float)atof(val);
+        } else if (strcmp(key, "ping") == 0) {
+          p.ping = (float)atof(val);
+        } else if (strcmp(key, "slap") == 0) {
+          p.slap = (float)atof(val);
         } else if (strcmp(key, "blend") == 0) {
           p.blend = (float)atof(val);
         } else if (strcmp(key, "m") == 0 || strcmp(key, "mallet") == 0) {
@@ -2995,6 +3132,29 @@ int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int arg
       }
       case DSL_DRUM_MEMBRANE: {
         duration = 2.20f;
+        break;
+      }
+      case DSL_DRUM_CRASH:
+      case DSL_DRUM_RIDE: {
+        duration = p.decay * 1.5f + 0.35f;
+        break;
+      }
+      case DSL_DRUM_RIM:
+      case DSL_DRUM_CLAVE:
+      case DSL_DRUM_MARACA: {
+        duration = p.decay * 7.0f + 0.05f;
+        break;
+      }
+      case DSL_DRUM_CONGA: {
+        duration = p.decay * 6.5f + 0.10f;
+        break;
+      }
+      case DSL_DRUM_SIMMONS: {
+        duration = p.decay * 6.5f + 0.15f;
+        break;
+      }
+      case DSL_DRUM_ZAP: {
+        duration = p.decay * 3.0f + 0.05f;
         break;
       }
 

@@ -13,6 +13,7 @@
 #include "skode-dict.h"
 #include "seq.h"
 #include "skode-internal.h"
+#include "sk_dsp.h"
 #include "synth.h"
 #include "synth-state.h"
 #include "miniz_zip.h"
@@ -4392,6 +4393,58 @@ static void test_sample_render_physical_modeling_and_loop_metadata(void) {
   expect_substr(test, ands_string(ctx.parse), "root:62", "parse metadata populated with detected root");
 }
 
+static void test_drum_kit_gen_models(void) {
+  const char *test = "drum kit gen models";
+  skode_t ctx = new_ctx();
+
+  /* 1. Crash cymbal: [drum:crash d:1.2 tone:0.6 sizzle:0.7] 311 gen! */
+  consume(test, &ctx, "[drum:crash d:1.2 tone:0.6 sizzle:0.7] 311 gen!");
+  if (!sw.data[311] || sw.size[311] <= 0) fail(test, "drum:crash did not install to w311");
+  expect_int(test, sw.one_shot[311], 1, "drum:crash w311 one_shot=1");
+
+  /* 2. Ride cymbal with bell ping: [drum:ride d:1.0 ping:0.7] 312 gen! */
+  consume(test, &ctx, "[drum:ride d:1.0 ping:0.7] 312 gen!");
+  if (!sw.data[312] || sw.size[312] <= 0) fail(test, "drum:ride did not install to w312");
+  expect_int(test, sw.one_shot[312], 1, "drum:ride w312 one_shot=1");
+
+  /* 3. TR-808 Rimshot: [drum:rim f:1750 d:0.04 click:0.6] 313 gen! */
+  consume(test, &ctx, "[drum:rim f:1750 d:0.04 click:0.6] 313 gen!");
+  if (!sw.data[313] || sw.size[313] <= 0) fail(test, "drum:rim did not install to w313");
+  expect_int(test, sw.one_shot[313], 1, "drum:rim w313 one_shot=1");
+
+  /* 4. TR-808 Claves: [drum:clave f:2450 d:0.035] 314 gen! */
+  consume(test, &ctx, "[drum:clave f:2450 d:0.035] 314 gen!");
+  if (!sw.data[314] || sw.size[314] <= 0) fail(test, "drum:clave did not install to w314");
+  expect_int(test, sw.one_shot[314], 1, "drum:clave w314 one_shot=1");
+  expect_int(test, (int)sw.midi_note[314], (int)roundf(sk_ftom(2450.0f)), "drum:clave w314 pitch metadata");
+
+  /* 5. TR-808 Maracas: [drum:maraca f:7500 d:0.04] 315 gen! */
+  consume(test, &ctx, "[drum:maraca f:7500 d:0.04] 315 gen!");
+  if (!sw.data[315] || sw.size[315] <= 0) fail(test, "drum:maraca did not install to w315");
+  expect_int(test, sw.one_shot[315], 1, "drum:maraca w315 one_shot=1");
+
+  /* 6. TR-808 Conga low: [drum:conga pitch:low d:0.25 slap:0.4] 316 gen! */
+  consume(test, &ctx, "[drum:conga pitch:low d:0.25 slap:0.4] 316 gen!");
+  if (!sw.data[316] || sw.size[316] <= 0) fail(test, "drum:conga low did not install to w316");
+  expect_int(test, sw.one_shot[316], 1, "drum:conga low w316 one_shot=1");
+  expect_int(test, (int)sw.midi_note[316], (int)roundf(sk_ftom(200.0f)), "drum:conga low w316 pitch=200Hz");
+
+  /* 7. TR-808 Conga high: [drum:conga pitch:high d:0.20 slap:0.6] 317 gen! */
+  consume(test, &ctx, "[drum:conga pitch:high d:0.20 slap:0.6] 317 gen!");
+  if (!sw.data[317] || sw.size[317] <= 0) fail(test, "drum:conga high did not install to w317");
+  expect_int(test, (int)sw.midi_note[317], (int)roundf(sk_ftom(420.0f)), "drum:conga high w317 pitch=420Hz");
+
+  /* 8. Simmons SDS-V 80s Synth Tom: [drum:simmons f:550 end:70 d:0.35 noise:0.25 click:0.4] 318 gen! */
+  consume(test, &ctx, "[drum:simmons f:550 end:70 d:0.35 noise:0.25 click:0.4] 318 gen!");
+  if (!sw.data[318] || sw.size[318] <= 0) fail(test, "drum:simmons did not install to w318");
+  expect_int(test, sw.one_shot[318], 1, "drum:simmons w318 one_shot=1");
+
+  /* 9. Analog Space Zap / Laser: [drum:zap f:3200 end:45 d:0.08 drive:1.4] 319 gen! */
+  consume(test, &ctx, "[drum:zap f:3200 end:45 d:0.08 drive:1.4] 319 gen!");
+  if (!sw.data[319] || sw.size[319] <= 0) fail(test, "drum:zap did not install to w319");
+  expect_int(test, sw.one_shot[319], 1, "drum:zap w319 one_shot=1");
+}
+
 static void test_polyblep_pwm_and_phonemes(void) {
   const char *test = "polyblep pwm and phonemes";
   skode_t ctx = new_ctx();
@@ -4624,6 +4677,7 @@ int main(int argc, char **argv) {
   test_voice_format_pitch_mode();
   test_voice_format_envelopes();
   test_polyblep_pwm_and_phonemes();
+  test_drum_kit_gen_models();
   test_error_system();
   test_pattern_length_rate_hz_and_scenes();
   test_binary_rejection_and_text_validation();

@@ -193,6 +193,99 @@ Physical modeling of a clamped circular drum skin vibrating across 8 Bessel part
 [drum:membrane n62 drop:0.35 d:0.45 b:0.45] 113 gen!
 ```
 
+#### `crash` / `cymbal` (TR-808 Multi-Band Metallic Crash Cymbal)
+6-oscillator square wave cluster passed through split multi-band body, high sizzle, and shaped air noise wash filters with natural non-linear ring.
+* `d`, `decay`: Overall cymbal decay time in seconds (default: `2.2`)
+* `tone`: Spectral balance between low metallic body and high sizzle `0.0`–`1.0` (default: `0.5`)
+* `sizzle`: High-frequency noise wash mix `0.0`–`1.0` (default: `0.65`)
+
+```skode
+# Heavy 808 crash with long sizzle
+[drum:crash d:2.5 tone:0.6 sizzle:0.75] 114 gen!
+```
+
+#### `ride` (Analog Ride Cymbal with Bell Ping)
+Metallic cluster shimmer combined with dual tuned bell ring resonators for stick tip ping.
+* `d`, `decay`: Shimmer decay in seconds (default: `1.6`)
+* `tone`: Shimmer brightness balance `0.0`–`1.0` (default: `0.6`)
+* `ping`: Stick strike bell ping level `0.0`–`1.0` (default: `0.5`)
+
+```skode
+# Crisp ride cymbal with bell ping
+[drum:ride d:1.8 ping:0.7] 115 gen!
+```
+
+#### `rim` / `rimshot` (TR-808 High-Q Resonant Rimshot)
+Twin-T high-Q resonant bandpass circuits triggered by narrow impulse excitation with stick click noise.
+* `f`, `freq`: Shell resonance in Hz (default: `1750.0`)
+* `d`, `decay`: Shell resonance decay in seconds (default: `0.038`)
+* `c`, `click`: Stick strike click level `0.0`–`1.0` (default: `0.50`)
+
+```skode
+# Classic 808 rimshot
+[drum:rim f:1750 d:0.04 click:0.6] 116 gen!
+```
+
+#### `clave` / `claves` (TR-808 Bridged-T Claves)
+Ringing pure Twin-T bridged filter circuit producing a crisp, clean woody click.
+* `f`, `freq`, `n`: Clave resonant pitch in Hz or MIDI note (default: `2450.0` / B6)
+* `d`, `decay`: Exponential decay in seconds (default: `0.040`)
+
+```skode
+# Authentic 808 claves
+[drum:clave f:2450 d:0.035] 117 gen!
+```
+
+#### `maraca` / `maracas` / `shaker` (TR-808 Shaker)
+Dual-stage highpass and bandpass filtered noise burst with linear bead acceleration attack.
+* `f`, `freq`: Shaker bandpass frequency in Hz (default: `7500.0`)
+* `d`, `decay`: Shaker envelope decay in seconds (default: `0.045`)
+
+```skode
+# Crisp 808 maraca / Latin shaker
+[drum:maraca f:7500 d:0.045] 118 gen!
+```
+
+#### `conga` / `bongo` (TR-808 Tunable Conga / Bongo)
+Dual resonant sine modes with dynamic pitch drop on impact and hand slap skin transient.
+* `f`, `freq`, `pitch`: Tuning frequency in Hz, MIDI note, or preset name (`low`, `mid`, `high`/`hi`) (default: `220.0` / A3)
+* `d`, `decay`: Body decay in seconds (default: `0.22`)
+* `drop`: Pitch drop factor ratio (default: `0.25`)
+* `slap`: Hand skin slap transient level `0.0`–`1.0` (default: `0.35`)
+
+```skode
+# Full 808 Conga trio (Low, Mid, High)
+[drum:conga pitch:low d:0.26 slap:0.35] 120 gen!
+[drum:conga pitch:mid d:0.22 slap:0.45] 121 gen!
+[drum:conga pitch:high d:0.18 slap:0.60] 122 gen!
+```
+
+#### `simmons` / `syntom` (1980s Simmons SDS-V Synth Tom)
+Iconic hexagonal disco/electro tom with quadratic pitch plunge, dynamic swept resonant noise rattle, and strike click.
+* `f`, `start`: Punch attack frequency in Hz (default: `550.0`)
+* `end`: Settled low fundamental in Hz (default: `75.0`)
+* `d`, `decay`: Body amplitude decay in seconds (default: `0.45`)
+* `pdecay`: Pitch dive duration in seconds (default: `0.075`)
+* `noise`: Resonant noise rattle mix `0.0`–`1.0` (default: `0.25`)
+* `c`, `click`: Stick strike click level `0.0`–`1.0` (default: `0.40`)
+
+```skode
+# Massive 80s Phil Collins / Disco synth tom
+[drum:simmons f:600 end:65 d:0.55 pdecay:0.085 noise:0.3] 123 gen!
+```
+
+#### `zap` / `laser` (Analog Space Zap / Disco Laser)
+Fast exponential frequency plunge with saturation overdrive.
+* `f`, `start`: Initial zap frequency in Hz (default: `3200.0`)
+* `end`: Bottom frequency in Hz (default: `45.0`)
+* `d`, `decay`: Total zap decay in seconds (default: `0.085`)
+* `drive`: Saturation overdrive factor (default: `1.4`)
+
+```skode
+# Classic 70s/80s space zap
+[drum:zap f:3400 end:40 d:0.08 drive:1.6] 124 gen!
+```
+
 ---
 
 ### 4.2. Modal Metallic Idiophones & Bells (`bell:` or `metal:`)

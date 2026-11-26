@@ -6536,7 +6536,7 @@ Usage: src dst scene_copy
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `267` (`skode_clause_scene_cue_c479`)
+- **Discrete Opcode ID**: `267` (`skode_clause_scene_cue_c483`)
 - **Summary**: queue scene change at next downbeat
 
 **Description & Details**:
@@ -6580,7 +6580,7 @@ Usage: (p0 p1 p2 ...) scene_define scene_id
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `268` (`skode_clause_scene_now_c480`)
+- **Discrete Opcode ID**: `268` (`skode_clause_scene_now_c485`)
 - **Summary**: switch scene immediately across all lanes
 
 **Description & Details**:
