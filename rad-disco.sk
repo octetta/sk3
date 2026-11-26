@@ -26,11 +26,12 @@ DP 2 1
 # SYNTHESIS VOICES
 # ----------------------------------------------------------------------
 # DRUMS
-v0 w82 f440 a5.0 p0                          # Munich 4-on-the-floor punch kick
-v1 w83 f440 a5.5 r1 p0 ds.25                 # Crisp disco snare
-v2 w84 f440 a-4.0 p.2                        # 16th closed hi-hat
-v3 w85 f440 a-2.0 p-.25                      # Sizzling offbeat open hi-hat
-v4 w86 f440 a4.5 r1 p0 ds.3                  # Stereo disco clap
+v0 w82 f440 a6.0 p0                          # Munich 4-on-the-floor punch kick
+v1 w83 f440 a6.5 r1 p0 ds.25                 # Crisp disco snare
+v2 w84 f440 a-3.5 p.2                        # 16th closed hi-hat
+v3 w85 f440 a-1.5 p-.25                      # Sizzling offbeat open hi-hat
+v4 w86 f440 a5.5 r1 p0 ds.3                  # Stereo disco clap
+v5 w0 a-2.0 p0 t.002,.28,0,.08 j1 k180 q.8   # Sub kick weight (pitch drop)
 
 # BASS: Punchy Filter-Swept Moog/Funk Bass
 # Ladder low-pass filter with snappy envelope + resonance + phase distortion
@@ -75,36 +76,39 @@ v13 G14 H14
 # PATTERNS (Demonstrating yl explicit lengths & ycp cloning)
 # ----------------------------------------------------------------------
 
-# Pattern 0: Four-on-the-Floor Kick
+# Pattern 0: Four-on-the-Floor Kick + Sub-weight
 y0 %1
 yl 16
-[v0] x0,4,8,12
+[v0 l1 v5 g0 n48 g.06 n24 l1] x0,4,8,12
 
 # Pattern 1: Disco Snare on 2 and 4 + Claps
 y1 %1
 yl 16
-[v1 v4] x4,12
+[v1 l.5 v4 l.7] x4,12
 
 # Pattern 2: Sizzling Disco Hats (16th closed hats + offbeat open hats)
 y2 %1
 yl 16
-[v2] x0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
-[v3] x2,6,10,14
+[v2 l.35] x0,1,2,3,4,5,6,7
+[v2 l.35] x8,9,10,11,12,13,14,15
+[v3 l.6] x2,6,10,14
 
 # Pattern 3: Punchy 16th Gallop Bass (Pulls dynamically from Stream 0 via &0)
 y3 %1
 yl 16
-[v6 n&0 l1] x0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
+[v6 n&0 l1] x0,1,2,3,4,5,6,7
+[v6 n&0 l1] x8,9,10,11,12,13,14,15
 
 # Pattern 4: Kick Variation (Cloned from Pattern 0 using ycp, then accented)
 0 4 ycp
 4 y
-[v0] x0,4,8,10,12,14
+[v0 l1 v5 g0 n48 g.06 n24 l1] x0,4,8,10,12,14
 
 # Pattern 5: Snare Roll Fill (Cloned from Pattern 1, then with 16th roll)
 1 5 ycp
 5 y
-[v1] x12,13,14,15
+[v1 l.4] x12,13,14,15
+[v4 l.7] x12
 
 # Pattern 6: Disco FM Chords (Syncopated stabs on the offbeats)
 y6 %1
