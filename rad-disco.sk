@@ -1,11 +1,40 @@
 # ======================================================================
 #  RAD DISCO ("I Feel Love" Giorgio Moroder Space-Disco Vibe)
 #  126 BPM, C Modal (C -> Eb -> F -> C), PolyBLEP Saw + Pulse PWM Bass
+#  Featuring:
+#    - Procedural Physical Modeling Drums ([drum:xxx] gen!)
+#    - Fully Labeled Voices ([...] vt)
+#    - 8-Stage Build-Up & Breakdown Arranger (Scene 0 -> Scene 7)
+#    - Realtime Effect Triggers with Labeled Macros (e! 0..5)
 # ======================================================================
 
-[RAD DISCO - "I FEEL LOVE" MORODER DISCO VIBES] puts
+[RAD DISCO - "I FEEL LOVE" PROCEDURAL MORODER SHOWCASE] puts
 V -12.0
 M 126 16
+
+# ----------------------------------------------------------------------
+# PROCEDURAL DRUM SYNTHESIS ([drum:xxx] gen!)
+# Synthesizes analog circuits directly into wavetable slots 100..104
+# ----------------------------------------------------------------------
+# Slot 100: Punchy 909-style disco kick with warm sub drop & beater click
+[drum:kick p:155 end:45 d:0.36 c:0.35 drive:1.5] 100 gen!
+[Kick 909] wt 100
+
+# Slot 101: Resonant electro snare with dual body modes & crisp wire snap
+[drum:snare snap:0.75 d:0.07 tail:0.18 f:2900] 101 gen!
+[Snare 808] wt 101
+
+# Slot 102: Crisp closed hi-hat (6-oscillator inharmonic cluster)
+[drum:hat open:0 d:0.045] 102 gen!
+[Closed Hat] wt 102
+
+# Slot 103: Sizzling open hi-hat
+[drum:hat open:1 d:0.42] 103 gen!
+[Open Hat] wt 103
+
+# Slot 104: Stereo disco multi-burst handclap
+[drum:clap bursts:3 spread:11 tail:0.22 f:1100] 104 gen!
+[Disco Clap] wt 104
 
 # ----------------------------------------------------------------------
 # DELAY BUSES (Tempo-synced to 126 BPM)
@@ -23,33 +52,50 @@ DD 2 6 3
 DP 2 1
 
 # ----------------------------------------------------------------------
-# SYNTHESIS VOICES
+# SYNTHESIS VOICES & LABELS ([...] vt)
 # ----------------------------------------------------------------------
-# DRUMS (Clean Munich Disco Kit - No Overdrive, Pristine Headroom)
-v0 w82 f440 a-1.5 p0                          # 4-on-the-floor punch kick
-v1 w83 f440 a-3.5 p0                          # Crisp disco snare (dry, no bus 1 delay)
-v2 w84 f440 a-8.0 p.25                        # Subtle 16th closed hi-hat
-v3 w85 f440 a-6.0 p-.25                       # Sizzling offbeat open hi-hat
-v4 w86 f440 a-4.0 p0                          # Wide stereo disco clap
-v5 w0 a-6.0 p0 t.002,.20,0,.05 j1 k140 q.7    # Sub kick weight (clean sine pitch drop)
+# DRUMS (Physical models sitting at clean mix levels with plenty of headroom)
+v0 w100 f440 a-1.5 p0
+[Physical Kick] vt
+
+v1 w101 f440 a-3.5 p0
+[Physical Snare] vt
+
+v2 w102 f440 a-8.0 p.25
+[Closed Hat] vt
+
+v3 w103 f440 a-6.0 p-.25
+[Open Hat] vt
+
+v4 w104 f440 a-4.0 p0
+[Disco Clap] vt
+
+v5 w0 a-6.0 p0 t.002,.20,0,.05 j1 k140 q.7
+[Sub Sine Kick] vt
 
 # BASS: The Authentic Moroder Moog Modular Bass
 # Layer 1 (Voice 6): PolyBLEP Saw (w2) -> 24dB Moog ladder lowpass, punchy pluck
 v6 w2 a-4.5 p0 t.002,.11,0,.03 j1,1 k260 q2.2 ft.001,.09,0,.03 fd600 r1 ds.25
+[Moroder Saw Bass] vt
 v6 >7
+
 # Layer 2 (Voice 7): PolyBLEP Pulse (w1) with active PWM modulation
 v7 w1 a-6.5 p0 pw 0.38 pwt .01,.14,.2,.05 pwd 0.15 j1 k280 q1.8 ft.001,.09,0,.03 fd500 r1 ds.20
+[Moroder Pulse PWM] vt
 # Slave Voice 7 trigger and pitch to Voice 6
 v6 G7 H7
 
 # SHIMMER ARPEGGIATOR: Roland Jupiter / Odyssey 16th Pulse
 v11 w1 a-12.0 p-.35 pw 0.25 t.002,.10,0,.03 j1 k2600 q1.5 r1 ds.25
+[Shimmer Arp] vt
 
 # LEAD: Soaring "Donna Summer" Anthem Lead Hook
 # Dual detuned PolyBLEP saw with smooth attack and space delay
 v13 w2 a-8.5 p.1 t.015,.35,.6,.25 j1 k3200 q1.2 r2 ds.35
+[Donna Lead Main] vt
 v13 >14
 v14 w2 a-10.5 p-.2 N0,6 r0
+[Donna Lead Detune] vt
 v13 G14 H14
 
 # ----------------------------------------------------------------------
@@ -59,51 +105,35 @@ v13 G14 H14
 # Stream 0: The Hypnotic 4-Bar Octave Bass (C -> Eb -> F -> C, 64 steps)
 # Played via i&0 on every 16th step. Rest '-' on step 15 gives rhythmic breath.
 [
-  # Bar 1: C octave pulse
   C2 C3 C2 C3  C2 C3 C2 C3  C2 C3 C2 C3  C2 C3 C2 -
-  # Bar 2: Eb octave pulse
   Eb2 Eb3 Eb2 Eb3  Eb2 Eb3 Eb2 Eb3  Eb2 Eb3 Eb2 Eb3  Eb2 Eb3 Eb2 -
-  # Bar 3: F octave pulse
   F2 F3 F2 F3  F2 F3 F2 F3  F2 F3 F2 F3  F2 F3 F2 -
-  # Bar 4: C octave return
   C2 C3 C2 C3  C2 C3 C2 C3  C2 C3 C2 C3  C2 C3 C2 -
 ] n>d /SS 0
 
 # Stream 1: Syncopated Bass Variation with Ties '.' and Rests '-' (64 steps)
 # Ties sustain previous pitch without re-triggering attack envelope.
 [
-  # Bar 1: C syncopated bounce
   C2 C3 . C2  . C3 C2 .  C2 C3 . C2  . C3 C2 -
-  # Bar 2: Eb syncopated bounce
   Eb2 Eb3 . Eb2  . Eb3 Eb2 .  Eb2 Eb3 . Eb2  . Eb3 Eb2 -
-  # Bar 3: F syncopated bounce
   F2 F3 . F2  . F3 F2 .  F2 F3 . F2  . F3 F2 -
-  # Bar 4: C turnaround
   C2 C3 . C2  . C3 C2 .  C2 C3 . C2  . C3 C2 -
 ] n>d /SS 1
 
 # Stream 2: Soaring Floating Anthem Lead Hook (4-Bar Donna Summer Phrase, 64 steps)
 # Uses sustained ties '.' across 16ths and rests '-' for breathing pauses.
 [
-  # Bar 1 (over C): "Ooooh..."
   G4 . . .  C5 . . .  G4 . . -  E4 . . -
-  # Bar 2 (over Eb): "...I feel..."
   Bb4 . . .  Eb5 . . .  Bb4 . . -  G4 . . -
-  # Bar 3 (over F): "...love..."
   C5 . . .  F5 . . .  C5 . . -  A4 . . -
-  # Bar 4 (over C): "...love, love!"
   G4 . E4 .  C5 . . .  G4 . . -  - - - -
 ] n>d /SS 2
 
 # Stream 3: 16th Shimmer Arp Notes (4-Bar Locked Harmonic Progression, 64 steps)
 [
-  # Bar 1 (C shimmer)
   C4 G4 C5 G4  C4 G4 C5 G4  C4 G4 C5 G4  C4 G4 C5 G4
-  # Bar 2 (Eb shimmer)
   Eb4 Bb4 Eb5 Bb4  Eb4 Bb4 Eb5 Bb4  Eb4 Bb4 Eb5 Bb4  Eb4 Bb4 Eb5 Bb4
-  # Bar 3 (F shimmer)
   F4 C5 F5 C5  F4 C5 F5 C5  F4 C5 F5 C5  F4 C5 F5 C5
-  # Bar 4 (C shimmer)
   C4 G4 C5 G4  C4 G4 C5 G4  C4 G4 C5 G4  C4 G4 C5 G4
 ] n>d /SS 3
 
@@ -116,17 +146,16 @@ y0 %1
 yl 16
 [v0 l1 v5 g0 n48 g.06 n24 l1] x0,4,8,12
 
-# Pattern 1: Disco Snare & Claps on 2 and 4 (Steps 4 and 12)
+# Pattern 1: Disco Snare on 2 and 4 (Steps 4 and 12)
 y1 %1
 yl 16
-[v1 l.5 v4 l.7] x4,12
+[v1 l.5] x4,12
 
-# Pattern 2: Sizzling 16th Disco Hats (Running closed + offbeat sizzles)
+# Pattern 2: Sizzling 16th Closed Hats
 y2 %1
 yl 16
 [v2 l.35] x0,1,2,3,4,5,6,7
 [v2 l.35] x8,9,10,11,12,13,14,15
-[v3 l.6] x2,6,10,14
 
 # Pattern 3: The Hypnotic Octave Gallop Bass (Pulls dynamically via i&0)
 y3 %1
@@ -134,16 +163,16 @@ yl 16
 [v6 i&0] x0,1,2,3,4,5,6,7
 [v6 i&0] x8,9,10,11,12,13,14,15
 
-# Pattern 4: Kick Variation (Cloned from Pattern 0 using ycp, then accented)
+# Pattern 4: Kick Climax Variation (Accented syncopated kicks)
 0 4 ycp
 4 y
 [v0 l1 v5 g0 n48 g.06 n24 l1] x0,4,8,10,12,14
 
-# Pattern 5: Snare Roll Fill (Cloned from Pattern 1, then with 16th roll)
+# Pattern 5: Snare Roll Fill + Stereo Claps
 1 5 ycp
 5 y
 [v1 l.4] x12,13,14,15
-[v4 l.7] x12
+[v4 l.7] x4,12
 
 # Pattern 6: 16th Shimmer Arpeggio (Pulls from Stream 3 via i&3)
 y6 %1
@@ -163,52 +192,139 @@ yl 16
 [v6 i&1] x0,1,2,3,4,5,6,7
 [v6 i&1] x8,9,10,11,12,13,14,15
 
+# Pattern 9: Open Hi-Hat Offbeat Sizzle
+y9 %1
+yl 16
+[v3 l.6] x2,6,10,14
+
 # Pattern 127: The Master Conductor (16 steps per bar)
 y127 %1
 yl 16
 [v0] x15 yp127
 
 # ----------------------------------------------------------------------
-# SCENE MATRIX & ARRANGER
-# Lanes: 0:Kick 1:Snare 2:Hats 3:Bass 4:Arp 5:Lead
+# SCENE MATRIX & ARRANGER (Build-up -> Climax -> Breakdown Outro)
+# Lanes: 0:Kick 1:Snare 2:ClosedHat 3:Bass 4:Arp 5:Lead 6:OpenHat/Clap 7:Conductor
 # ----------------------------------------------------------------------
-# Scene 0: Hypnotic Intro (4-on-floor Kick, Sizzling Hats, Octave Bass)
-( 0 -1 2 3 -1 -1 -1 127 ) scene_define 0
 
-# Scene 1: The Full "I Feel Love" Anthem (Kick, Snare/Clap, Hats, Bass, Shimmer Arp, Soaring Lead)
-( 0 1 2 3 6 7 -1 127 ) scene_define 1
+# Scene 0: "Kick & Snare" (4 bars: foundation groove)
+( 0  1 -1 -1 -1 -1 -1 127 ) scene_define 0
 
-# Scene 2: High Energy Climax / Fill (Kick Variation, Snare Roll, Hats, Funky Bass, Arp, Lead)
-( 4 5 2 8 6 7 -1 127 ) scene_define 2
+# Scene 1: "Add Closed Hat" (4 bars: 16th hats join the groove)
+( 0  1  2 -1 -1 -1 -1 127 ) scene_define 1
+
+# Scene 2: "Add Bass" (4 bars: hypnotic octave bass drops in)
+( 0  1  2  3 -1 -1 -1 127 ) scene_define 2
+
+# Scene 3: "Melody Anthem" (8 bars: full Donna Summer lead & shimmer arp)
+( 0  1  2  3  6  7 -1 127 ) scene_define 3
+
+# Scene 4: "Climax" (4 bars: high-energy kick accents, snare fill, claps, open hats, sync bass)
+( 4  5  2  8  6  7  9 127 ) scene_define 4
+
+# Scene 5: "Breakdown 1: Drop Lead" (4 bars: reverse step 1 - peel back lead and arp)
+( 0  1  2  3 -1 -1 -1 127 ) scene_define 5
+
+# Scene 6: "Breakdown 2: Drop Bass" (4 bars: reverse step 2 - bass drops out, hats tick)
+( 0  1  2 -1 -1 -1 -1 127 ) scene_define 6
+
+# Scene 7: "Outro: Kick & Snare" (4 bars: reverse step 3 - return to raw kick & snare)
+( 0  1 -1 -1 -1 -1 -1 127 ) scene_define 7
 
 # ----------------------------------------------------------------------
-# AUTOMATED SCENE CHAINING
-# Scene 0 loops 4 times -> auto-transitions to Scene 1
-# Scene 1 loops 8 times -> auto-transitions to Scene 2
-# Scene 2 loops 4 times -> auto-loops back to Scene 1
+# AUTOMATED SCENE PROGRESSION
+# Structure:
+#   Scene 0 (4 loops) -> Scene 1
+#   Scene 1 (4 loops) -> Scene 2
+#   Scene 2 (4 loops) -> Scene 3
+#   Scene 3 (8 loops) -> Scene 4
+#   Scene 4 (4 loops) -> Scene 5
+#   Scene 5 (4 loops) -> Scene 6
+#   Scene 6 (4 loops) -> Scene 7
+#   Scene 7 (4 loops) -> Scene 0 (seamless cycle)
 # ----------------------------------------------------------------------
 0 4 1 scene_chain
-1 8 2 scene_chain
-2 4 1 scene_chain
+1 4 2 scene_chain
+2 4 3 scene_chain
+3 8 4 scene_chain
+4 4 5 scene_chain
+5 4 6 scene_chain
+6 4 7 scene_chain
+7 4 0 scene_chain
 
 # ----------------------------------------------------------------------
-# PRECOMPILED REALTIME MACROS (Instant e! trigger)
+# SCENE LABELS & USER NAVIGATION MACROS
+# Type any scene name in the terminal to jump immediately or downbeat cue!
 # ----------------------------------------------------------------------
-# Slot 0: Accent kick on downbeat
-[v0 a-0.5 n36] e> 0
+[scene_kick_snare] : 0 scene_cue ;
+[scene_add_hats]   : 1 scene_cue ;
+[scene_add_bass]   : 2 scene_cue ;
+[scene_melody]     : 3 scene_cue ;
+[scene_climax]     : 4 scene_cue ;
+[scene_drop_lead]  : 5 scene_cue ;
+[scene_drop_bass]  : 6 scene_cue ;
+[scene_outro]      : 7 scene_cue ;
 
-# Slot 1: Filter sweep / breakdown on bass (muffled warm pulse)
+# Helper macro to print labeled scene roster
+[scenes] :
+  [--- RAD DISCO SCENE ROSTER ---] puts
+  [  Scene 0: scene_kick_snare  (4 bars: Kick + Snare)] puts
+  [  Scene 1: scene_add_hats    (4 bars: + 16th Closed Hats)] puts
+  [  Scene 2: scene_add_bass    (4 bars: + Hypnotic Octave Bass)] puts
+  [  Scene 3: scene_melody      (8 bars: + Shimmer Arp & Donna Lead)] puts
+  [  Scene 4: scene_climax      (4 bars: Climax Fills, Open Hats & Claps)] puts
+  [  Scene 5: scene_drop_lead   (4 bars: Breakdown 1 - Drop Lead/Arp)] puts
+  [  Scene 6: scene_drop_bass   (4 bars: Breakdown 2 - Drop Bass)] puts
+  [  Scene 7: scene_outro       (4 bars: Outro - Raw Kick & Snare)] puts
+  [Usage: type scene name (e.g. scene_climax) or 'N scene_cue'] puts
+;
+
+# ----------------------------------------------------------------------
+# PRECOMPILED REALTIME MACRO EFFECTS (e> 0..5 / e! 0..5)
+# Fast-path zero allocation performance effects with labeled macros
+# ----------------------------------------------------------------------
+# Slot 0: Accent kick punch on downbeat
+[v0 a0.0 n36] e> 0
+
+# Slot 1: Bass filter breakdown (muffled underwater pulse)
 [v6 k180] e> 1
 
-# Slot 2: Filter sweep / open up (bright and sizzling)
-[v6 k550] e> 2
+# Slot 2: Bass filter sweep open (bright sizzle)
+[v6 k580] e> 2
 
-# Slot 3: Reset bass filter to standard punch
+# Slot 3: Bass filter reset to standard punch
 [v6 k260] e> 3
 
-# === PLAYBACK CONTROLS ===
-[start_disco] : ?ce! /cer 1 Z0 Z! scene_now 0 ;
+# Slot 4: Lead space echo dub wash (crank delay decay & send)
+[v13 ds.60] e> 4
 
-[RAD DISCO READY - Type 'start_disco' or 'play' to launch the automated "I Feel Love" arrangement!] puts
-[Commands: scene_cue 0 (hypnotic bass), scene_cue 1 (anthem), scene_cue 2 (climax)] puts
-[Live tweaks: 0 4 ycp (re-clone kick), e! 1 (muffled filter drop), e! 2 (filter open sweep)] puts
+# Slot 5: Lead space echo reset to clean
+[v13 ds.35] e> 5
+
+# Labeled macro aliases for effects
+[fx_kick_accent]  : 0 e! ;
+[fx_bass_muffle]   : 1 e! ;
+[fx_bass_open]     : 2 e! ;
+[fx_bass_reset]    : 3 e! ;
+[fx_dub_wash]      : 4 e! ;
+[fx_dub_clean]     : 5 e! ;
+
+# Helper macro to print labeled effect roster
+[effects] :
+  [--- REALTIME MACRO EFFECTS ---] puts
+  [  e! 0 or fx_kick_accent  : Accent kick punch on downbeat] puts
+  [  e! 1 or fx_bass_muffle   : Muffled underwater bass filter] puts
+  [  e! 2 or fx_bass_open     : Bright open bass filter sweep] puts
+  [  e! 3 or fx_bass_reset    : Reset bass filter to punchy default] puts
+  [  e! 4 or fx_dub_wash      : Lead space echo dub wash] puts
+  [  e! 5 or fx_dub_clean     : Lead space echo reset to clean] puts
+;
+
+# ----------------------------------------------------------------------
+# PLAYBACK CONTROLS
+# ----------------------------------------------------------------------
+# The classic play macro launches the full automated arrangement from Scene 0
+[play] : ?ce! /cer 1 Z0 Z! scene_now 0 ;
+
+[RAD DISCO READY - Type 'play' to launch the complete 36-bar arrangement!] puts
+[Type 'scenes' for the arrangement scene list, or 'effects' for the live FX list.] puts
