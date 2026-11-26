@@ -246,6 +246,12 @@ void skode_dict_vocab_destroy(skode_vocab_t *vocab) {
 int skode_execute_word(skode_t *ctx, ands_t *s, uint32_t atom, double *arg,
     int argc, int *out_result) {
   const skode_word_t *w = skode_dict_lookup(ctx->vocab, atom);
+  if (w && skode_dict_word_is_promoted_macro(w)) {
+    const char *atom_name = ands_atom_name(s);
+    if (atom_name && atom_name[0] && strcmp(w->name, atom_name) != 0) {
+      w = NULL;
+    }
+  }
   if (w && w->execute) {
     if (ctx->trace) {
       ctx->printf(ctx, "# SKODE_DICT %s", w->name);
@@ -1209,6 +1215,7 @@ int skode_dict_unpromote_macro(skode_vocab_t *vocab, const char *name) {
   uint32_t atom = pack_atom_runtime(name, (int)strlen(name));
   skode_word_t *current = (skode_word_t *)skode_vocab_find(vocab, atom);
   if (!skode_dict_word_is_promoted_macro(current)) return 0;
+  if (strcmp(current->name, name) != 0) return 0;
   skode_word_t *removed = current->shadow ?
     skode_dict_revert(vocab, atom) : skode_dict_remove(vocab, atom);
   skode_dict_free_promoted_macro(removed);

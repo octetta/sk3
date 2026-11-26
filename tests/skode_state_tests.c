@@ -2455,6 +2455,15 @@ static void test_ands_macro_commands(void) {
 
   consume(test, &ctx, "/m!");
   expect_int(test, ands_macro_count(ctx.parse), 0, "macro count after clear");
+
+  /* Test realtime macros with colliding 4-character atom prefixes fall back cleanly */
+  consume(test, &ctx,
+    "[scene_kick_snare]: v0 f220 ; [scene_add_hats]: v0 f330 ; [scenes]: [list] puts ;");
+  consume(test, &ctx, "scene_kick_snare");
+  expect_float(test, sv.freq[0], 220.0f, 0.0001f, "colliding macro 1 executed");
+  consume(test, &ctx, "scene_add_hats");
+  expect_float(test, sv.freq[0], 330.0f, 0.0001f, "colliding macro 2 executed");
+  consume(test, &ctx, "/m!");
   ands_macro_clear(ctx.parse);
 }
 

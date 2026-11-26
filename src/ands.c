@@ -6,6 +6,7 @@
 #include <stdarg.h>
 
 #include "ands.h"
+#include "skode-dict.h"
 
 /**
  * ANDS GRAMMAR (EBNF-ish)
@@ -602,8 +603,11 @@ static int ands_preprocess_macros(ands_t *s, const char *input, buffer_t *out, i
             idx = ands_find_macro(atom);
             if (!atom_too_long && atom_len > 0 && atom_len < MACRO_NAME_LEN && idx >= 0) {
                 if (global_macros[idx].status == ANDS_MACRO_REALTIME) {
-                    if (!expand_buf_append_n(out, start, (int)(ptr - start))) return 0;
-                    continue;
+                    const skode_word_t *w = skode_dict_find_by_name(skode_dict_global_vocab(), atom);
+                    if (w && strcmp(w->name, atom) == 0) {
+                        if (!expand_buf_append_n(out, start, (int)(ptr - start))) return 0;
+                        continue;
+                    }
                 }
                 int needed = global_macros[idx].arg_count;
                 int collected = 0;

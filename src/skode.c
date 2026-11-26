@@ -2610,7 +2610,7 @@ int skode_callback(ands_t *s, int info) {
           result == SKODE_COMPILE_IMMEDIATE_ONLY ? ANDS_MACRO_IMMEDIATE :
           result == SKODE_COMPILE_TOO_LARGE ? ANDS_MACRO_TOO_LARGE :
           ANDS_MACRO_INVALID;
-        if (status == ANDS_MACRO_REALTIME &&
+        if (status == ANDS_MACRO_REALTIME && strlen(name) <= 4 &&
             !skode_dict_promote_macro(vocab, name, body))
           status = ANDS_MACRO_INVALID;
         ands_macro_set_status(s, index, status);

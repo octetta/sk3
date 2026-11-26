@@ -89,12 +89,12 @@ v6 G7 H7
 v11 w1 a-12.0 p-.35 pw 0.25 t.002,.10,0,.03 j1 k2600 q1.5 r1 ds.25
 [Shimmer Arp] vt
 
-# LEAD: Soaring "Donna Summer" Anthem Lead Hook
-# Dual detuned PolyBLEP saw with smooth attack and space delay
-v13 w2 a-8.5 p.1 t.015,.35,.6,.25 j1 k3200 q1.2 r2 ds.35
+# LEAD: Soaring "Donna Summer" Ethereal Lead Hook
+# Velvety filtered PolyBLEP saw with singing attack, backed by a warm detuned triangle
+v13 w2 a-9.0 p.1 t.03,.30,.7,.25 j1,1 k1600 q1.2 r2 ds.35
 [Donna Lead Main] vt
 v13 >14
-v14 w2 a-10.5 p-.2 N0,6 r0
+v14 w4 a-11.0 p-.15 t.03,.30,.7,.25 j1 k1400 q1.0 N0,4 r2 ds.25
 [Donna Lead Detune] vt
 v13 G14 H14
 
@@ -120,13 +120,13 @@ v13 G14 H14
   C2 C3 . C2  . C3 C2 .  C2 C3 . C2  . C3 C2 -
 ] n>d /SS 1
 
-# Stream 2: Soaring Floating Anthem Lead Hook (4-Bar Donna Summer Phrase, 64 steps)
-# Uses sustained ties '.' across 16ths and rests '-' for breathing pauses.
+# Stream 2: Sultry Floating Minor Pentatonic Lead Hook (4-Bar Donna Summer Phrase, 64 steps)
+# Hypnotic minor melody (C minor / Dorian): C5 -> Eb5 -> Bb4 -> G4, with sustained ties '.'
 [
-  G4 . . .  C5 . . .  G4 . . -  E4 . . -
-  Bb4 . . .  Eb5 . . .  Bb4 . . -  G4 . . -
-  C5 . . .  F5 . . .  C5 . . -  A4 . . -
-  G4 . E4 .  C5 . . .  G4 . . -  - - - -
+  C5 . . .  Eb5 . . .  C5 . . -  Bb4 . . -
+  Bb4 . . .  Eb5 . . .  D5 . . -  Bb4 . . -
+  C5 . . .  F5 . . .  Eb5 . . -  C5 . . -
+  Eb5 . D5 .  C5 . . .  G4 . . -  - - - -
 ] n>d /SS 2
 
 # Stream 3: 16th Shimmer Arp Notes (4-Bar Locked Harmonic Progression, 64 steps)
@@ -265,19 +265,8 @@ yl 16
 [scene_drop_bass]  : 6 scene_cue ;
 [scene_outro]      : 7 scene_cue ;
 
-# Helper macro to print labeled scene roster
-[scenes] :
-  [--- RAD DISCO SCENE ROSTER ---] puts
-  [  Scene 0: scene_kick_snare  (4 bars: Kick + Snare)] puts
-  [  Scene 1: scene_add_hats    (4 bars: + 16th Closed Hats)] puts
-  [  Scene 2: scene_add_bass    (4 bars: + Hypnotic Octave Bass)] puts
-  [  Scene 3: scene_melody      (8 bars: + Shimmer Arp & Donna Lead)] puts
-  [  Scene 4: scene_climax      (4 bars: Climax Fills, Open Hats & Claps)] puts
-  [  Scene 5: scene_drop_lead   (4 bars: Breakdown 1 - Drop Lead/Arp)] puts
-  [  Scene 6: scene_drop_bass   (4 bars: Breakdown 2 - Drop Bass)] puts
-  [  Scene 7: scene_outro       (4 bars: Outro - Raw Kick & Snare)] puts
-  [Usage: type scene name (e.g. scene_climax) or 'N scene_cue'] puts
-;
+# Helper macro to display labeled scene roster on demand
+[scenes] : [SCENES: 0:scene_kick_snare 1:scene_add_hats 2:scene_add_bass 3:scene_melody 4:scene_climax 5:scene_drop_lead 6:scene_drop_bass 7:scene_outro] puts ;
 
 # ----------------------------------------------------------------------
 # PRECOMPILED REALTIME MACRO EFFECTS (e> 0..5 / e! 0..5)
@@ -309,16 +298,8 @@ yl 16
 [fx_dub_wash]      : 4 e! ;
 [fx_dub_clean]     : 5 e! ;
 
-# Helper macro to print labeled effect roster
-[effects] :
-  [--- REALTIME MACRO EFFECTS ---] puts
-  [  e! 0 or fx_kick_accent  : Accent kick punch on downbeat] puts
-  [  e! 1 or fx_bass_muffle   : Muffled underwater bass filter] puts
-  [  e! 2 or fx_bass_open     : Bright open bass filter sweep] puts
-  [  e! 3 or fx_bass_reset    : Reset bass filter to punchy default] puts
-  [  e! 4 or fx_dub_wash      : Lead space echo dub wash] puts
-  [  e! 5 or fx_dub_clean     : Lead space echo reset to clean] puts
-;
+# Helper macro to display labeled effect roster on demand
+[effects] : [EFFECTS: 0:fx_kick_accent 1:fx_bass_muffle 2:fx_bass_open 3:fx_bass_reset 4:fx_dub_wash 5:fx_dub_clean] puts ;
 
 # ----------------------------------------------------------------------
 # PLAYBACK CONTROLS
@@ -326,5 +307,22 @@ yl 16
 # The classic play macro launches the full automated arrangement from Scene 0
 [play] : ?ce! /cer 1 Z0 Z! scene_now 0 ;
 
-[RAD DISCO READY - Type 'play' to launch the complete 36-bar arrangement!] puts
-[Type 'scenes' for the arrangement scene list, or 'effects' for the live FX list.] puts
+# Display startup guide
+[--- RAD DISCO SCENE ROSTER ---] puts
+[  Scene 0: scene_kick_snare  (4 bars: Kick + Snare)] puts
+[  Scene 1: scene_add_hats    (4 bars: + 16th Closed Hats)] puts
+[  Scene 2: scene_add_bass    (4 bars: + Hypnotic Octave Bass)] puts
+[  Scene 3: scene_melody      (8 bars: + Shimmer Arp & Donna Lead)] puts
+[  Scene 4: scene_climax      (4 bars: Climax Fills, Open Hats & Claps)] puts
+[  Scene 5: scene_drop_lead   (4 bars: Breakdown 1 - Drop Lead/Arp)] puts
+[  Scene 6: scene_drop_bass   (4 bars: Breakdown 2 - Drop Bass)] puts
+[  Scene 7: scene_outro       (4 bars: Outro - Raw Kick & Snare)] puts
+[--- REALTIME MACRO EFFECTS ---] puts
+[  e! 0 or fx_kick_accent  : Accent kick punch on downbeat] puts
+[  e! 1 or fx_bass_muffle   : Muffled underwater bass filter] puts
+[  e! 2 or fx_bass_open     : Bright open bass filter sweep] puts
+[  e! 3 or fx_bass_reset    : Reset bass filter to punchy default] puts
+[  e! 4 or fx_dub_wash      : Lead space echo dub wash] puts
+[  e! 5 or fx_dub_clean     : Lead space echo reset to clean] puts
+[RAD DISCO READY - Type 'play' to start arrangement, 'stop' to halt.] puts
+[Live navigation: type 'scenes' or any scene macro (e.g. scene_climax); type 'effects' for FX.] puts

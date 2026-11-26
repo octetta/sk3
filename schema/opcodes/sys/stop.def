@@ -9,7 +9,12 @@
 Stops playback, halts all sequencer patterns, and mutes sounding voices.
 Usage: stop
 @code
-    (void)ctx; (void)s; (void)args; (void)argc;
+    (void)args; (void)argc;
     seq_state_all(SEQ_STOPPED);
+    skode_exec_O(ctx, s, NULL, 0);
+    skode_exec_DQ(ctx, s, NULL, 0);
+    skode_exec_qce_bang(ctx, s, NULL, 0);
+    double zero = 0.0;
+    skode_exec_slashcer(ctx, s, &zero, 1);
     return 0;
 @end
