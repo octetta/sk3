@@ -9,10 +9,10 @@ Generated automatically by `tools/mkopcodes` from modular opcode definitions in 
 
 ## Architecture & System Overview
 
-- **Total Command Words**: 344
-- **Total Dispatch Clauses**: 720
-- **Real-Time Audio Opcode Handlers**: 167 (audio-thread safe, zero allocation, zero string lookup)
-- **Immediate / Control Plane Clauses**: 553 (REPL / parser / file system / diagnostics)
+- **Total Command Words**: 351
+- **Total Dispatch Clauses**: 730
+- **Real-Time Audio Opcode Handlers**: 169 (audio-thread safe, zero allocation, zero string lookup)
+- **Immediate / Control Plane Clauses**: 561 (REPL / parser / file system / diagnostics)
 
 ### Functional Command Groups
 
@@ -26,7 +26,7 @@ Generated automatically by `tools/mkopcodes` from modular opcode definitions in 
 | mod | `mod` | 15 | Cross-modulation, FM, AM, ring mod, sample & hold, glissando |
 | delay | `delay` | 9 | Stereo delay engine, feedback, pingpong, damping, grit |
 | poly | `poly` | 13 | Polyphonic voice pools, voice allocation, prototype groups |
-| seq | `seq` | 30 | Sequencer patterns, steps, tempo, ratchets, loop modulo |
+| seq | `seq` | 37 | Sequencer patterns, steps, tempo, ratchets, loop modulo |
 | ctrl | `ctrl` | 9 | Control plane events, event bus, responder bindings |
 | repeat | `repeat` | 11 | Scheduled repeats, tick loops, and deferred queues |
 | stream | `stream` | 6 | Step data streams and stream cursors |
@@ -116,7 +116,7 @@ Turns gate off for all voices.
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `273` (`skode_clause_amp_set`)
+- **Discrete Opcode ID**: `275` (`skode_clause_amp_set`)
 - **Summary**: set voice output amplitude / gain
 
 **Description & Details**:
@@ -130,7 +130,7 @@ Usage: a level (or amp level)
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `274` (`skode_clause_amp_reset`)
+- **Discrete Opcode ID**: `276` (`skode_clause_amp_reset`)
 - **Summary**: reset voice output amplitude to default 0.5
 
 **Description & Details**:
@@ -152,7 +152,7 @@ Usage: a - (or amp -)
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `279` (`skode_clause_amp_bend`)
+- **Discrete Opcode ID**: `281` (`skode_clause_amp_bend`)
 - **Summary**: amplitude bend (-1..1)
 
 **Description & Details**:
@@ -174,7 +174,7 @@ Usage: ab amount (or amp_bend amount)
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `280` (`skode_clause_amp_bend_param_1`)
+- **Discrete Opcode ID**: `282` (`skode_clause_amp_bend_param_1`)
 - **Summary**: amplitude bend range in dB
 
 **Description & Details**:
@@ -188,7 +188,7 @@ Usage: abp range (or amp_bend_param range)
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `281` (`skode_clause_amp_bend_param_2`)
+- **Discrete Opcode ID**: `283` (`skode_clause_amp_bend_param_2`)
 - **Summary**: amplitude bend range and offset
 
 **Description & Details**:
@@ -210,7 +210,7 @@ Usage: abp range offset (or amp_bend_param range offset)
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `288` (`skode_clause_channel_pair`)
+- **Discrete Opcode ID**: `290` (`skode_clause_channel_pair`)
 - **Summary**: select stereo channel pair from multi-channel wave
 
 **Description & Details**:
@@ -298,7 +298,7 @@ Triggers voice gate on.
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `285` (`skode_clause_inst_note_c624`)
+- **Discrete Opcode ID**: `287` (`skode_clause_inst_note_c634`)
 - **Summary**: trigger instrument note
 
 **Description & Details**:
@@ -312,7 +312,7 @@ Usage: i note
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `286` (`skode_clause_inst_note_c625`)
+- **Discrete Opcode ID**: `288` (`skode_clause_inst_note_c635`)
 - **Summary**: trigger instrument note with velocity
 
 **Description & Details**:
@@ -326,7 +326,7 @@ Usage: i note velocity
 
 - **Arity**: `3`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `287` (`skode_clause_inst_note_c626`)
+- **Discrete Opcode ID**: `289` (`skode_clause_inst_note_c636`)
 - **Summary**: trigger instrument note with velocity and cents
 
 **Description & Details**:
@@ -348,7 +348,7 @@ Usage: i note velocity cents
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `289` (`skode_clause_jump_to_cue_2`)
+- **Discrete Opcode ID**: `291` (`skode_clause_jump_to_cue_2`)
 - **Summary**: jump specific voice playback phase to cue point by index
 
 **Description & Details**:
@@ -362,7 +362,7 @@ Usage: jc voice index (or voice index jc)
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `290` (`skode_clause_jump_to_cue_1`)
+- **Discrete Opcode ID**: `292` (`skode_clause_jump_to_cue_1`)
 - **Summary**: jump voice playback phase to cue point by index
 
 **Description & Details**:
@@ -431,7 +431,7 @@ Master volume no-op.
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `277` (`skode_clause_mute_set`)
+- **Discrete Opcode ID**: `279` (`skode_clause_mute_set`)
 - **Summary**: mute or unmute voice audio output (0 = unmute, 1 = mute)
 
 **Description & Details**:
@@ -445,7 +445,7 @@ Usage: m 1 (mute) or m 0 (unmute)
 
 - **Arity**: `0`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `278` (`skode_clause_mute_toggle`)
+- **Discrete Opcode ID**: `280` (`skode_clause_mute_toggle`)
 - **Summary**: toggle voice mute state
 
 **Description & Details**:
@@ -467,7 +467,7 @@ Usage: m (or mute)
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `275` (`skode_clause_pan_set`)
+- **Discrete Opcode ID**: `277` (`skode_clause_pan_set`)
 - **Summary**: set voice stereo pan position (-1.0 left to +1.0 right)
 
 **Description & Details**:
@@ -481,7 +481,7 @@ Usage: p pan (or pan pan)
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `276` (`skode_clause_pan_center`)
+- **Discrete Opcode ID**: `278` (`skode_clause_pan_center`)
 - **Summary**: center voice stereo pan (0.0)
 
 **Description & Details**:
@@ -602,7 +602,7 @@ Queries voice information with argument.
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `282` (`skode_clause_velocity`)
+- **Discrete Opcode ID**: `284` (`skode_clause_velocity`)
 - **Summary**: set voice note velocity
 
 **Description & Details**:
@@ -747,7 +747,7 @@ Voice control events no-op.
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `284` (`skode_clause_voice_copy`)
+- **Discrete Opcode ID**: `286` (`skode_clause_voice_copy`)
 - **Summary**: copy voice state to target voice
 
 **Description & Details**:
@@ -803,7 +803,7 @@ Usage: v* param var
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `283` (`skode_clause_voice_reset`)
+- **Discrete Opcode ID**: `285` (`skode_clause_voice_reset`)
 - **Summary**: reset voice state to defaults
 
 **Description & Details**:
@@ -2462,7 +2462,7 @@ Usage: [phonemes] slot /vox
 
 - **Arity**: `0`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `293` (`skode_clause_wave_bandlimit_0`)
+- **Discrete Opcode ID**: `295` (`skode_clause_wave_bandlimit_0`)
 - **Summary**: bandlimit active voice wavetable
 
 **Description & Details**:
@@ -2476,7 +2476,7 @@ Usage: WB (or wave_bandlimit)
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `294` (`skode_clause_wave_bandlimit_1`)
+- **Discrete Opcode ID**: `296` (`skode_clause_wave_bandlimit_1`)
 - **Summary**: bandlimit specified wavetable slot
 
 **Description & Details**:
@@ -2498,7 +2498,7 @@ Usage: WB <slot> (or wave_bandlimit <slot>)
 
 - **Arity**: `0`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `291` (`skode_clause_wave_default_0`)
+- **Discrete Opcode ID**: `293` (`skode_clause_wave_default_0`)
 - **Summary**: reset voice waveform to default sine
 
 **Description & Details**:
@@ -2512,7 +2512,7 @@ Usage: /
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `292` (`skode_clause_wave_default_1`)
+- **Discrete Opcode ID**: `294` (`skode_clause_wave_default_1`)
 - **Summary**: reset voice waveform to default sine with argument
 
 **Description & Details**:
@@ -5696,6 +5696,8 @@ Usage: gr pool key velocity
 | [`pattern_all_query`](#pattern_all_query) | `Z?` | 1 | 0 | Immediate | query all patterns summary |
 | [`pattern_goto`](#pattern_goto) | `zg` | 1 | 1 | Immediate | jump active pattern playback step |
 | [`pattern_goto_alt`](#pattern_goto_alt) | `-j` | 1 | 1 | Real-Time | jump active pattern playback step (-j alias) |
+| [`pattern_hz`](#pattern_hz) | `pattern_hz` | 2 | 1..2 | Immediate | set pattern rate in isochronous Hz |
+| [`pattern_length`](#pattern_length) | `yl` | 2 | 1..2 | Immediate | set explicit pattern length in steps |
 | [`pattern_loop`](#pattern_loop) | `/zl` | 1 | 3 | Real-Time | pattern step loop counter and branch |
 | [`pattern_master`](#pattern_master) | `yp` | 2 | 0..1 | Immediate | query master pattern |
 | [`pattern_modulo`](#pattern_modulo) | `%` | 1 | 1 | Immediate | set active pattern step loop modulo |
@@ -5703,6 +5705,7 @@ Usage: gr pool key velocity
 | [`pattern_mute`](#pattern_mute) | `ym` | 1 | 1 | Immediate | mute or unmute pattern |
 | [`pattern_queue`](#pattern_queue) | `zq` | 1 | 1 | Immediate | queue pattern start or stop at boundary |
 | [`pattern_ratchet`](#pattern_ratchet) | `z*` | 1 | 1 | Real-Time | set step ratchet multiplier |
+| [`pattern_rate`](#pattern_rate) | `pattern_rate` | 2 | 1..2 | Immediate | set pattern step rate in steps per bar |
 | [`pattern_reset`](#pattern_reset) | `Y` | 1 | 1 | Immediate | reset pattern steps and length |
 | [`pattern_rewind`](#pattern_rewind) | `Z!` | 1 | 0 | Immediate | rewind all patterns to step 0 |
 | [`pattern_select`](#pattern_select) | `y` | 2 | 0..1 | Immediate | select active pattern |
@@ -5713,6 +5716,10 @@ Usage: gr pool key velocity
 | [`pattern_state_set`](#pattern_state_set) | `/z` | 1 | 2 | Real-Time | set pattern state by explicit index |
 | [`pattern_step_query`](#pattern_step_query) | `ys?` | 1 | 0 | Immediate | query pattern step details |
 | [`pattern_text`](#pattern_text) | `yt` | 2 | 0..1 | Immediate | set pattern text label from active string |
+| [`scene_active`](#scene_active) | `scene_active` | 1 | 0 | Immediate | query currently active scene index |
+| [`scene_cue`](#scene_cue) | `scene_cue` | 1 | 1 | Real-Time | queue scene change at next downbeat |
+| [`scene_define`](#scene_define) | `scene_define` | 1 | 1 | Immediate | define or inspect scene pattern assignments |
+| [`scene_now`](#scene_now) | `scene_now` | 1 | 1 | Real-Time | switch scene immediately across all lanes |
 | [`step_all_data`](#step_all_data) | `X>` | 2 | 0..1 | Immediate | assign step program to steps in data array on active pattern |
 | [`step_append`](#step_append) | `xa` | 1 | 0 | Immediate | append bracketed program step to active pattern |
 | [`step_get`](#step_get) | `xg` | 1 | 1 | Immediate | get pattern step source string |
@@ -5891,6 +5898,74 @@ Usage: -j step
 
 ---
 
+### `pattern_hz`
+
+- **Alias**: `pattern_hz`
+- **Group**: `seq`
+- **Clause Count**: 2
+
+#### Clause 1: `pattern_hz(finite)`
+
+- **Arity**: `1`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: set pattern rate in isochronous Hz
+
+**Description & Details**:
+
+```text
+Sets isochronous playback frequency in Hz for active pattern (e.g. 50 for PAL SID, 60 for NTSC).
+Usage: pattern_hz hz (or hz pattern_hz)
+```
+
+#### Clause 2: `pattern_hz(finite, finite)`
+
+- **Arity**: `2`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: set pattern rate in isochronous Hz for specific pattern
+
+**Description & Details**:
+
+```text
+Sets isochronous playback frequency in Hz for specified pattern (pattern, hz).
+Usage: pattern_hz pattern hz
+```
+
+---
+
+### `pattern_length`
+
+- **Alias**: `yl`
+- **Group**: `seq`
+- **Clause Count**: 2
+
+#### Clause 1: `pattern_length(finite)`
+
+- **Arity**: `1`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: set explicit pattern length in steps
+
+**Description & Details**:
+
+```text
+Sets explicit pattern length in steps for active pattern.
+Usage: pattern_length steps (or steps pattern_length, steps yl)
+```
+
+#### Clause 2: `pattern_length(finite, finite)`
+
+- **Arity**: `2`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: set explicit pattern length for specific pattern
+
+**Description & Details**:
+
+```text
+Sets explicit pattern length in steps for specified pattern (pattern, steps).
+Usage: pattern_length pattern steps
+```
+
+---
+
 ### `pattern_loop`
 
 - **Alias**: `/zl`
@@ -6050,6 +6125,40 @@ Usage: zq mode (or pattern_queue mode)
 ```text
 Sets sub-step ratchet multiplier for pattern step.
 Usage: z* multiplier (or * multiplier)
+```
+
+---
+
+### `pattern_rate`
+
+- **Alias**: `pattern_rate`
+- **Group**: `seq`
+- **Clause Count**: 2
+
+#### Clause 1: `pattern_rate(finite)`
+
+- **Arity**: `1`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: set pattern step rate in steps per bar
+
+**Description & Details**:
+
+```text
+Sets pattern resolution in steps per bar for active pattern (e.g. 16 for sixteenths, 12 for triplets, 96 for MOD ticks).
+Usage: pattern_rate rate (or rate pattern_rate)
+```
+
+#### Clause 2: `pattern_rate(finite, finite)`
+
+- **Arity**: `2`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: set pattern step rate for specific pattern
+
+**Description & Details**:
+
+```text
+Sets pattern resolution in steps per bar for specified pattern (pattern, rate).
+Usage: pattern_rate pattern rate
 ```
 
 ---
@@ -6313,6 +6422,93 @@ Usage: [label] yt
 ```text
 Configures text label for the active pattern with an optional numeric parameter.
 Usage: [label] yt num
+```
+
+---
+
+### `scene_active`
+
+- **Alias**: `scene_active`
+- **Group**: `seq`
+- **Clause Count**: 1
+
+#### Clause 1: `scene_active()`
+
+- **Arity**: `0`
+- **Execution Model**: `immediate (control plane)`
+- **Summary**: query currently active scene index
+
+**Description & Details**:
+
+```text
+Prints the currently active scene index.
+Usage: scene_active
+```
+
+---
+
+### `scene_cue`
+
+- **Alias**: `scene_cue`
+- **Group**: `seq`
+- **Clause Count**: 1
+
+#### Clause 1: `scene_cue(finite)`
+
+- **Arity**: `1`
+- **Execution Model**: `realtime (audio thread safe)`
+- **Discrete Opcode ID**: `267` (`skode_clause_scene_cue_c479`)
+- **Summary**: queue scene change at next downbeat
+
+**Description & Details**:
+
+```text
+Queues scene change across all 8 lanes at next downbeat.
+Usage: scene_cue scene_id (or scene_id scene_cue)
+```
+
+---
+
+### `scene_define`
+
+- **Alias**: `scene_define`
+- **Group**: `seq`
+- **Clause Count**: 1
+
+#### Clause 1: `scene_define(finite)`
+
+- **Arity**: `1`
+- **Execution Model**: `immediate (control plane)`
+- **Parser State Requirements**: `data`
+- **Summary**: define or inspect scene pattern assignments
+
+**Description & Details**:
+
+```text
+Defines pattern assignments across 8 lanes for scene_id using the preceding array (p0 p1 ...), or prints the definition if no array is provided.
+Usage: (p0 p1 p2 ...) scene_define scene_id
+```
+
+---
+
+### `scene_now`
+
+- **Alias**: `scene_now`
+- **Group**: `seq`
+- **Clause Count**: 1
+
+#### Clause 1: `scene_now(finite)`
+
+- **Arity**: `1`
+- **Execution Model**: `realtime (audio thread safe)`
+- **Discrete Opcode ID**: `268` (`skode_clause_scene_now_c480`)
+- **Summary**: switch scene immediately across all lanes
+
+**Description & Details**:
+
+```text
+Switches active scene immediately without downbeat quantization.
+Usage: scene_now scene_id (or scene_id scene_now)
 ```
 
 ---
@@ -7205,7 +7401,7 @@ Usage: DO?
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `267` (`skode_clause_stream_copy_c475`)
+- **Discrete Opcode ID**: `269` (`skode_clause_stream_copy_c485`)
 - **Summary**: copy stream contents
 
 **Description & Details**:
@@ -7227,7 +7423,7 @@ Usage: /SC dst src
 
 - **Arity**: `3`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `270` (`skode_clause_stream_gen_c478`)
+- **Discrete Opcode ID**: `272` (`skode_clause_stream_gen_c488`)
 - **Summary**: configure virtual stream generator with default step 1.0
 
 **Description & Details**:
@@ -7241,7 +7437,7 @@ Usage: /SG stream_idx min max
 
 - **Arity**: `4`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `271` (`skode_clause_stream_gen_c479`)
+- **Discrete Opcode ID**: `273` (`skode_clause_stream_gen_c489`)
 - **Summary**: configure virtual stream generator with step
 
 **Description & Details**:
@@ -7255,7 +7451,7 @@ Usage: /SG stream_idx min max step
 
 - **Arity**: `5`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `272` (`skode_clause_stream_gen_c480`)
+- **Discrete Opcode ID**: `274` (`skode_clause_stream_gen_c490`)
 - **Summary**: configure virtual stream generator with step and mode
 
 **Description & Details**:
@@ -7277,7 +7473,7 @@ Usage: /SG stream_idx min max step mode
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `268` (`skode_clause_stream_mode_c476`)
+- **Discrete Opcode ID**: `270` (`skode_clause_stream_mode_c486`)
 - **Summary**: set stream playback mode
 
 **Description & Details**:
@@ -7299,7 +7495,7 @@ Usage: /SM stream_idx mode
 
 - **Arity**: `2`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `269` (`skode_clause_stream_pos_c477`)
+- **Discrete Opcode ID**: `271` (`skode_clause_stream_pos_c487`)
 - **Summary**: set stream read position
 
 **Description & Details**:

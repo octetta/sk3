@@ -1,0 +1,34 @@
+@name     pattern_rate
+@alias    pattern_rate
+@group    seq
+@c_name   skode_clause_pattern_rate_1
+@type     immediate
+@arity    1
+@match    (finite)
+@summary  set pattern step rate in steps per bar
+@doc
+Sets pattern resolution in steps per bar for active pattern (e.g. 16 for sixteenths, 12 for triplets, 96 for MOD ticks).
+Usage: pattern_rate rate (or rate pattern_rate)
+@code
+    (void)s; (void)argc;
+    if (!ctx) return -1;
+    seq_pattern_rate_set(ctx->pattern, (float)args[0]);
+    return 0;
+@end
+
+@name     pattern_rate
+@alias    pattern_rate
+@group    seq
+@c_name   skode_clause_pattern_rate_2
+@type     immediate
+@arity    2
+@match    (finite, finite)
+@summary  set pattern step rate for specific pattern
+@doc
+Sets pattern resolution in steps per bar for specified pattern (pattern, rate).
+Usage: pattern_rate pattern rate
+@code
+    (void)ctx; (void)s; (void)argc;
+    seq_pattern_rate_set((int)args[0], (float)args[1]);
+    return 0;
+@end

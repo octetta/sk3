@@ -114,6 +114,37 @@ extern int seq_pending_state[PATTERNS_MAX];
 extern int seq_mute[PATTERNS_MAX];
 extern int seq_control_events[PATTERNS_MAX];
 extern int seq_pattern_length[PATTERNS_MAX];
+extern int seq_explicit_length[PATTERNS_MAX];
+extern float seq_pattern_rate[PATTERNS_MAX];
+extern float seq_pattern_hz[PATTERNS_MAX];
+
+#define SCENE_MAX (32)
+#define SCENE_LANES (8)
+
+typedef struct {
+  int pattern[SCENE_LANES];
+} seq_scene_t;
+
+extern seq_scene_t seq_scenes[SCENE_MAX];
+extern int seq_active_scene;
+extern int seq_pending_scene;
+extern int seq_lane_pattern[SCENE_LANES];
+
+int seq_pattern_length_get(int pattern);
+void seq_pattern_length_set(int pattern, int len);
+
+float seq_pattern_rate_get(int pattern);
+void seq_pattern_rate_set(int pattern, float rate);
+
+float seq_pattern_hz_get(int pattern);
+void seq_pattern_hz_set(int pattern, float hz);
+
+void seq_scene_define(int scene_id, const int *patterns, int count);
+void seq_scene_cue(int scene_id);
+void seq_scene_now(int scene_id);
+int seq_scene_active_get(void);
+int seq_scene_pattern_get(int scene_id, int lane);
+
 const char *seq_step_source(int pattern, int step);
 const event_program_t *seq_step_program(int pattern, int step);
 

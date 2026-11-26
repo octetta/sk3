@@ -61,6 +61,16 @@ char *seq_step_get(int pattern, int step) {
 }
 
 int seq_pattern_length[PATTERNS_MAX] = {0};
+int seq_explicit_length[PATTERNS_MAX] = {0};
+float seq_pattern_rate[PATTERNS_MAX] = {0.0f};
+float seq_pattern_hz[PATTERNS_MAX] = {0.0f};
+static uint64_t seq_pattern_start_sample[PATTERNS_MAX] = {0};
+static uint64_t seq_pattern_step_count[PATTERNS_MAX] = {0};
+
+seq_scene_t seq_scenes[SCENE_MAX];
+int seq_active_scene = -1;
+int seq_pending_scene = -1;
+int seq_lane_pattern[SCENE_LANES];
 
 int scope_pattern_pointer = 0;
 int seq_pointer[PATTERNS_MAX] = {0};  // read-only derived value, kept for external inspection
@@ -176,6 +186,10 @@ void seq_rewind(void) {
   seq_sample_origin = SAMPLE_COUNT_GET();
   seq_tick_origin = 0.0;
   master_tick = 0;
+  for (int p = 0; p < PATTERNS_MAX; p++) {
+    seq_pattern_start_sample[p] = seq_sample_origin;
+    seq_pattern_step_count[p] = 0;
+  }
   seq_edit_unlock();
 }
 
@@ -241,6 +255,30 @@ void do_event(uint64_t now, void (*event_fn)(const event_t *event)) {
 }
 /* @end seq_event_dispatch */
 
+static void seq_scene_apply_locked(int scene_id, uint64_t now) {
+  if (scene_id < 0 || scene_id >= SCENE_MAX) return;
+  seq_scene_t *sc = &seq_scenes[scene_id];
+  for (int lane = 0; lane < SCENE_LANES; lane++) {
+    int old_pat = seq_lane_pattern[lane];
+    int new_pat = sc->pattern[lane];
+    if (old_pat != new_pat) {
+      if (old_pat >= 0 && old_pat < PATTERNS_MAX) {
+        seq_state_set_locked(old_pat, SEQ_STOPPED);
+      }
+      if (new_pat >= 0 && new_pat < PATTERNS_MAX) {
+        seq_state_set_locked(new_pat, SEQ_RUNNING);
+        if (seq_pattern_rate[new_pat] > 0.0f || seq_pattern_hz[new_pat] > 0.0f) {
+          seq_pattern_start_sample[new_pat] = now;
+          seq_pattern_step_count[new_pat] = 0;
+        }
+      }
+      seq_lane_pattern[lane] = new_pat;
+    }
+  }
+  seq_active_scene = scene_id;
+  seq_pending_scene = -1;
+}
+
 /* @stage seq_pattern_clock
  * @title            Pattern Timeline Clock, Downbeat Sync, & Step Dispatch
  * @scope            engine
@@ -267,6 +305,27 @@ void do_pattern(uint64_t now,
         target_tick - master_tick >= SEQ_MAX_CATCHUP_TICKS)
       master_tick = target_tick - (SEQ_MAX_CATCHUP_TICKS - 1);
     while (master_tick <= target_tick) {
+      if (seq_pending_scene >= 0) {
+        int mp = seq_master_pattern_get();
+        int mp_running = (mp >= 0 && mp < PATTERNS_MAX &&
+                          seq_state[mp] == SEQ_RUNNING);
+        int scene_trigger = 0;
+        if (mp_running) {
+          int mp_mod = seq_modulo[mp] > 0 ? seq_modulo[mp] : 1;
+          if ((master_tick % (uint64_t)mp_mod) == 0) {
+            int64_t t0 = (int64_t)(master_tick / (uint64_t)mp_mod);
+            int mp_len = seq_pattern_length[mp] > 0 ? seq_pattern_length[mp] : 1;
+            int step0 = (int)((((t0 - seq_offset[mp]) % (int64_t)mp_len) +
+                               (int64_t)mp_len) % (int64_t)mp_len);
+            scene_trigger = (step0 == 0);
+          }
+        } else {
+          scene_trigger = (master_tick % 16 == 0);
+        }
+        if (scene_trigger) {
+          seq_scene_apply_locked(seq_pending_scene, now);
+        }
+      }
       for (int p = 0; p < PATTERNS_MAX; p++) {
         if (seq_pending_state[p] > 0) {
           int mod = seq_modulo[p] > 0 ? seq_modulo[p] : 1;
@@ -314,6 +373,7 @@ void do_pattern(uint64_t now,
       }
       for (int p = 0; p < PATTERNS_MAX; p++) {
         if (seq_state[p] != SEQ_RUNNING) continue;
+        if (seq_pattern_rate[p] > 0.0f || seq_pattern_hz[p] > 0.0f) continue;
         if ((master_tick % (uint64_t)seq_modulo[p]) != 0) continue;
 
         int len = seq_pattern_length[p];
@@ -407,6 +467,38 @@ void do_pattern(uint64_t now,
       }
       master_tick++;
     }
+    for (int p = 0; p < PATTERNS_MAX; p++) {
+      if (seq_state[p] != SEQ_RUNNING || seq_pattern_length[p] == 0) continue;
+      if (seq_pattern_rate[p] <= 0.0f && seq_pattern_hz[p] <= 0.0f) continue;
+
+      double sps = 0.0;
+      if (seq_pattern_hz[p] > 0.0f) {
+        sps = (double)MAIN_SAMPLE_RATE / (double)seq_pattern_hz[p];
+      } else {
+        double bpm = (double)tempo_bpm_get();
+        if (bpm <= 0.0) bpm = 120.0;
+        double seconds_per_bar = 240.0 / bpm;
+        sps = (seconds_per_bar / (double)seq_pattern_rate[p]) * (double)MAIN_SAMPLE_RATE;
+      }
+      if (sps <= 0.0 || now < seq_pattern_start_sample[p]) continue;
+
+      uint64_t target_step = (uint64_t)((double)(now - seq_pattern_start_sample[p]) / sps);
+      if (target_step > seq_pattern_step_count[p] &&
+          target_step - seq_pattern_step_count[p] >= SEQ_MAX_CATCHUP_TICKS) {
+        seq_pattern_step_count[p] = target_step - (SEQ_MAX_CATCHUP_TICKS - 1);
+      }
+      while (seq_pattern_step_count[p] <= target_step) {
+        int len = seq_pattern_length[p];
+        int step = (int)(seq_pattern_step_count[p] % (uint64_t)len);
+        seq_pointer[p] = step;
+        seq_current_pattern = p;
+        if (program_fn && seq_mute[p] == 0) {
+          program_fn(p, step, seq_step_program(p, step));
+        }
+        seq_current_pattern = -1;
+        seq_pattern_step_count[p]++;
+      }
+    }
   }
   seq_edit_unlock();
 }
@@ -426,6 +518,23 @@ int seq_next_boundary(uint64_t now, uint64_t limit, uint64_t *boundary) {
     uint64_t pattern_tick = UINT64_MAX;
     for (int p = 0; p < PATTERNS_MAX; p++) {
       if (seq_state[p] != SEQ_RUNNING || seq_pattern_length[p] == 0) continue;
+      if (seq_pattern_rate[p] > 0.0f || seq_pattern_hz[p] > 0.0f) {
+        double sps = 0.0;
+        if (seq_pattern_hz[p] > 0.0f) {
+          sps = (double)MAIN_SAMPLE_RATE / (double)seq_pattern_hz[p];
+        } else {
+          double bpm = (double)tempo_bpm_get();
+          if (bpm <= 0.0) bpm = 120.0;
+          double seconds_per_bar = 240.0 / bpm;
+          sps = (seconds_per_bar / (double)seq_pattern_rate[p]) * (double)MAIN_SAMPLE_RATE;
+        }
+        if (sps > 0.0) {
+          uint64_t cand = seq_pattern_start_sample[p] + (uint64_t)((double)seq_pattern_step_count[p] * sps);
+          if (cand <= now) cand = now;
+          if (cand <= limit && cand < next) next = cand;
+        }
+        continue;
+      }
       uint64_t modulo = (uint64_t)seq_modulo[p];
       uint64_t remainder = master_tick % modulo;
       uint64_t candidate = master_tick + (remainder ? modulo - remainder : 0);
@@ -493,6 +602,11 @@ static void pattern_reset_locked(int p) {
   seq_mute[p] = 0;
   seq_control_events[p] = 0;
   seq_pattern_length[p] = 0;
+  seq_explicit_length[p] = 0;
+  seq_pattern_rate[p] = 0.0f;
+  seq_pattern_hz[p] = 0.0f;
+  seq_pattern_start_sample[p] = 0;
+  seq_pattern_step_count[p] = 0;
   seq_offset[p] = 0;
   for (int s = 0; s < seq_storage[p].capacity; s++) {
     free(seq_storage[p].steps[s].source);
@@ -537,6 +651,16 @@ void seq_init(void) {
   seq_sample_origin = SAMPLE_COUNT_GET();
   seq_tick_origin = 0.0;
   master_tick = 0;
+  for (int s = 0; s < SCENE_MAX; s++) {
+    for (int l = 0; l < SCENE_LANES; l++) {
+      seq_scenes[s].pattern[l] = -1;
+    }
+  }
+  for (int l = 0; l < SCENE_LANES; l++) {
+    seq_lane_pattern[l] = -1;
+  }
+  seq_active_scene = -1;
+  seq_pending_scene = -1;
   for (int p = 0; p < PATTERNS_MAX; p++) {
     atomic_store_int(&seq_generation[p], 0);
     pattern_reset_locked(p);
@@ -638,7 +762,16 @@ int seq_step_set(int pattern, int step, const char *source,
   st->steps[step].source = new_source;
   st->steps[step].program = new_program;
 
-  seq_pattern_length[pattern] = pattern_length_compute(pattern);
+  if (seq_explicit_length[pattern] > 0) {
+    if (step >= seq_explicit_length[pattern]) {
+      seq_explicit_length[pattern] = step + 1;
+      seq_pattern_length[pattern] = step + 1;
+    } else {
+      seq_pattern_length[pattern] = seq_explicit_length[pattern];
+    }
+  } else {
+    seq_pattern_length[pattern] = pattern_length_compute(pattern);
+  }
   seq_edit_unlock();
 
   free(old_source);
@@ -659,16 +792,27 @@ void seq_pattern_length_set(int pattern, int len) {
   if (pattern < 0 || pattern >= PATTERNS_MAX) return;
   if (len < 0) len = 0;
   seq_edit_lock();
-  if (len < seq_pattern_length[pattern]) {
+  if (len > 0) {
+    if (len < seq_pattern_length[pattern]) {
       for (int i = len; i < seq_storage[pattern].capacity; i++) {
-          free(seq_storage[pattern].steps[i].source);
-          seq_storage[pattern].steps[i].source = NULL;
-          free(seq_storage[pattern].steps[i].program);
-          seq_storage[pattern].steps[i].program = NULL;
+        free(seq_storage[pattern].steps[i].source);
+        seq_storage[pattern].steps[i].source = NULL;
+        free(seq_storage[pattern].steps[i].program);
+        seq_storage[pattern].steps[i].program = NULL;
       }
+    }
+    seq_explicit_length[pattern] = len;
+    seq_pattern_length[pattern] = len;
+  } else {
+    seq_explicit_length[pattern] = 0;
+    seq_pattern_length[pattern] = pattern_length_compute(pattern);
   }
-  seq_pattern_length[pattern] = len;
   seq_edit_unlock();
+}
+
+int seq_pattern_length_get(int pattern) {
+  if (pattern < 0 || pattern >= PATTERNS_MAX) return 0;
+  return seq_pattern_length[pattern];
 }
 
 // Jump to a specific step on the next tick. Adjusts seq_offset so that
@@ -694,10 +838,15 @@ void seq_state_set_locked(int p, int state) {
       seq_state[p] = SEQ_STOPPED;
       seq_pointer[p] = 0;
       seq_offset[p] = 0;
+      seq_pattern_step_count[p] = 0;
       break;
     case 1: // start
       seq_state[p] = SEQ_RUNNING;
-      {
+      if (seq_pattern_rate[p] > 0.0f || seq_pattern_hz[p] > 0.0f) {
+        seq_pattern_start_sample[p] = SAMPLE_COUNT_GET();
+        seq_pattern_step_count[p] = 0;
+        seq_pointer[p] = 0;
+      } else {
         int modulo = seq_modulo[p] > 0 ? seq_modulo[p] : 1;
         int64_t next_tick = (int64_t)((master_tick + (uint64_t)modulo - 1) / (uint64_t)modulo);
         seq_offset[p] = next_tick;
@@ -795,4 +944,66 @@ int seq_kill_by_tag(int tag) {
 int seq_kill_all(void) {
   queue_clear(&seq_q);
   return 0;
+}
+
+void seq_pattern_rate_set(int pattern, float rate) {
+  if (pattern < 0 || pattern >= PATTERNS_MAX) return;
+  seq_edit_lock();
+  seq_pattern_rate[pattern] = rate > 0.0f ? rate : 0.0f;
+  seq_pattern_hz[pattern] = 0.0f;
+  seq_pattern_start_sample[pattern] = SAMPLE_COUNT_GET();
+  seq_pattern_step_count[pattern] = 0;
+  seq_edit_unlock();
+}
+
+float seq_pattern_rate_get(int pattern) {
+  if (pattern < 0 || pattern >= PATTERNS_MAX) return 0.0f;
+  return seq_pattern_rate[pattern];
+}
+
+void seq_pattern_hz_set(int pattern, float hz) {
+  if (pattern < 0 || pattern >= PATTERNS_MAX) return;
+  seq_edit_lock();
+  seq_pattern_hz[pattern] = hz > 0.0f ? hz : 0.0f;
+  seq_pattern_rate[pattern] = 0.0f;
+  seq_pattern_start_sample[pattern] = SAMPLE_COUNT_GET();
+  seq_pattern_step_count[pattern] = 0;
+  seq_edit_unlock();
+}
+
+float seq_pattern_hz_get(int pattern) {
+  if (pattern < 0 || pattern >= PATTERNS_MAX) return 0.0f;
+  return seq_pattern_hz[pattern];
+}
+
+void seq_scene_define(int scene_id, const int *patterns, int count) {
+  if (scene_id < 0 || scene_id >= SCENE_MAX) return;
+  seq_edit_lock();
+  for (int l = 0; l < SCENE_LANES; l++) {
+    seq_scenes[scene_id].pattern[l] = (patterns && l < count) ? patterns[l] : -1;
+  }
+  seq_edit_unlock();
+}
+
+void seq_scene_cue(int scene_id) {
+  if (scene_id < 0 || scene_id >= SCENE_MAX) return;
+  seq_edit_lock();
+  seq_pending_scene = scene_id;
+  seq_edit_unlock();
+}
+
+void seq_scene_now(int scene_id) {
+  if (scene_id < 0 || scene_id >= SCENE_MAX) return;
+  seq_edit_lock();
+  seq_scene_apply_locked(scene_id, SAMPLE_COUNT_GET());
+  seq_edit_unlock();
+}
+
+int seq_scene_active_get(void) {
+  return seq_active_scene;
+}
+
+int seq_scene_pattern_get(int scene_id, int lane) {
+  if (scene_id < 0 || scene_id >= SCENE_MAX || lane < 0 || lane >= SCENE_LANES) return -1;
+  return seq_scenes[scene_id].pattern[lane];
 }

@@ -1,0 +1,33 @@
+@name     scene_define
+@alias    scene_define
+@group    seq
+@c_name   skode_clause_scene_define
+@type     immediate
+@arity    1
+@match    (finite)
+@summary  define or inspect scene pattern assignments
+@doc
+Defines pattern assignments across 8 lanes for scene_id using the preceding array (p0 p1 ...), or prints the definition if no array is provided.
+Usage: (p0 p1 p2 ...) scene_define scene_id
+@code
+    if (!ctx) return -1;
+    (void)s; (void)argc;
+    int scene_id = (int)args[0];
+    if (scene_id < 0 || scene_id >= SCENE_MAX) return -1;
+    if (ctx->parse && ands_data_len(ctx->parse) > 0) {
+        double *data = ands_data(ctx->parse);
+        int len = ands_data_len(ctx->parse);
+        int patterns[SCENE_LANES];
+        for (int l = 0; l < SCENE_LANES; l++) {
+            patterns[l] = (l < len) ? (int)data[l] : -1;
+        }
+        seq_scene_define(scene_id, patterns, SCENE_LANES);
+    } else {
+        ctx->printf(ctx, "# scene %d: (", scene_id);
+        for (int l = 0; l < SCENE_LANES; l++) {
+            ctx->printf(ctx, "%s%d", l ? " " : "", seq_scene_pattern_get(scene_id, l));
+        }
+        ctx->printf(ctx, ")\n");
+    }
+    return 0;
+@end

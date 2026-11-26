@@ -4449,6 +4449,66 @@ static void test_polyblep_pwm_and_phonemes(void) {
   }
 }
 
+static void test_pattern_length_rate_hz_and_scenes(void) {
+  const char *test = "pattern length, rate, hz, and scenes";
+  skode_t ctx = new_ctx();
+
+  /* 1. Test explicit pattern_length / yl and trailing rest preservation */
+  consume(test, &ctx, "0 y");
+  consume(test, &ctx, "16 pattern_length");
+  expect_int(test, seq_pattern_length_get(0), 16, "explicit pattern length set");
+  consume(test, &ctx, "[v0 a-1] x0,4,8,12");
+  expect_int(test, seq_pattern_length_get(0), 16, "pattern length preserves trailing rests");
+  consume(test, &ctx, "0 yl");
+  expect_int(test, seq_pattern_length_get(0), 13, "clearing explicit length recalculates");
+
+  /* 2. Test pattern_rate */
+  consume(test, &ctx, "1 y");
+  consume(test, &ctx, "96 pattern_rate");
+  expect_float(test, seq_pattern_rate_get(1), 96.0f, 0.001f, "pattern rate set on active pattern");
+  consume(test, &ctx, "pattern_rate 2 12");
+  expect_float(test, seq_pattern_rate_get(2), 12.0f, 0.001f, "pattern rate set by explicit pattern arg");
+
+  /* 3. Test pattern_hz */
+  consume(test, &ctx, "3 y");
+  consume(test, &ctx, "50 pattern_hz");
+  expect_float(test, seq_pattern_hz_get(3), 50.0f, 0.001f, "pattern hz set on active pattern");
+  consume(test, &ctx, "pattern_hz 4 60");
+  expect_float(test, seq_pattern_hz_get(4), 60.0f, 0.001f, "pattern hz set by explicit pattern arg");
+
+  /* 4. Test scene define, cue, and now */
+  consume(test, &ctx, "(0 1 2 3) scene_define 0");
+  expect_int(test, seq_scene_pattern_get(0, 0), 0, "scene 0 lane 0");
+  expect_int(test, seq_scene_pattern_get(0, 1), 1, "scene 0 lane 1");
+  expect_int(test, seq_scene_pattern_get(0, 2), 2, "scene 0 lane 2");
+  expect_int(test, seq_scene_pattern_get(0, 3), 3, "scene 0 lane 3");
+  expect_int(test, seq_scene_pattern_get(0, 4), -1, "scene 0 lane 4 empty");
+
+  consume(test, &ctx, "scene_now 0");
+  expect_int(test, seq_scene_active_get(), 0, "active scene is 0");
+  expect_int(test, seq_state[0], SEQ_RUNNING, "pattern 0 running in scene 0");
+  expect_int(test, seq_state[1], SEQ_RUNNING, "pattern 1 running in scene 0");
+  expect_int(test, seq_state[2], SEQ_RUNNING, "pattern 2 running in scene 0");
+  expect_int(test, seq_state[3], SEQ_RUNNING, "pattern 3 running in scene 0");
+
+  /* Switch to Scene 1 with partial swap: lane 0 swapped to pattern 4, lane 1 muted (-1), lane 2 kept */
+  consume(test, &ctx, "(4 -1 2 5) scene_define 1");
+  consume(test, &ctx, "scene_now 1");
+  expect_int(test, seq_scene_active_get(), 1, "active scene is 1");
+  expect_int(test, seq_state[0], SEQ_STOPPED, "pattern 0 stopped in scene 1");
+  expect_int(test, seq_state[4], SEQ_RUNNING, "pattern 4 running in scene 1");
+  expect_int(test, seq_state[1], SEQ_STOPPED, "pattern 1 stopped in scene 1");
+  expect_int(test, seq_state[2], SEQ_RUNNING, "pattern 2 continued running in scene 1");
+  expect_int(test, seq_state[5], SEQ_RUNNING, "pattern 5 running in scene 1");
+
+  /* Test scene_cue */
+  consume(test, &ctx, "scene_cue 0");
+  expect_int(test, seq_pending_scene, 0, "scene 0 queued for next downbeat");
+
+  /* Cleanup */
+  seq_state_all(0);
+}
+
 int main(int argc, char **argv) {
   synth_init(8);
   wave_table_init(0);
@@ -4535,6 +4595,7 @@ int main(int argc, char **argv) {
   test_voice_format_envelopes();
   test_polyblep_pwm_and_phonemes();
   test_error_system();
+  test_pattern_length_rate_hz_and_scenes();
   test_binary_rejection_and_text_validation();
 
   synth_free();

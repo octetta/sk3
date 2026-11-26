@@ -1,0 +1,17 @@
+@name     scene_active
+@alias    scene_active
+@group    seq
+@c_name   skode_clause_scene_active
+@type     immediate
+@arity    0
+@match    ()
+@summary  query currently active scene index
+@doc
+Prints the currently active scene index.
+Usage: scene_active
+@code
+    if (!ctx) return -1;
+    (void)s; (void)args; (void)argc;
+    ctx->printf(ctx, "# active scene: %d\n", seq_scene_active_get());
+    return 0;
+@end

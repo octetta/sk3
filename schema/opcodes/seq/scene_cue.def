@@ -1,0 +1,15 @@
+@name     scene_cue
+@alias    scene_cue
+@group    seq
+@type     realtime
+@arity    1
+@match    (finite)
+@summary  queue scene change at next downbeat
+@doc
+Queues scene change across all 8 lanes at next downbeat.
+Usage: scene_cue scene_id (or scene_id scene_cue)
+@code
+    (void)voice;
+    seq_scene_cue((int)args[0]);
+    return 0;
+@end
