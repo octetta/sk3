@@ -75,7 +75,7 @@ static skode_t new_ctx(void) {
 }
 
 static void consume(const char *test, skode_t *ctx, const char *line) {
-  char buf[512];
+  char buf[STEP_MAX];
   snprintf(buf, sizeof(buf), "%s", line);
   int r = skode_consume(buf, ctx);
   if (r != 0) {
@@ -1684,9 +1684,13 @@ static void test_opcode_events(void) {
   consume(test, &ctx, "[a-1] e>106");
   expect_int(test, skode_compile_program("e!90", &program),
              SKODE_COMPILE_INVALID, "reject excessive compile nesting");
-  consume(test, &ctx,
-    "[a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 "
-    "a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1 a-1] e>125");
+  char big_macro[4096];
+  int pos = snprintf(big_macro, sizeof(big_macro), "[");
+  for (int i = 0; i < SEQ_PROGRAM_OP_MAX; i++) {
+    pos += snprintf(big_macro + pos, sizeof(big_macro) - pos, "a-1 ");
+  }
+  snprintf(big_macro + pos, sizeof(big_macro) - pos, "] e>125");
+  consume(test, &ctx, big_macro);
   expect_int(test, skode_compile_program("e!125 p0", &program),
              SKODE_COMPILE_TOO_LARGE, "reject oversized macro expansion");
   expect_int(test, skode_compile_program("e!126", &program),

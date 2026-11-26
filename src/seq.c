@@ -594,12 +594,13 @@ int seq_step_set(int pattern, int step, const char *source,
   }
 
   if (source && source[0] != '-' && program && program->count > 0 && program->count <= SEQ_PROGRAM_OP_MAX) {
-      new_program = malloc(sizeof(event_program_t));
+      size_t prog_size = sizeof(uint16_t) + (size_t)program->count * sizeof(program_op_t);
+      new_program = malloc(prog_size);
       if (!new_program) {
           free(new_source);
           return -1;
       }
-      *new_program = *program;
+      memcpy(new_program, program, prog_size);
   } else if (source && source[0] != '-' && (!program || program->count > SEQ_PROGRAM_OP_MAX)) {
       free(new_source);
       return -1;

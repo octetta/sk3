@@ -12,7 +12,7 @@
 
 _Static_assert(SKODE_OP_FREQ_FEEDBACK <= UINT16_MAX,
   "Skode opcodes must fit in opcode_event_t.code");
-_Static_assert(SEQ_PROGRAM_OP_MAX <= UINT8_MAX,
+_Static_assert(SEQ_PROGRAM_OP_MAX <= UINT16_MAX,
   "Compiled program length must fit in event_program_t.count");
 
 const char *skode_opcode_name(uint16_t opcode) {

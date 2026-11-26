@@ -181,7 +181,7 @@ int skode_session_load(skode_t *ctx, const char *filename);
 #include "vendor/ksynth/ksynth.h"
 
 #define STRING_BUF_IDX_MAX SKODE_EXTRA_MAX
-#define STRING_BUF_LEN (256)
+#define STRING_BUF_LEN (4096)
 
 extern simple_mutex_t skode_ks_eval_mutex;
 extern simple_mutex_t skode_extra_mutex;
