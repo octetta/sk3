@@ -2055,6 +2055,8 @@ typedef enum {
   DSL_DRUM_CONGA,
   DSL_DRUM_SIMMONS,
   DSL_DRUM_ZAP,
+  DSL_DRUM_VL1,
+  DSL_DRUM_SK1,
 
   DSL_BELL_CHURCH,
   DSL_BELL_TUBULAR,
@@ -2089,6 +2091,7 @@ typedef struct {
   float click;        /* click level */
   float drive;        /* saturation drive */
   float end_freq;     /* sub pitch */
+  int subtype;        /* preset subtype / instrument index */
   float snap;         /* snare snap */
   float tail;         /* snare / clap tail seconds */
   float f1, f2;       /* modal freqs */
@@ -2651,6 +2654,16 @@ static int sk_gen_drum_render(skode_t *ctx, const char *domain, const char *inst
     if (p->drive > 0.0f) zp.drive = sk_clampf(p->drive, 0.1f, 10.0f);
     sk_drum_zap_trigger(&zp, p->velocity > 0.0f ? p->velocity : 1.0f);
     for (int i = 0; i < total_samples; i++) buf[i] = sk_drum_zap_step(&zp);
+  } else if (p->preset == DSL_DRUM_VL1) {
+    sk_drum_vl1_t vl;
+    sk_drum_vl1_init(&vl, rate, p->subtype);
+    sk_drum_vl1_trigger(&vl, p->velocity > 0.0f ? p->velocity : 1.0f);
+    for (int i = 0; i < total_samples; i++) buf[i] = sk_drum_vl1_step(&vl);
+  } else if (p->preset == DSL_DRUM_SK1) {
+    sk_drum_sk1_t sk;
+    sk_drum_sk1_init(&sk, rate, p->subtype);
+    sk_drum_sk1_trigger(&sk, p->velocity > 0.0f ? p->velocity : 1.0f);
+    for (int i = 0; i < total_samples; i++) buf[i] = sk_drum_sk1_step(&sk);
   } else {
     /* Kick drum */
     sk_drum_kick_t k;
@@ -2847,6 +2860,8 @@ int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int arg
           strcmp(pre_str, "shaker") == 0 ||
           strcmp(pre_str, "conga") == 0 || strcmp(pre_str, "bongo") == 0 ||
           strcmp(pre_str, "simmons") == 0 || strcmp(pre_str, "syntom") == 0 ||
+          strcmp(pre_str, "vl1") == 0 || strcmp(pre_str, "vl-1") == 0 ||
+          strcmp(pre_str, "sk1") == 0 || strcmp(pre_str, "sk-1") == 0 ||
           strcmp(pre_str, "zap") == 0 || strcmp(pre_str, "laser") == 0) {
         p.family = DSL_FAM_DRUM;
         if (strcmp(pre_str, "snare") == 0) {
@@ -2912,6 +2927,14 @@ int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int arg
           p.preset = DSL_DRUM_ZAP;
           strcpy(p.preset_name, "drum:zap");
           p.freq = 3200.0f; p.end_freq = 45.0f; p.decay = 0.085f; p.drive = 1.4f;
+        } else if (strcmp(pre_str, "vl1") == 0 || strcmp(pre_str, "vl-1") == 0) {
+          p.preset = DSL_DRUM_VL1;
+          strcpy(p.preset_name, "drum:vl1");
+          p.subtype = 0;
+        } else if (strcmp(pre_str, "sk1") == 0 || strcmp(pre_str, "sk-1") == 0) {
+          p.preset = DSL_DRUM_SK1;
+          strcpy(p.preset_name, "drum:sk1");
+          p.subtype = 0;
         } else {
           p.preset = DSL_DRUM_KICK;
           strcpy(p.preset_name, "drum:kick");
@@ -3027,6 +3050,18 @@ int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int arg
           }
         } else if (strcmp(key, "n") == 0 || strcmp(key, "note") == 0 || strcmp(key, "midi") == 0) {
           p.freq = parse_dsl_pitch(val, p.freq, &p.midi_note, &p.has_pitch);
+        } else if (strcmp(key, "type") == 0 || strcmp(key, "sound") == 0) {
+          if (strcasecmp(val, "kick") == 0 || strcasecmp(val, "po") == 0 || strcasecmp(val, "bd") == 0) {
+            p.subtype = 0;
+          } else if (strcasecmp(val, "snare") == 0 || strcasecmp(val, "ka") == 0 || strcasecmp(val, "sd") == 0) {
+            p.subtype = 1;
+          } else if (strcasecmp(val, "hat") == 0 || strcasecmp(val, "chi") == 0 || strcasecmp(val, "hh") == 0) {
+            p.subtype = 2;
+          } else if (strcasecmp(val, "bongo") == 0 || strcasecmp(val, "bongo_hi") == 0 || strcasecmp(val, "hi") == 0) {
+            p.subtype = 3;
+          } else if (strcasecmp(val, "bongo_lo") == 0 || strcasecmp(val, "bongo_low") == 0 || strcasecmp(val, "lo") == 0) {
+            p.subtype = 4;
+          }
         } else if (strcmp(key, "d") == 0 || strcmp(key, "decay") == 0 || strcmp(key, "t60") == 0) {
           p.decay = (float)atof(val);
         } else if (strcmp(key, "dur") == 0 || strcmp(key, "duration") == 0 || strcmp(key, "len") == 0) {
@@ -3155,6 +3190,14 @@ int skode_exec_sample_render(skode_t *ctx, ands_t *s, const double *arg, int arg
       }
       case DSL_DRUM_ZAP: {
         duration = p.decay * 3.0f + 0.05f;
+        break;
+      }
+      case DSL_DRUM_VL1: {
+        duration = (p.subtype == SK_VL1_HAT) ? 0.05f : (p.subtype == SK_VL1_SNARE ? 0.10f : 0.18f);
+        break;
+      }
+      case DSL_DRUM_SK1: {
+        duration = (p.subtype == SK_SK1_HAT) ? 0.07f : (p.subtype == SK_SK1_SNARE ? 0.18f : 0.32f);
         break;
       }
 

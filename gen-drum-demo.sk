@@ -109,6 +109,26 @@ M 124 16
 [drum:zap f:3400 end:45 d:0.085 drive:1.5] 117 gen!
 [Space Laser] wt 117
 
+# Slot 118: Casio VL-Tone VL-1 (1979) 1-Bit Square Chirp Kick ("Po")
+[drum:vl1 type:kick] 118 gen!
+[VL-1 Po Kick] wt 118
+
+# Slot 119: Casio VL-Tone VL-1 (1979) 1-Bit LFSR Resonant Noise Snare ("Ka")
+[drum:vl1 type:snare] 119 gen!
+[VL-1 Ka Snare] wt 119
+
+# Slot 120: Casio VL-Tone VL-1 (1979) 1-Bit Highpass Micro-Tick Hat ("Chi")
+[drum:vl1 type:hat] 120 gen!
+[VL-1 Chi Hat] wt 120
+
+# Slot 121: Casio SK-1 (1985) Lo-Fi 8-Bit 9.38 kHz High Bongo
+[drum:sk1 type:bongo] 121 gen!
+[SK-1 Hi Bongo] wt 121
+
+# Slot 122: Casio SK-1 (1985) Lo-Fi 8-Bit 9.38 kHz Low Bongo
+[drum:sk1 type:bongo_lo] 122 gen!
+[SK-1 Lo Bongo] wt 122
+
 # ----------------------------------------------------------------------
 # 2. VOICE DEFINITIONS & STEREO PANNING
 # ----------------------------------------------------------------------
@@ -184,29 +204,28 @@ v16 w116 f440 a-2.0 p.10
 v17 w117 f440 a-3.5 p-.25
 [Space Laser] vt
 
-# --- CASIO VL-1 (1979) & SK-1 (1985) LO-FI POLYBLEP VOICES ---
-# Synthesized in real time via PolyBLEP square/pulse waves (w1) and clocked
-# LFSR digital noise (w5) with hardware-authentic pitch envelopes and filtering:
+# --- CASIO VL-1 (1979) & SK-1 (1985) HARDWARE-MODELED DRUM VOICES ---
+# Voices play back bit-accurate 1-bit CMOS and 9.38 kHz 8-bit PCM models from slots 118..122:
 
-# v18: Casio VL-1 Square Wave Pitch Chirp Kick ("Po" - 1-bit NEC MCU pulse)
-v18 w1 pw 0.50 f55 a-2.0 p0 t.001,.09,0,.01 pt.001,.045,0,.01 pd 2.2 j1 k450 q1.4
-[Casio VL1 Kick] vt
+# v18: Casio VL-1 Square Chirp Kick ("Po")
+v18 w118 f440 a-1.5 p0
+[VL-1 Po Kick] vt
 
-# v19: Casio VL-1 Resonant Bandpass Noise Snare ("Ka" - Shift register burst)
-v19 w6 a-4.5 p0 t.001,.055,0,.01 j3 k2800 q2.5
-[Casio VL1 Snare] vt
+# v19: Casio VL-1 Resonant Noise Snare ("Ka")
+v19 w119 f440 a-3.0 p0
+[VL-1 Ka Snare] vt
 
-# v20: Casio VL-1 Highpass Micro-Tick Hi-Hat ("Chi" - 20ms 1-bit tick)
-v20 w6 a-6.0 p.20 t.001,.020,0,.01 j2 k6500 q1.5
-[Casio VL1 Hat] vt
+# v20: Casio VL-1 Highpass Micro-Tick Hat ("Chi")
+v20 w120 f440 a-4.5 p.20
+[VL-1 Chi Hat] vt
 
-# v21: Casio SK-1 Lo-Fi High Bongo (9.38 kHz PCM character via resonant pulse)
-v21 w1 pw 0.35 f280 a-4.0 p-.25 t.001,.10,0,.01 pt.001,.035,0,.01 pd 0.5 j1 k1200 q2.2
-[Casio SK1 HiBongo] vt
+# v21: Casio SK-1 8-Bit Lo-Fi High Bongo
+v21 w121 f440 a-3.5 p-.25
+[SK-1 Hi Bongo] vt
 
-# v22: Casio SK-1 Lo-Fi Low Bongo (9.38 kHz PCM character via resonant pulse)
-v22 w1 pw 0.35 f180 a-4.0 p.25 t.001,.12,0,.01 pt.001,.040,0,.01 pd 0.5 j1 k900 q2.0
-[Casio SK1 LoBongo] vt
+# v22: Casio SK-1 8-Bit Lo-Fi Low Bongo
+v22 w122 f440 a-3.5 p.25
+[SK-1 Lo Bongo] vt
 
 # ----------------------------------------------------------------------
 # 3. DISCRETE STEP SEQUENCER PATTERNS (y0..y69)

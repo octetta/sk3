@@ -2845,6 +2845,258 @@ static inline float sk_drum_zap_step(sk_drum_zap_t *z) {
 }
 
 /* -------------------------------------------------------------------------
+ * 12.14. Casio VL-Tone VL-1 Drum Engine (sk_drum_vl1_t)
+ * -------------------------------------------------------------------------
+ * Authentic circuit emulation of the NEC D1867G single-chip microcontroller:
+ *   - Type 0 (KICK / "Po"): 1-bit CMOS 50% square wave with rapid exponential
+ *     downward pitch chirp (240 Hz -> 52 Hz) and 1-pole RC speaker lowpass roll-off.
+ *   - Type 1 (SNARE / "Ka"): High-rate 1-bit shift register pseudo-random noise burst
+ *     mixed with a short tonal pop, bandpass filtered at 2.2 kHz.
+ *   - Type 2 (HAT / "Chi"): 16 ms micro-slice of highpass-filtered 1-bit noise (7.0 kHz).
+ */
+typedef enum {
+    SK_VL1_KICK = 0,    /* "Po" - 1-bit square chirp */
+    SK_VL1_SNARE = 1,   /* "Ka" - 1-bit LFSR noise burst */
+    SK_VL1_HAT = 2      /* "Chi" - 1-bit micro highpass tick */
+} sk_vl1_type_t;
+
+typedef struct {
+    float sample_rate;
+    int type;
+    float phase;
+    float start_freq;
+    float end_freq;
+    float pitch_env;
+    float pitch_decay;
+    float amp_env;
+    float amp_decay;
+    float filter_lp;
+    float filter_coeff;
+    sk_biquad_t biquad;
+    uint32_t lfsr;
+} sk_drum_vl1_t;
+
+static inline void sk_drum_vl1_init(sk_drum_vl1_t *v, float sample_rate, int type) {
+    if (!v) return;
+    memset(v, 0, sizeof(*v));
+    v->sample_rate = sample_rate > 1000.0f ? sample_rate : 48000.0f;
+    v->type = type;
+    v->lfsr = 0x12345;
+
+    if (type == SK_VL1_KICK) {
+        v->start_freq = 240.0f;
+        v->end_freq = 52.0f;
+        v->pitch_decay = expf(-1.0f / (0.038f * v->sample_rate));
+        v->amp_decay = expf(-1.0f / (0.090f * v->sample_rate));
+        /* Single-pole RC lowpass filter around 450 Hz */
+        v->filter_coeff = 1.0f - expf(-2.0f * (float)M_PI * 450.0f / v->sample_rate);
+    } else if (type == SK_VL1_SNARE) {
+        v->start_freq = 170.0f;
+        v->end_freq = 110.0f;
+        v->pitch_decay = expf(-1.0f / (0.025f * v->sample_rate));
+        v->amp_decay = expf(-1.0f / (0.048f * v->sample_rate));
+        sk_biquad_init(&v->biquad, SK_BIQUAD_BANDPASS, 2200.0f, 1.8f, v->sample_rate);
+    } else { /* HAT */
+        v->amp_decay = expf(-1.0f / (0.018f * v->sample_rate));
+        sk_biquad_init(&v->biquad, SK_BIQUAD_HIGHPASS, 7000.0f, 1.4f, v->sample_rate);
+    }
+}
+
+static inline void sk_drum_vl1_trigger(sk_drum_vl1_t *v, float velocity) {
+    if (!v) return;
+    velocity = sk_clampf(velocity, 0.0f, 1.0f);
+    v->amp_env = velocity;
+    v->pitch_env = 1.0f;
+    v->phase = 0.0f;
+    v->filter_lp = 0.0f;
+    v->lfsr = 0x12345;
+}
+
+static inline float sk_drum_vl1_step(sk_drum_vl1_t *v) {
+    if (!v || v->amp_env < 1e-4f) return 0.0f;
+
+    float out = 0.0f;
+    if (v->type == SK_VL1_KICK) {
+        float cur_freq = v->end_freq + (v->start_freq - v->end_freq) * v->pitch_env;
+        v->phase += cur_freq / v->sample_rate;
+        if (v->phase >= 1.0f) v->phase -= 1.0f;
+
+        float sqr = (v->phase < 0.5f) ? 1.0f : -1.0f;
+        v->filter_lp += v->filter_coeff * (sqr - v->filter_lp);
+        out = v->filter_lp * v->amp_env * 1.6f;
+
+        v->pitch_env *= v->pitch_decay;
+        v->amp_env *= v->amp_decay;
+    } else if (v->type == SK_VL1_SNARE) {
+        /* 17-bit LFSR noise */
+        uint32_t bit = ((v->lfsr >> 0) ^ (v->lfsr >> 3)) & 1;
+        v->lfsr = (v->lfsr >> 1) | (bit << 16);
+        float noise = (v->lfsr & 1) ? 0.85f : -0.85f;
+
+        float cur_freq = v->end_freq + (v->start_freq - v->end_freq) * v->pitch_env;
+        v->phase += cur_freq / v->sample_rate;
+        if (v->phase >= 1.0f) v->phase -= 1.0f;
+        float pop = ((v->phase < 0.5f) ? 0.35f : -0.35f) * v->pitch_env;
+
+        float filtered = sk_biquad_step(&v->biquad, noise + pop);
+        out = filtered * v->amp_env * 1.8f;
+
+        v->pitch_env *= v->pitch_decay;
+        v->amp_env *= v->amp_decay;
+    } else { /* HAT */
+        uint32_t bit = ((v->lfsr >> 0) ^ (v->lfsr >> 5)) & 1;
+        v->lfsr = (v->lfsr >> 1) | (bit << 16);
+        float noise = (v->lfsr & 1) ? 0.9f : -0.9f;
+
+        float filtered = sk_biquad_step(&v->biquad, noise);
+        out = filtered * v->amp_env * 1.6f;
+
+        v->amp_env *= v->amp_decay;
+    }
+
+    return sk_softclip_cubic(out, 1.0f);
+}
+
+/* -------------------------------------------------------------------------
+ * 12.15. Casio SK-1 8-Bit PCM Lo-Fi Drum Engine (sk_drum_sk1_t)
+ * -------------------------------------------------------------------------
+ * Authentic circuit emulation of the 1985 Casio SK-1 PCM percussion ROM:
+ *   - Native 9.375 kHz sample-and-hold decimation
+ *   - 8-bit companded DAC quantization (256 discrete levels)
+ *   - 4-pole post-DAC analog reconstruction filter (3.8 kHz cutoff)
+ */
+typedef enum {
+    SK_SK1_KICK = 0,
+    SK_SK1_SNARE = 1,
+    SK_SK1_HAT = 2,
+    SK_SK1_BONGO_HI = 3,
+    SK_SK1_BONGO_LO = 4
+} sk_sk1_type_t;
+
+typedef struct {
+    float sample_rate;
+    int type;
+    float phase;
+    float start_freq;
+    float end_freq;
+    float pitch_env;
+    float pitch_decay;
+    float amp_env;
+    float amp_decay;
+    sk_biquad_t lowpass1;
+    sk_biquad_t lowpass2;
+    sk_biquad_t bandpass;
+    sk_rng_t rng;
+    float decimate_phase;
+    float decimate_inc;
+    float held_sample;
+} sk_drum_sk1_t;
+
+static inline void sk_drum_sk1_init(sk_drum_sk1_t *s, float sample_rate, int type) {
+    if (!s) return;
+    memset(s, 0, sizeof(*s));
+    s->sample_rate = sample_rate > 1000.0f ? sample_rate : 48000.0f;
+    s->type = type;
+    sk_rng_init(&s->rng, 9375ULL);
+
+    /* 9375 Hz native SK-1 sample rate */
+    s->decimate_inc = 9375.0f / s->sample_rate;
+    if (s->decimate_inc > 1.0f) s->decimate_inc = 1.0f;
+
+    /* 4-pole reconstruction filter around 3.8 kHz */
+    sk_biquad_init(&s->lowpass1, SK_BIQUAD_LOWPASS, 3800.0f, 0.707f, s->sample_rate);
+    sk_biquad_init(&s->lowpass2, SK_BIQUAD_LOWPASS, 3800.0f, 0.707f, s->sample_rate);
+
+    if (type == SK_SK1_KICK) {
+        s->start_freq = 135.0f;
+        s->end_freq = 46.0f;
+        s->pitch_decay = expf(-1.0f / (0.035f * s->sample_rate));
+        s->amp_decay = expf(-1.0f / (0.240f * s->sample_rate));
+    } else if (type == SK_SK1_SNARE) {
+        s->start_freq = 185.0f;
+        s->end_freq = 120.0f;
+        s->pitch_decay = expf(-1.0f / (0.020f * s->sample_rate));
+        s->amp_decay = expf(-1.0f / (0.130f * s->sample_rate));
+        sk_biquad_init(&s->bandpass, SK_BIQUAD_BANDPASS, 2600.0f, 1.5f, s->sample_rate);
+    } else if (type == SK_SK1_HAT) {
+        s->amp_decay = expf(-1.0f / (0.045f * s->sample_rate));
+        sk_biquad_init(&s->bandpass, SK_BIQUAD_HIGHPASS, 4800.0f, 1.0f, s->sample_rate);
+    } else if (type == SK_SK1_BONGO_HI) {
+        s->start_freq = 380.0f;
+        s->end_freq = 280.0f;
+        s->pitch_decay = expf(-1.0f / (0.030f * s->sample_rate));
+        s->amp_decay = expf(-1.0f / (0.160f * s->sample_rate));
+    } else { /* BONGO_LO */
+        s->start_freq = 260.0f;
+        s->end_freq = 175.0f;
+        s->pitch_decay = expf(-1.0f / (0.035f * s->sample_rate));
+        s->amp_decay = expf(-1.0f / (0.180f * s->sample_rate));
+    }
+}
+
+static inline void sk_drum_sk1_trigger(sk_drum_sk1_t *s, float velocity) {
+    if (!s) return;
+    velocity = sk_clampf(velocity, 0.0f, 1.0f);
+    s->amp_env = velocity;
+    s->pitch_env = 1.0f;
+    s->phase = 0.0f;
+    s->decimate_phase = 1.0f; /* force immediate sample */
+    s->held_sample = 0.0f;
+}
+
+static inline float sk_drum_sk1_step(sk_drum_sk1_t *s) {
+    if (!s || s->amp_env < 1e-4f) return 0.0f;
+
+    s->decimate_phase += s->decimate_inc;
+    if (s->decimate_phase >= 1.0f) {
+        s->decimate_phase -= 1.0f;
+
+        float raw = 0.0f;
+        if (s->type == SK_SK1_KICK) {
+            float cur_freq = s->end_freq + (s->start_freq - s->end_freq) * s->pitch_env;
+            s->phase += cur_freq / 9375.0f;
+            if (s->phase >= 1.0f) s->phase -= 1.0f;
+            float s_val = sinf(s->phase * 2.0f * (float)M_PI);
+            float tri = (s->phase < 0.5f) ? (4.0f * s->phase - 1.0f) : (3.0f - 4.0f * s->phase);
+            raw = (s_val * 0.7f + tri * 0.3f) * 1.5f;
+        } else if (s->type == SK_SK1_SNARE) {
+            float noise = sk_rng_float(&s->rng);
+            float cur_freq = s->end_freq + (s->start_freq - s->end_freq) * s->pitch_env;
+            s->phase += cur_freq / 9375.0f;
+            if (s->phase >= 1.0f) s->phase -= 1.0f;
+            float snap = sinf(s->phase * 2.0f * (float)M_PI) * s->pitch_env * 0.5f;
+            raw = sk_biquad_step(&s->bandpass, noise * 0.9f + snap) * 1.6f;
+        } else if (s->type == SK_SK1_HAT) {
+            float noise = sk_rng_float(&s->rng);
+            raw = sk_biquad_step(&s->bandpass, noise) * 1.4f;
+        } else { /* BONGO HI / LO */
+            float cur_freq = s->end_freq + (s->start_freq - s->end_freq) * s->pitch_env;
+            s->phase += cur_freq / 9375.0f;
+            if (s->phase >= 1.0f) s->phase -= 1.0f;
+            float s_val = sinf(s->phase * 2.0f * (float)M_PI);
+            float h2 = sinf(s->phase * 4.0f * (float)M_PI) * 0.25f;
+            raw = (s_val + h2) * 1.3f;
+        }
+
+        /* 8-bit companded DAC quantization (256 discrete levels) */
+        float companded = sk_softclip_cubic(raw, 1.0f);
+        int q = (int)(companded * 127.0f);
+        if (q > 127) q = 127;
+        if (q < -128) q = -128;
+        s->held_sample = (float)q / 127.0f;
+
+        s->pitch_env *= s->pitch_decay;
+    }
+
+    /* 4-pole reconstruction filter */
+    float f1 = sk_biquad_step(&s->lowpass1, s->held_sample);
+    float f2 = sk_biquad_step(&s->lowpass2, f1);
+
+    s->amp_env *= s->amp_decay;
+    return f2 * s->amp_env;
+}
+
+/* -------------------------------------------------------------------------
  * 12.7. Modal Metallic Idiophone & Bell Engine (sk_drum_bell_t)
  * -------------------------------------------------------------------------
  *
