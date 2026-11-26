@@ -193,327 +193,331 @@ v17 w117 f440 a-3.5 p-.25
 y0 %1
 [CR-78 Kick] yt
 yl 16
-[v0] x0,6,10
+[v0 l.9] x0,6,10
 
 # Pattern 1: CR-78 Cross-Stick Rimshot (Steps 0, 3, 6, 10, 12)
 y1 %1
 [CR-78 Rimshot] yt
 yl 16
-[v3] x0,3,6,10,12
+[v3 l.8] x0,3,6,10,12
 
 # Pattern 2: CR-78 Closed Hat Pulse (Steps 0, 4, 8, 12)
 y2 %1
 [CR-78 Hat Pulse] yt
 yl 16
-[v5] x0,4,8,12
+[v5 l.6] x0,4,8,12
 
 # Pattern 3: CR-78 Claves (Son Clave: Steps 0, 3, 6, 10, 12)
 y3 %1
 [CR-78 Claves] yt
 yl 16
-[v11] x0,3,6,10,12
+[v11 l.8] x0,3,6,10,12
 
 # Pattern 4: CR-78 Congas (Low: 4, 11 and High: 2, 8, 14)
 y4 %1
 [CR-78 Congas] yt
 yl 16
-[v9] x4,11
-[v10] x2,8,14
+[v9 l.8] x4,11
+[v10 l.85] x2,8,14
 
 # Pattern 5: CR-78 16th Maracas Shaker
 y5 %1
 [CR-78 Maracas] yt
 yl 16
-[v13] x0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
+[v13 l.5] x0,1,2,3,4,5,6,7
+[v13 l.5] x8,9,10,11,12,13,14,15
 
 # Pattern 6: CR-78 Accent Crash
 y6 %1
 [CR-78 Crash] yt
 yl 16
-[v14] x0
+[v14 l.8] x0
 
 # --- STYLE 2: 1970s SPACE DISCO (1977-1979) ---
 # Pattern 10: 909 Four-on-the-Floor Kick (Steps 0, 4, 8, 12)
 y10 %1
 [Disco 4-on-Floor] yt
 yl 16
-[v1] x0,4,8,12
+[v1 l1] x0,4,8,12
 
 # Pattern 11: Disco Snare & Claps on 2 and 4 (Steps 4, 12)
 y11 %1
 [Disco Snare & Claps] yt
 yl 16
-[v2] x4,12
-[v4] x4,12
+[v2 l.85 v4 l.75] x4,12
 
 # Pattern 12: Disco 16th Hats + Offbeat Open Hat Sizzle (Steps 2, 6, 10, 14)
 y12 %1
 [Disco Hats & Offbeat] yt
 yl 16
-[v5] x0,1,3,4,5,7,8,9,11,12,13,15
-[v6] x2,6,10,14
+[v5 l.6] x0,1,3,4,5,7
+[v5 l.6] x8,9,11,12,13,15
+[v6 l.7] x2,6,10,14
 
 # Pattern 13: Disco Syncopated Claps
 y13 %1
 [Disco Sync Claps] yt
 yl 16
-[v4] x4,7,12,15
+[v4 l.8] x4,7,12,15
 
 # Pattern 14: Disco Toms Fill (Low & High)
 y14 %1
 [Disco Tom Fill] yt
 yl 16
-[v7] x14,15
-[v8] x12,13
+[v8 l.85] x12,13
+[v7 l.85] x14,15
 
 # Pattern 15: Disco Cowbell Syncopation (Steps 4, 7, 11, 14)
 y15 %1
 [Disco Cowbell] yt
 yl 16
-[v12] x4,7,11,14
+[v12 l.75] x4,7,11,14
 
 # Pattern 16: Disco Crash on Downbeat
 y16 %1
 [Disco Crash] yt
 yl 16
-[v14] x0
+[v14 l.8] x0
 
 # --- STYLE 3: ROLAND TR-808 ELECTRO HIP-HOP ("PLANET ROCK" 1982) ---
 # Pattern 20: 808 Booming Sub Kick Syncopation (Steps 0, 7, 10, 13)
 y20 %1
 [808 Electro Kick] yt
 yl 16
-[v0] x0,7,10,13
+[v0 l1] x0,7,10,13
 
 # Pattern 21: 808 Snappy Snare + Ghost Tap (Steps 4, 12, 15)
 y21 %1
 [808 Electro Snare] yt
 yl 16
-[v2] x4,12
-[v2 l.3] x15
+[v2 l.9] x4,12
+[v2 l.35] x15
 
 # Pattern 22: 808 16th Hi-Hats with Open Splash on 14
 y22 %1
 [808 Electro Hats] yt
 yl 16
-[v5] x0,1,2,3,4,5,6,7,8,9,10,11,12,13,15
-[v6] x14
+[v5 l.55] x0,1,2,3,4,5,6,7
+[v5 l.55] x8,9,10,11,12,13,15
+[v6 l.75] x14
 
 # Pattern 23: 808 Handclap Stabs on 4 and 12
 y23 %1
 [808 Electro Claps] yt
 yl 16
-[v4] x4,12
+[v4 l.85] x4,12
 
 # Pattern 24: 808 Tom Drop Fill
 y24 %1
 [808 Tom Drop] yt
 yl 16
-[v8] x8,10
-[v7] x12,14
+[v8 l.85] x8,10
+[v7 l.85] x12,14
 
 # Pattern 25: The Iconic 808 Cowbell Pattern (Steps 0, 3, 6, 8, 11, 14)
 y25 %1
 [808 Planet Rock Cowbell] yt
 yl 16
-[v12] x0,3,6,8,11,14
+[v12 l.8] x0,3,6,8,11,14
 
 # Pattern 26: 808 Crash Accent
 y26 %1
 [808 Electro Crash] yt
 yl 16
-[v14] x0
+[v14 l.8] x0
 
 # --- STYLE 4: 1983 LATIN ELECTRO FREESTYLE (SHANNON / MIAMI BASS) ---
 # Pattern 30: Freestyle Syncopated Kick (Steps 0, 3, 6, 10, 12)
 y30 %1
 [Freestyle Kick] yt
 yl 16
-[v0] x0,3,6,10,12
+[v0 l.95] x0,3,6,10,12
 
 # Pattern 31: Freestyle Snare & Rimshot (Snare on 4, 12 and Rimshot on 8, 14)
 y31 %1
 [Freestyle Snare/Rim] yt
 yl 16
-[v2] x4,12
-[v3] x8,14
+[v2 l.9] x4,12
+[v3 l.8] x8,14
 
 # Pattern 32: Freestyle Rapid 16th Hats with Accents
 y32 %1
 [Freestyle Hats] yt
 yl 16
-[v5] x0,1,2,3,4,5,6,7,8,9,10,11,12,13,15
-[v6] x6,14
+[v5 l.55] x0,1,2,3,4,5
+[v5 l.55] x7,8,9,10,11,12,13,15
+[v6 l.75] x6,14
 
 # Pattern 33: Freestyle Claps & Claves Counterpoint
 y33 %1
 [Freestyle Claps/Claves] yt
 yl 16
-[v4] x4,12
-[v11] x0,3,7,10
+[v4 l.85] x4,12
+[v11 l.8] x0,3,7,10
 
 # Pattern 34: Freestyle Conga Tumble (Low: 4, 11 and High: 2, 5, 8, 14)
 y34 %1
 [Freestyle Congas] yt
 yl 16
-[v9] x4,11
-[v10] x2,5,8,14
+[v9 l.8] x4,11
+[v10 l.85] x2,5,8,14
 
 # Pattern 35: Freestyle Maracas & Cowbell
 y35 %1
 [Freestyle Shaker/Bell] yt
 yl 16
-[v13] x0,2,4,6,8,10,12,14
-[v12] x2,8,11
+[v13 l.5] x0,4,6,10,12,14
+[v12 l.75] x8,11
+[v13 l.5 v12 l.75] x2
 
 # Pattern 36: Freestyle Crash Downbeat
 y36 %1
 [Freestyle Crash] yt
 yl 16
-[v14] x0
+[v14 l.8] x0
 
 # --- STYLE 5: 1984 80s SYNTH-POP / NEW WAVE (DEPECHE MODE / NEW ORDER) ---
 # Pattern 40: Driving 909 Synth-Pop Kick (Steps 0, 6, 8, 10, 12)
 y40 %1
 [Synth-Pop Kick] yt
 yl 16
-[v1] x0,6,8,10,12
+[v1 l1] x0,6,8,10,12
 
 # Pattern 41: Gated Snare + Handclap Layer (Steps 4, 12)
 y41 %1
 [Gated Snare/Clap] yt
 yl 16
-[v2] x4,12
-[v4] x4,12
+[v2 l.9 v4 l.8] x4,12
 
 # Pattern 42: Closed Hat 16ths
 y42 %1
 [Synth-Pop Closed Hat] yt
 yl 16
-[v5] x0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
+[v5 l.55] x0,1,2,3,4,5,6,7
+[v5 l.55] x8,9,10,11,12,13,14,15
 
 # Pattern 43: Analog Ride Cymbal Bell Ping (Quarter notes: 0, 4, 8, 12)
 y43 %1
 [Ride Bell Ping] yt
 yl 16
-[v15] x0,4,8,12
+[v15 l.85] x0,4,8,12
 
 # Pattern 44: Toms Fill (High & Low)
 y44 %1
 [Synth-Pop Tom Fill] yt
 yl 16
-[v8] x12,13
-[v7] x14,15
+[v8 l.85] x12,13
+[v7 l.85] x14,15
 
 # Pattern 45: 80s Laser Zap Fills (Steps 6, 14)
 y45 %1
 [Synth-Pop Laser Zap] yt
 yl 16
-[v17] x6,14
+[v17 l.8] x6,14
 
 # Pattern 46: Crash Cymbal Wash
 y46 %1
 [Synth-Pop Crash] yt
 yl 16
-[v14] x0
+[v14 l.8] x0
 
 # --- STYLE 6: 1981 SIMMONS SDS-V ELECTRONIC DISCO TOM SOLO ---
 # Pattern 50: Steady Four-on-the-Floor Kick Pulse (Steps 0, 4, 8, 12)
 y50 %1
 [Simmons Pulse Kick] yt
 yl 16
-[v1] x0,4,8,12
+[v1 l1] x0,4,8,12
 
 # Pattern 51: Snappy Snare + Rim Accent
 y51 %1
 [Simmons Snare/Rim] yt
 yl 16
-[v2] x4,12
-[v3] x14
+[v2 l.9] x4,12
+[v3 l.8] x14
 
 # Pattern 52: Open & Closed Hi-Hats
 y52 %1
 [Simmons Hats] yt
 yl 16
-[v5] x0,4,8,12
-[v6] x2,6,10,14
+[v5 l.6] x0,4,8,12
+[v6 l.75] x2,6,10,14
 
 # Pattern 53: Stereo Claps on 2 and 4
 y53 %1
 [Simmons Claps] yt
 yl 16
-[v4] x4,12
+[v4 l.85] x4,12
 
 # Pattern 54: Iconic Simmons SDS-V Pitch-Diving Tom Fills (Steps 2, 5, 8, 11, 14, 15)
 y54 %1
 [Simmons Disco Toms] yt
 yl 16
-[v16] x2,5,8,11,14,15
+[v16 l.95] x2,5,8,11,14,15
 
 # Pattern 55: Space Laser Zaps (Steps 6, 14)
 y55 %1
 [Simmons Lasers] yt
 yl 16
-[v17] x6,14
+[v17 l.85] x6,14
 
 # Pattern 56: Crash Accent
 y56 %1
 [Simmons Crash] yt
 yl 16
-[v14] x0
+[v14 l.8] x0
 
 # --- STYLE 7: 1985 WASHINGTON D.C. GO-GO & BOOGIE FUNK ---
 # Pattern 60: Go-Go Bounce Kick (Steps 0, 6, 10, 14)
 y60 %1
 [Go-Go Kick] yt
 yl 16
-[v0] x0,6,10,14
+[v0 l1] x0,6,10,14
 
 # Pattern 61: Go-Go Snare Double Crack (Steps 4, 7, 12)
 y61 %1
 [Go-Go Snare] yt
 yl 16
-[v2] x4,7,12
+[v2 l.9] x4,7,12
 
 # Pattern 62: Go-Go Hats (Open sizzle on 8, 15)
 y62 %1
 [Go-Go Hats] yt
 yl 16
-[v5] x0,2,4,6,10,12,14
-[v6] x8,15
+[v5 l.6] x0,2,4,6,10,12,14
+[v6 l.75] x8,15
 
 # Pattern 63: Go-Go Claps & Claves
 y63 %1
 [Go-Go Claps/Claves] yt
 yl 16
-[v4] x4,12
-[v11] x2,8,14
+[v4 l.85] x4,12
+[v11 l.8] x2,8,14
 
 # Pattern 64: Go-Go Conga Groove (Low: 4, 10 and High: 2, 6, 8, 14)
 y64 %1
 [Go-Go Congas] yt
 yl 16
-[v9] x4,10
-[v10] x2,6,8,14
+[v9 l.8] x4,10
+[v10 l.85] x2,6,8,14
 
 # Pattern 65: Relentless Funky 808 Cowbell (Steps 0, 2, 4, 6, 8, 10, 12, 14)
 y65 %1
 [Go-Go Funky Cowbell] yt
 yl 16
-[v12] x0,2,4,6,8,10,12,14
+[v12 l.8] x0,2,4,6,8,10,12,14
 
 # Pattern 66: Crash Cymbal Accent
 y66 %1
 [Go-Go Crash] yt
 yl 16
-[v14] x0
+[v14 l.8] x0
 
 # --- MASTER CONDUCTOR PATTERN ---
 # Pattern 127: Master Conductor Lane (Advances measures & scenes)
 y127 %1
 [Master Conductor] yt
 yl 16
-[v0] x15 yp127
+[-] x15 yp127
 
 # ----------------------------------------------------------------------
 # 4. SCENE MATRIX & ARRANGER DEFINITION
