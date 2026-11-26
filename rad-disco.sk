@@ -9,15 +9,15 @@
 # ======================================================================
 
 [RAD DISCO - "I FEEL LOVE" PROCEDURAL MORODER SHOWCASE] puts
-V -12.0
+V -3.0
 M 126 16
 
 # ----------------------------------------------------------------------
 # PROCEDURAL DRUM SYNTHESIS ([drum:xxx] gen!)
 # Synthesizes analog circuits directly into wavetable slots 100..104
 # ----------------------------------------------------------------------
-# Slot 100: Punchy 909-style disco kick with warm sub drop & beater click
-[drum:kick p:155 end:45 d:0.36 c:0.35 drive:1.5] 100 gen!
+# Slot 100: Punchy 909-style disco kick with warm sub drop & beater click (clean headroom)
+[drum:kick p:155 end:45 d:0.36 c:0.35 drive:0.2] 100 gen!
 [Kick 909] wt 100
 
 # Slot 101: Resonant electro snare with dual body modes & crisp wire snap
@@ -143,22 +143,26 @@ v13 G14 H14
 
 # Pattern 0: Four-on-the-Floor Kick + Sub-Weight
 y0 %1
+[Kick 4-on-Floor] yt
 yl 16
 [v0 l1 v5 g0 n48 g.06 n24 l1] x0,4,8,12
 
 # Pattern 1: Disco Snare on 2 and 4 (Steps 4 and 12)
 y1 %1
+[Snare & Claps] yt
 yl 16
 [v1 l.5] x4,12
 
 # Pattern 2: Sizzling 16th Closed Hats with Disco Dynamics
 y2 %1
+[16th Closed Hats] yt
 yl 16
 [v2 l.38] x0,2,4,6,8,10,12,14
 [v2 l.22] x1,3,5,7,9,11,13,15
 
 # Pattern 3: The Hypnotic Octave Gallop Bass (Pulls dynamically via i&0)
 y3 %1
+[Moroder Octave Bass] yt
 yl 16
 [v6 i&0] x0,1,2,3,4,5,6,7
 [v6 i&0] x8,9,10,11,12,13,14,15
@@ -166,45 +170,53 @@ yl 16
 # Pattern 4: Kick Climax Variation (Accented syncopated kicks)
 0 4 ycp
 4 y
+[Kick Climax Accents] yt
 [v0 l1 v5 g0 n48 g.06 n24 l1] x0,4,8,10,12,14
 
 # Pattern 5: Snare Roll Fill (Climax builds into downbeat)
 1 5 ycp
 5 y
+[Snare Roll Fill] yt
 [v1 l.5] x4,12
 [v1 l.35] x13,14,15
 
 # Pattern 6: 16th Shimmer Arpeggio (Pulls from Stream 3 via i&3)
 y6 %1
+[16th Shimmer Arp] yt
 yl 16
 [v11 i&3] x0,1,2,3,4,5,6,7
 [v11 i&3] x8,9,10,11,12,13,14,15
 
 # Pattern 7: Soaring Anthem Lead (Pulls from Stream 2 via i&2 with ties & rests)
 y7 %1
+[Donna Anthem Lead] yt
 yl 16
 [v13 i&2] x0,1,2,3,4,5,6,7
 [v13 i&2] x8,9,10,11,12,13,14,15
 
 # Pattern 8: Funky Syncopated Bass Variation (Pulls from Stream 1 via i&1)
 y8 %1
+[Syncopated Bass] yt
 yl 16
 [v6 i&1] x0,1,2,3,4,5,6,7
 [v6 i&1] x8,9,10,11,12,13,14,15
 
 # Pattern 9: Open Hi-Hat Offbeat Sizzle (Classic Disco Lift on the '&' of each beat)
 y9 %1
+[Offbeat Open Hat] yt
 yl 16
 [v3 l.55] x2,6,10,14
 
 # Pattern 10: Climax Open Hats + Stereo Claps on 2 and 4
 y10 %1
+[Open Hat & Claps] yt
 yl 16
 [v3 l.55] x2,6,10,14
 [v4 l.7] x4,12
 
 # Pattern 127: The Master Conductor (16 steps per bar)
 y127 %1
+[Arranger Conductor] yt
 yl 16
 [v0] x15 yp127
 
@@ -311,7 +323,7 @@ yl 16
 # PLAYBACK CONTROLS
 # ----------------------------------------------------------------------
 # The classic play macro launches the full automated arrangement from Scene 0
-[play] : ?ce! /cer 1 Z0 Z! scene_now 0 ;
+[play] : Z0 Z! scene_now 0 ;
 
 # Display startup guide
 [--- RAD DISCO SCENE ROSTER ---] puts

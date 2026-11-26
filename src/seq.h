@@ -151,6 +151,7 @@ void seq_pattern_hz_set(int pattern, float hz);
 void seq_scene_define(int scene_id, const int *patterns, int count);
 void seq_scene_cue(int scene_id);
 void seq_scene_now(int scene_id);
+void seq_scene_stop(void);
 int seq_scene_active_get(void);
 int seq_scene_pattern_get(int scene_id, int lane);
 

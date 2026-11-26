@@ -11,10 +11,10 @@ Usage: stop
 @code
     (void)args; (void)argc;
     seq_state_all(SEQ_STOPPED);
+    seq_scene_stop();
     skode_exec_O(ctx, s, NULL, 0);
     skode_exec_DQ(ctx, s, NULL, 0);
-    skode_exec_qce_bang(ctx, s, NULL, 0);
-    double zero = 0.0;
-    skode_exec_slashcer(ctx, s, &zero, 1);
+    skred_control_event_clear();
+    skred_control_response_set_enabled(0);
     return 0;
 @end

@@ -321,7 +321,16 @@ void do_pattern(uint64_t now,
             scene_trigger = (step0 == 0);
           }
         } else {
-          scene_trigger = (master_tick % 16 == 0);
+          int any_running = 0;
+          for (int p = 0; p < PATTERNS_MAX; p++) {
+            if (seq_state[p] == SEQ_RUNNING) {
+              any_running = 1;
+              break;
+            }
+          }
+          if (any_running) {
+            scene_trigger = (master_tick % 16 == 0);
+          }
         }
         if (scene_trigger) {
           if (seq_pending_scene >= 0) {
@@ -899,6 +908,14 @@ void seq_state_all(int state) {
   for (int p = 0; p < PATTERNS_MAX; p++) {
     seq_state_set_locked(p, state);
   }
+  if (state == SEQ_STOPPED) {
+    seq_active_scene = -1;
+    seq_pending_scene = -1;
+    seq_scene_loop_counter = 0;
+    for (int l = 0; l < SCENE_LANES; l++) {
+      seq_lane_pattern[l] = -1;
+    }
+  }
   seq_edit_unlock();
 }
 
@@ -1010,6 +1027,17 @@ void seq_scene_now(int scene_id) {
   if (scene_id < 0 || scene_id >= SCENE_MAX) return;
   seq_edit_lock();
   seq_scene_apply_locked(scene_id, SAMPLE_COUNT_GET());
+  seq_edit_unlock();
+}
+
+void seq_scene_stop(void) {
+  seq_edit_lock();
+  seq_active_scene = -1;
+  seq_pending_scene = -1;
+  seq_scene_loop_counter = 0;
+  for (int l = 0; l < SCENE_LANES; l++) {
+    seq_lane_pattern[l] = -1;
+  }
   seq_edit_unlock();
 }
 
