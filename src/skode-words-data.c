@@ -26,6 +26,11 @@ static int word_exec_n_gtd(const skode_word_t *self, skode_t *ctx, ands_t *s, do
   while (*p && note_count < 1024) {
     while (*p && (isspace((unsigned char)*p) || *p == ',')) p++;
     if (!*p) break;
+
+    if (*p == '#') {
+      while (*p && *p != '\n' && *p != '\r') p++;
+      continue;
+    }
     
     int is_slur = 0;
     if ((*p == '~' || *p == '/' || *p == '\\') &&

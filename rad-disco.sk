@@ -1,86 +1,89 @@
 # ======================================================================
 #  RAD DISCO ("I Feel Love" Giorgio Moroder Space-Disco Vibe)
-#  126 BPM, C Major/Modal, Hypnotic PolyBLEP Octave Bass & Floating Lead
+#  126 BPM, C Modal (C -> Eb -> F -> C), PolyBLEP Saw + Pulse PWM Bass
 # ======================================================================
 
 [RAD DISCO - "I FEEL LOVE" MORODER DISCO VIBES] puts
-V -7.0
+V -12.0
 M 126 16
 
 # ----------------------------------------------------------------------
 # DELAY BUSES (Tempo-synced to 126 BPM)
 # ----------------------------------------------------------------------
-# Bus 1: The Iconic Moroder 16th Ping-Pong Gallop Delay
+# Bus 1: The Iconic Moroder 16th Ping-Pong Gallop Delay (Dedicated to Bass & Arp)
 DS 1 126 .25
-DL 1 - - 7 2 2 10
-DD 1 6 3
+DL 1 - - 5 2 2 8
+DD 1 5 3
 DP 1 1
 
 # Bus 2: Dotted-Eighth Floating Space Echo for Donna Summer Lead
 DS 2 126 .75
-DL 2 - - 8 3 3 11
-DD 2 7 3
+DL 2 - - 6 3 3 8
+DD 2 6 3
 DP 2 1
 
 # ----------------------------------------------------------------------
 # SYNTHESIS VOICES
 # ----------------------------------------------------------------------
-# DRUMS (Munich Disco Kit)
-v0 w82 f440 a6.0 p0                          # 4-on-the-floor punch kick
-v1 w83 f440 a6.0 r1 p0 ds.25                 # Crisp disco snare
-v2 w84 f440 a-3.5 p.2                        # 16th closed hi-hat
-v3 w85 f440 a-1.5 p-.25                      # Sizzling offbeat open hi-hat
-v4 w86 f440 a5.5 r1 p0 ds.3                  # Wide stereo disco clap
-v5 w0 a-2.0 p0 t.002,.28,0,.08 j1 k180 q.8   # Sub kick weight (sine pitch drop)
+# DRUMS (Clean Munich Disco Kit - No Overdrive, Pristine Headroom)
+v0 w82 f440 a-1.5 p0                          # 4-on-the-floor punch kick
+v1 w83 f440 a-3.5 p0                          # Crisp disco snare (dry, no bus 1 delay)
+v2 w84 f440 a-8.0 p.25                        # Subtle 16th closed hi-hat
+v3 w85 f440 a-6.0 p-.25                       # Sizzling offbeat open hi-hat
+v4 w86 f440 a-4.0 p0                          # Wide stereo disco clap
+v5 w0 a-6.0 p0 t.002,.20,0,.05 j1 k140 q.7    # Sub kick weight (clean sine pitch drop)
 
-# BASS: The Authentic Moroder Modular Moog Bass
-# Voice 6: PolyBLEP Saw Up (w3) -> Driven 24dB ladder filter + resonance
-v6 w3 a-2.5 p0 t.002,.12,.1,.04 j1,1 k520 q3.8 ft.001,.10,0,.04 fd2400 c4,.35 r1 ds.35
+# BASS: The Authentic Moroder Moog Modular Bass
+# Layer 1 (Voice 6): PolyBLEP Saw (w2) -> 24dB Moog ladder lowpass, punchy pluck
+v6 w2 a-4.5 p0 t.002,.11,0,.03 j1,1 k260 q2.2 ft.001,.09,0,.03 fd600 r1 ds.25
 v6 >7
-# Voice 7: PolyBLEP Pulse (w1) with active PWM envelope modulation
-v7 w1 a-4.5 N0,5 p0 pw 0.35 pwt .005,.12,.2,.06 pwd 0.25 r1 ds.35
+# Layer 2 (Voice 7): PolyBLEP Pulse (w1) with active PWM modulation
+v7 w1 a-6.5 p0 pw 0.38 pwt .01,.14,.2,.05 pwd 0.15 j1 k280 q1.8 ft.001,.09,0,.03 fd500 r1 ds.20
+# Slave Voice 7 trigger and pitch to Voice 6
 v6 G7 H7
 
 # SHIMMER ARPEGGIATOR: Roland Jupiter / Odyssey 16th Pulse
-v11 w1 a-8.0 p-.35 pw 0.25 t.002,.10,0,.04 j1 k3400 q2.0 r1 ds.35
+v11 w1 a-12.0 p-.35 pw 0.25 t.002,.10,0,.03 j1 k2600 q1.5 r1 ds.25
 
-# LEAD: Soaring "Donna Summer" Anthem Lead
-# Detuned dual-saw with slow lush attack, filter swell, and space delay
-v13 w3 a-7.0 p0 t.008,.35,.5,.20 j1,1 k4400 q1.5 c4,.25 ct.002,.25,0,.15 cd.3 r2 ds.4
+# LEAD: Soaring "Donna Summer" Anthem Lead Hook
+# Dual detuned PolyBLEP saw with smooth attack and space delay
+v13 w2 a-8.5 p.1 t.015,.35,.6,.25 j1 k3200 q1.2 r2 ds.35
 v13 >14
-v14 w2 a-9.0 p-.5 N0,7 r0
+v14 w2 a-10.5 p-.2 N0,6 r0
 v13 G14 H14
 
 # ----------------------------------------------------------------------
 # NOTE STREAMS (Using /SS with rest '-', tie '.', and slur '~' options)
 # ----------------------------------------------------------------------
-# Stream 0: The Hypnotic 4-Bar Octave Gallop (C -> Eb -> F -> C)
-# Playing with i&0 handles attacks on notes, ties on '.', and releases on '-'
+
+# Stream 0: The Hypnotic 4-Bar Octave Bass (C -> Eb -> F -> C, 64 steps)
+# Played via i&0 on every 16th step. Rest '-' on step 15 gives rhythmic breath.
 [
-  # Bar 1: C major gallop
-  C2 C3 . C2  . C3 . C2  C2 C3 . C2  . C3 C2 -
-  # Bar 2: Eb major gallop
-  Eb2 Eb3 . Eb2  . Eb3 . Eb2  Eb2 Eb3 . Eb2  . Eb3 Eb2 -
-  # Bar 3: F major gallop
-  F2 F3 . F2  . F3 . F2  F2 F3 . F2  . F3 F2 -
-  # Bar 4: C major return
-  C2 C3 . C2  . C3 . C2  C2 C3 . C2  . C3 C2 -
+  # Bar 1: C octave pulse
+  C2 C3 C2 C3  C2 C3 C2 C3  C2 C3 C2 C3  C2 C3 C2 -
+  # Bar 2: Eb octave pulse
+  Eb2 Eb3 Eb2 Eb3  Eb2 Eb3 Eb2 Eb3  Eb2 Eb3 Eb2 Eb3  Eb2 Eb3 Eb2 -
+  # Bar 3: F octave pulse
+  F2 F3 F2 F3  F2 F3 F2 F3  F2 F3 F2 F3  F2 F3 F2 -
+  # Bar 4: C octave return
+  C2 C3 C2 C3  C2 C3 C2 C3  C2 C3 C2 C3  C2 C3 C2 -
 ] n>d /SS 0
 
-# Stream 1: Funky Syncopated Bass Variation with Legato Slurs
+# Stream 1: Syncopated Bass Variation with Ties '.' and Rests '-' (64 steps)
+# Ties sustain previous pitch without re-triggering attack envelope.
 [
-  # Bar 1: C syncopated
-  C2 . C3 C2  . C3 C2 .  C2 C3 . C2  ~D2 ~Eb2 C2 -
-  # Bar 2: Eb syncopated
-  Eb2 . Eb3 Eb2  . Eb3 Eb2 .  Eb2 Eb3 . Eb2  ~F2 ~G2 Eb2 -
-  # Bar 3: F syncopated
-  F2 . F3 F2  . F3 F2 .  F2 F3 . F2  ~G2 ~Ab2 F2 -
+  # Bar 1: C syncopated bounce
+  C2 C3 . C2  . C3 C2 .  C2 C3 . C2  . C3 C2 -
+  # Bar 2: Eb syncopated bounce
+  Eb2 Eb3 . Eb2  . Eb3 Eb2 .  Eb2 Eb3 . Eb2  . Eb3 Eb2 -
+  # Bar 3: F syncopated bounce
+  F2 F3 . F2  . F3 F2 .  F2 F3 . F2  . F3 F2 -
   # Bar 4: C turnaround
-  C2 . C3 C2  . C3 C2 .  Bb1 . G1 .  C2 C3 C2 -
+  C2 C3 . C2  . C3 C2 .  C2 C3 . C2  . C3 C2 -
 ] n>d /SS 1
 
-# Stream 2: Soaring Floating Anthem Lead Hook (4-Bar Donna Summer Phrase)
-# Long expressive held notes using ties '.' over the galloping bass
+# Stream 2: Soaring Floating Anthem Lead Hook (4-Bar Donna Summer Phrase, 64 steps)
+# Uses sustained ties '.' across 16ths and rests '-' for breathing pauses.
 [
   # Bar 1 (over C): "Ooooh..."
   G4 . . .  C5 . . .  G4 . . -  E4 . . -
@@ -92,9 +95,16 @@ v13 G14 H14
   G4 . E4 .  C5 . . .  G4 . . -  - - - -
 ] n>d /SS 2
 
-# Stream 3: 16th Shimmer Arp Notes
+# Stream 3: 16th Shimmer Arp Notes (4-Bar Locked Harmonic Progression, 64 steps)
 [
-  C4 E4 G4 C5  Eb4 G4 Bb4 Eb5  F4 A4 C5 F5  E4 G4 C5 E5
+  # Bar 1 (C shimmer)
+  C4 G4 C5 G4  C4 G4 C5 G4  C4 G4 C5 G4  C4 G4 C5 G4
+  # Bar 2 (Eb shimmer)
+  Eb4 Bb4 Eb5 Bb4  Eb4 Bb4 Eb5 Bb4  Eb4 Bb4 Eb5 Bb4  Eb4 Bb4 Eb5 Bb4
+  # Bar 3 (F shimmer)
+  F4 C5 F5 C5  F4 C5 F5 C5  F4 C5 F5 C5  F4 C5 F5 C5
+  # Bar 4 (C shimmer)
+  C4 G4 C5 G4  C4 G4 C5 G4  C4 G4 C5 G4  C4 G4 C5 G4
 ] n>d /SS 3
 
 # ----------------------------------------------------------------------
@@ -106,7 +116,7 @@ y0 %1
 yl 16
 [v0 l1 v5 g0 n48 g.06 n24 l1] x0,4,8,12
 
-# Pattern 1: Disco Snare on 2 and 4 + Claps
+# Pattern 1: Disco Snare & Claps on 2 and 4 (Steps 4 and 12)
 y1 %1
 yl 16
 [v1 l.5 v4 l.7] x4,12
@@ -184,22 +194,21 @@ yl 16
 # ----------------------------------------------------------------------
 # PRECOMPILED REALTIME MACROS (Instant e! trigger)
 # ----------------------------------------------------------------------
-# Slot 0: Big crash / kick accent on downbeat
-[v0 a6.5 n36 v1 a6.0] e> 0
+# Slot 0: Accent kick on downbeat
+[v0 a-0.5 n36] e> 0
 
-# Slot 1: Filter sweep / breakdown on bass (muffled)
-[v6 k200] e> 1
+# Slot 1: Filter sweep / breakdown on bass (muffled warm pulse)
+[v6 k180] e> 1
 
 # Slot 2: Filter sweep / open up (bright and sizzling)
-[v6 k750] e> 2
+[v6 k550] e> 2
 
 # Slot 3: Reset bass filter to standard punch
-[v6 k520] e> 3
+[v6 k260] e> 3
 
 # === PLAYBACK CONTROLS ===
-[play] : ?ce! /cer 1 Z0 Z! scene_now 0 ;
-[stop] : /cer 0 Z0 O DQ ?ce! ;
+[start_disco] : ?ce! /cer 1 Z0 Z! scene_now 0 ;
 
-[RAD DISCO READY - Type 'play' to launch the automated "I Feel Love" arrangement!] puts
+[RAD DISCO READY - Type 'start_disco' or 'play' to launch the automated "I Feel Love" arrangement!] puts
 [Commands: scene_cue 0 (hypnotic bass), scene_cue 1 (anthem), scene_cue 2 (climax)] puts
 [Live tweaks: 0 4 ycp (re-clone kick), e! 1 (muffled filter drop), e! 2 (filter open sweep)] puts
