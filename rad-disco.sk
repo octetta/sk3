@@ -85,16 +85,16 @@ v7 w1 a-6.0 p0 pw 0.40 pwt .01,.14,.2,.04 pwd 0.18 j1 k320 q2.0 ft.001,.08,0,.02
 # Slave Voice 7 trigger and pitch to Voice 6
 v6 G7 H7
 
-# SHIMMER ARPEGGIATOR: Roland Jupiter / Odyssey 16th Pulse
-v11 w1 a-12.0 p-.35 pw 0.25 t.002,.10,0,.03 j1 k2600 q1.5 r1 ds.25
+# SHIMMER ARPEGGIATOR: Roland Jupiter / Odyssey 16th Pulse (Bright, cutting shimmer)
+v11 w1 a-6.5 p-.40 pw 0.28 t.002,.10,0,.03 j1 k3800 q2.2 r1 ds.35
 [Shimmer Arp] vt
 
-# LEAD: Soaring "Donna Summer" Ethereal Lead Hook
-# Velvety filtered PolyBLEP saw with singing attack, backed by a warm detuned triangle
-v13 w2 a-9.0 p.1 t.03,.30,.7,.25 j1,1 k1600 q1.2 r2 ds.35
+# LEAD: Soaring "Donna Summer" Ethereal Lead Hook (Smooth singing glide, gentle in the mix)
+# Velvety filtered PolyBLEP saw with vocal portamento, backed by warm detuned triangle
+v13 w2 a-14.0 p.15 t.04,.35,.6,.25 g.075 j1,1 k1500 q1.0 r2 ds.40
 [Donna Lead Main] vt
 v13 >14
-v14 w4 a-11.0 p-.15 t.03,.30,.7,.25 j1 k1400 q1.0 N0,4 r2 ds.25
+v14 w4 a-16.5 p-.15 t.04,.35,.6,.25 g.075 j1 k1300 q0.8 N0,4 r2 ds.30
 [Donna Lead Detune] vt
 v13 G14 H14
 
