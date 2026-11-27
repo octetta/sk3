@@ -2,23 +2,25 @@
 #  SK3 VINTAGE ANALOG SYNTHESIS SUITE (SCENE-BASED SYNTH SHOWCASE)
 #  File: gen-synth-demo.sk
 #
-#  Featuring 4 Iconic Hardware Synthesizer Architectures:
+#  Featuring 5 Iconic Hardware Synthesizer Architectures:
 #    Scene 0: scene_moog_bass  (Minimoog Model D 1970 3-Oscillator Analog Bass)
 #    Scene 1: scene_prophet    (Sequential Prophet-5 1978 Hard Sync & Curtis Brass)
 #    Scene 2: scene_korg       (Korg MS20 1978 Dual Screamer Filter & Ring Mod)
 #    Scene 3: scene_jupiter    (Roland Jupiter-8 1981 Stereo Dual-Osc Arpeggio)
+#    Scene 4: scene_casio_cz   (Casio CZ-101 1984 Phase Distortion DCW Reso-Synth)
 #
 #  100% Native Synth Engine DSP:
 #    - Band-limited PolyBLEP oscillators (Saw, Pulse, Triangle)
+#    - Casio CZ Phase Distortion synthesis (c 1..8, ct DCW envelope, cd depth)
 #    - Oscillator hard-sync master-slave phase alignment (HS)
 #    - Hardware-accurate Pulse-Width Modulation (pw, pwt, pwd, PW)
 #    - Multimode ladder lowpass with screamer & driven characters (j1 0, j1 1, j1 2)
 #    - Analog cubic soft-clipping saturation drive (jd)
-#    - Cross-domain ADSR envelopes across amp (t), pitch (pt/pd), filter (kt/kd), PWM (pwt/pwd)
+#    - Cross-domain ADSR envelopes across amp (t), pitch (pt/pd), filter (kt/kd), PWM (pwt/pwd), CZ (ct/cd)
 #    - Audio-rate ring modulation (XM)
 #    - Analog glissando portamento (g)
 #    - Tempo-synced ping-pong stereo space echo (DS/DL/DD/DP)
-#    - Real-time control plane downbeat scene triggers (ce0..ce3)
+#    - Real-time control plane downbeat scene triggers (ce0..ce4)
 # ======================================================================
 
 [===============================================================] puts
@@ -153,6 +155,24 @@ v13 w1 pw 0.42 N0,6 p.45 a-5.5 t.003,.24,.40,.12 j1,0 k680 q2.2 kt.003,.26,.25,.
 v14 w4 N-12,0 p0 a-6.5 t.003,.30,.55,.12 j1,0 k380 q1.0
 [Jupiter-8 Sub Center] vt
 
+# ======================================================================
+# STYLE 5: CASIO CZ-101 / CZ-1 PHASE DISTORTION SYNTHESIS (Voices 15..17)
+# ======================================================================
+# Line 1 Saw Voice (Voice 15): Sine carrier distorted into saw with snappy DCW envelope
+# Slaves Voices 16 & 17 via G16,17 H16,17
+v15 w0 a-4.0 p-.20 c 1 0.15 ct .004,.28,.20,.08 cd 0.75 t.003,.30,.40,.08 g0.025
+v15 G16,17 H16,17
+[CZ-101 Line 1 Saw] vt
+
+# Line 2 Resonant Saw Voice (Voice 16): Sine carrier distorted into Resonant 1 wave
+# Detuned +5 cents (N0,5) for lush dual-line beating and subtle stereo delay send (ds 0.22)
+v16 w0 a-4.5 p.20 N0,5 c 6 0.10 ct .004,.25,.15,.08 cd 0.85 t.003,.30,.40,.08 g0.025 ds 0.22
+[CZ-101 Line 2 Reso] vt
+
+# Sub-Octave Square Voice (Voice 17): Folded sine into square (c 2), 1 octave down
+v17 w0 a-5.0 p0 N-12,0 c 2 0.20 ct .004,.32,.45,.10 cd 0.60 t.003,.32,.50,.10
+[CZ-101 Sub Square] vt
+
 # ----------------------------------------------------------------------
 # 4. 4-BAR NOTE STREAMS (/SS 0..3)
 # ----------------------------------------------------------------------
@@ -203,6 +223,21 @@ v14 w4 N-12,0 p0 a-6.5 t.003,.30,.55,.12 j1,0 k380 q1.0
   Bb2 F3 Bb3 D4  F4 D4 Bb3 F3  Bb2 F3 Bb3 D4  F4 D4 Bb3 F3
   G2 D3 G3 Bb3  D4 Bb3 G3 D3  G3 Bb3 D4 G4  D4 Bb3 G3 -
 ] n>d /SS 3
+
+# Stream 4: Casio CZ-101 Vince Clarke / Synthpop Resonant Hook (A Minor, 64 steps)
+[
+  # Bar 1: Punchy digital CZ bass riff with snappy octave bounces
+  A2 . A3 .  . A2 C3 .  D3 . Eb3 E3  . G3 A2 .
+
+  # Bar 2: Resonant filter sweep accent turnaround
+  A2 . A3 .  . A2 C3 .  D3 . E3 G3   . A3 G3 E3
+
+  # Bar 3: Syncopated driving rhythm
+  A2 . A3 .  . A2 C3 .  D3 . Eb3 E3  . G3 A2 .
+
+  # Bar 4: Harmonic turnaround with rising resonant lead accent
+  F2 . F3 .  G2 . G3 .  A3 . C4 B3   . G3 E2 -
+] n>d /SS 4
 
 # ----------------------------------------------------------------------
 # 5. STEP SEQUENCER PATTERNS
@@ -301,6 +336,30 @@ y127 %1
 yl 64
 [ce3] x0
 
+# --- SCENE 4 PATTERNS: CASIO CZ-101 PHASE DISTORTION ---
+y40 %1
+[Casio CZ Reso-Bass] yt
+yl 16
+[v15 i&4] x0,1,2,3,4,5,6,7
+[v15 i&4] x8,9,10,11,12,13,14,15
+
+y41 %1
+[CZ Electro Kick] yt
+yl 16
+[v10 l1.0] x0,3,6,10,12
+
+y42 %1
+[CZ Crisp Snare & Hats] yt
+yl 16
+[v9 l.90] x4,12
+[v11 l.42] x0,2,4,6,8,10,12,14
+[v11 l.25] x1,3,5,7,9,11,13,15
+
+y128 %1
+[Conductor Scene 4] yt
+yl 64
+[ce4] x0
+
 # ----------------------------------------------------------------------
 # 6. CONTROL PLANE DISPATCHER & REAL-TIME CLI CONSOLE BANNERS
 # ----------------------------------------------------------------------
@@ -310,25 +369,27 @@ yl 64
 # Disable master pattern sync locking so 4-bar scenes advance smoothly
 yp -1
 
-# Responder macros triggered by control plane events (ce0..ce3) on scene start
+# Responder macros triggered by control plane events (ce0..ce4) on scene start
 [scene_moog_puts] : [>>> SCENE 0: MINIMOOG MODEL D (3-Osc Bass + Driven Ladder + Portamento) <<<] puts ;
 [scene_prophet_puts] : [>>> SCENE 1: SEQUENTIAL PROPHET-5 (Iconic Curtis CEM3320 Poly-Brass Chords) <<<] puts ;
 [scene_korg_puts] : [>>> SCENE 2: EARLY KORG MS20 (Dual VCO Screamer 35 Filter & Hot Analog Drive) <<<] puts ;
 [scene_jupiter_puts] : [>>> SCENE 3: ROLAND JUPITER-8 (Lush Stereo Arpeggio + Roland Space Echo) <<<] puts ;
+[scene_cz_puts] : [>>> SCENE 4: CASIO CZ-101 (Phase Distortion DCW Resonant Synthesis) <<<] puts ;
 
-# Bind responders to user control event IDs 0..3
+# Bind responders to user control event IDs 0..4
 [scene_moog_puts]    /ceb 4 0
 [scene_prophet_puts] /ceb 4 1
 [scene_korg_puts]    /ceb 4 2
 [scene_jupiter_puts] /ceb 4 3
+[scene_cz_puts]      /ceb 4 4
 
 # ----------------------------------------------------------------------
 # 7. SCENE DEFINITIONS & AUTOMATED PROGRESSION
 # Lanes:
-#   Lane 0: Synth Lead/Bass Track (y0 / y10 / y20 / y30)
-#   Lane 1: Kick Drum Track (y1 / y11 / y21 / y31)
-#   Lane 2: Snare / Hats Track (y2 / y12 / y22 / y32)
-#   Lane 7: Master Conductor Pattern (y124 / y125 / y126 / y127)
+#   Lane 0: Synth Lead/Bass Track (y0 / y10 / y20 / y30 / y40)
+#   Lane 1: Kick Drum Track (y1 / y11 / y21 / y31 / y41)
+#   Lane 2: Snare / Hats Track (y2 / y12 / y22 / y32 / y42)
+#   Lane 7: Master Conductor Pattern (y124 / y125 / y126 / y127 / y128)
 # ----------------------------------------------------------------------
 
 # Scene 0: Minimoog Model D 3-Oscillator Analog Bass Showcase
@@ -343,11 +404,15 @@ yp -1
 # Scene 3: Roland Jupiter-8 Stereo Dual-Osc Arpeggiator & Delay
 ( 30 31 32 -1 -1 -1 -1 127 ) scene_define 3
 
+# Scene 4: Casio CZ-101 Phase Distortion Resonant Synthesis
+( 40 41 42 -1 -1 -1 -1 128 ) scene_define 4
+
 # Automated 4-bar scene progression cycle:
 0 4 1 scene_chain
 1 4 2 scene_chain
 2 4 3 scene_chain
-3 4 0 scene_chain
+3 4 4 scene_chain
+4 4 0 scene_chain
 
 # ----------------------------------------------------------------------
 # 8. PERFORMANCE MACROS & REALTIME PARAMETER TWEAKS
@@ -375,6 +440,13 @@ yp -1
 [pwm_wide] : v1 pwd 0.40 PW 3 0.35 [PWM: Wide Sweeping Chorus] puts ;
 [pwm_subtle] : v1 pwd 0.15 PW 3 0.10 [PWM: Subtle Organic Movement] puts ;
 
+# Casio CZ Phase Distortion Tweaks
+[cz_bright] : v15 cd 0.95 v16 cd 0.95 v17 cd 0.85 [Casio CZ: Max DCW Brightness] puts ;
+[cz_resonant] : v16 c 6 0.15 cd 0.95 v15 c 6 0.15 cd 0.90 [Casio CZ: High Resonance Scream] puts ;
+[cz_mellow] : v15 cd 0.40 v16 cd 0.35 v17 cd 0.30 [Casio CZ: Smooth Warm DCW] puts ;
+[cz_line_saw] : v15 c 1 0.15 v16 c 1 0.10 [Casio CZ: Line 1 Saw Waveforms] puts ;
+[cz_line_reso] : v15 c 1 0.15 v16 c 6 0.10 [Casio CZ: Dual Saw + Resonant 1] puts ;
+
 # Drum Pocket Mute / Solo
 [drums_off] : v9 m1 v10 m1 v11 m1 [Pocket Drums: Muted (Pure Synth Solo)] puts ;
 [drums_on] : v9 m0 v10 m0 v11 m0 [Pocket Drums: Enabled] puts ;
@@ -384,19 +456,21 @@ yp -1
 [scene_prophet] : 1 scene_cue ;
 [scene_korg] : 2 scene_cue ;
 [scene_jupiter] : 3 scene_cue ;
+[scene_casio_cz] : 4 scene_cue ;
 
 # Immediate Scene Jumps (Jump right now without waiting)
 [now_moog] : 0 scene_now ;
 [now_prophet] : 1 scene_now ;
 [now_korg] : 2 scene_now ;
 [now_jupiter] : 3 scene_now ;
+[now_cz] : 4 scene_now ;
 
 # Transport Controls
 [play] : Z0 Z! scene_now 0 ;
 [pause] : scene_pause ;
 [resume] : scene_resume ;
-[scenes] : [SCENES: 0:scene_moog_bass 1:scene_prophet 2:scene_korg 3:scene_jupiter] puts ;
-[controls] : [LIVE TWEAKS: filter_open, filter_deep, filter_normal, res_high, res_warm, drive_hot, drive_warm, drive_clean, brass_bright, brass_warm, korg_screech, korg_punch, glide_long, glide_tight, glide_off, pwm_wide, drums_off, drums_on] puts ;
+[scenes] : [SCENES: 0:scene_moog_bass 1:scene_prophet 2:scene_korg 3:scene_jupiter 4:scene_casio_cz] puts ;
+[controls] : [LIVE TWEAKS: filter_open, filter_deep, res_high, drive_hot, drive_clean, cz_bright, cz_resonant, cz_mellow, cz_line_saw, cz_line_reso, brass_bright, korg_screech, pwm_wide, drums_off, drums_on] puts ;
 
 # ----------------------------------------------------------------------
 # 9. STARTUP BANNER & ROSTER
@@ -406,7 +480,8 @@ yp -1
 [  Scene 1: scene_prophet    (Sequential Prophet-5 1978 Curtis Poly-Brass Chords)] puts
 [  Scene 2: scene_korg       (Korg MS20 1978 Dual VCO Screamer Filter & Drive)] puts
 [  Scene 3: scene_jupiter    (Roland Jupiter-8 1981 Stereo Dual-Osc Arpeggio)] puts
-[Type 'play' to start automated 4-scene arrangement from Scene 0.] puts
+[  Scene 4: scene_casio_cz   (Casio CZ-101 1984 Phase Distortion DCW Reso-Synth)] puts
+[Type 'play' to start automated 5-scene arrangement from Scene 0.] puts
 [Type 'scenes' to list scenes, or cue any scene macro (e.g. 'scene_prophet').] puts
 [Type 'controls' to view live realtime performance parameter macros.] puts
 [Scene transport: 'scene_stop' (or -1 scene_cue) to stop at bar end; 'pause' / 'resume'] puts
