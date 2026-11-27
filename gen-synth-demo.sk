@@ -2,16 +2,20 @@
 #  SK3 VINTAGE ANALOG SYNTHESIS SUITE (SCENE-BASED SYNTH SHOWCASE)
 #  File: gen-synth-demo.sk
 #
-#  Featuring 5 Iconic Hardware Synthesizer Architectures:
-#    Scene 0: scene_moog_bass  (Minimoog Model D 1970 3-Oscillator Analog Bass)
-#    Scene 1: scene_prophet    (Sequential Prophet-5 1978 Hard Sync & Curtis Brass)
-#    Scene 2: scene_korg       (Korg MS20 1978 Dual Screamer Filter & Ring Mod)
-#    Scene 3: scene_jupiter    (Roland Jupiter-8 1981 Stereo Dual-Osc Arpeggio)
-#    Scene 4: scene_casio_cz   (Casio CZ-101 1984 Phase Distortion DCW Reso-Synth)
+#  Featuring 7 Iconic Vintage Synthesizer Demonstrations:
+#    Scene 0: scene_moog_bass    (Minimoog Model D 1970 3-Oscillator Analog Bass)
+#    Scene 1: scene_prophet      (Sequential Prophet-5 1978 Talking Heads Hard-Sync Funk Lead)
+#    Scene 2: scene_korg         (Korg MS20 1978 Dual VCO Screamer Filter & Drive)
+#    Scene 3: scene_jupiter      (Roland Jupiter-8 1981 Stereo Dual-Osc Arpeggio)
+#    Scene 4: scene_casio_cz     (Casio CZ-101 1984 Phase Distortion Reso-Bass & Stabs)
+#    Scene 5: scene_cz_bell      (Casio CZ-101 1984 Glassy Phase Distortion Bells & Chimes)
+#    Scene 6: scene_korg_dw8000  (Korg DW-8000 1985 3-Osc DWGS Hybrid Synth + Built-in Delay)
 #
 #  100% Native Synth Engine DSP:
 #    - Band-limited PolyBLEP oscillators (Saw, Pulse, Triangle)
 #    - Casio CZ Phase Distortion synthesis (c 1..8, ct DCW envelope, cd depth)
+#    - Korg DW-8000 Digital Waveform Generator ROM wavetables (w15..w30 DWGS)
+#    - Built-in hardware-accurate Korg DW-8000 digital delay line (DL/DD/DP)
 #    - Oscillator hard-sync master-slave phase alignment (HS)
 #    - Hardware-accurate Pulse-Width Modulation (pw, pwt, pwd, PW)
 #    - Multimode ladder lowpass with screamer & driven characters (j1 0, j1 1, j1 2)
@@ -19,8 +23,8 @@
 #    - Cross-domain ADSR envelopes across amp (t), pitch (pt/pd), filter (kt/kd), PWM (pwt/pwd), CZ (ct/cd)
 #    - Audio-rate ring modulation (XM)
 #    - Analog glissando portamento (g)
-#    - Tempo-synced ping-pong stereo space echo (DS/DL/DD/DP)
-#    - Real-time control plane downbeat scene triggers (ce0..ce4)
+#    - Tempo-synced ping-pong stereo space echo & hardware delay buses (DS/DL/DD/DP)
+#    - Real-time control plane downbeat scene triggers (ce0..ce6)
 # ======================================================================
 
 [===============================================================] puts
@@ -57,13 +61,20 @@ v11 w101 f440 a-8.0 p.20
 [Pocket Hat] vt
 
 # ----------------------------------------------------------------------
-# 2. TEMPO-SYNCED STEREO SPACE DELAY BUS (For Jupiter-8 and Ambience)
+# 2. DELAY BUSES (Tempo-Synced Space Delay + Korg DW-8000 Delay Line)
 # ----------------------------------------------------------------------
-# Bus 1: 16th-note ping-pong stereo delay synced to 116 BPM
+# Bus 1: 16th-note ping-pong stereo delay synced to 116 BPM (Jupiter-8 and CZ)
 DS 1 116 .25
 DL 1 - - 5 2 2 8
 DD 1 5 3
 DP 1 1
+
+# Bus 2: Hardware-accurate Korg DW-8000 Digital Delay Line
+# Param 51: Coarse 5 (256ms), Param 52: Fine 8, Param 53: Feedback 7,
+# Param 54: Mod Freq 12, Param 55: Mod Depth 18, Param 56: Level 6
+DL 2 5 8 7 12 18 6
+DD 2 12 0
+DP 2 1
 
 # ----------------------------------------------------------------------
 # 3. SYNTHESIZER VOICE ARCHITECTURES
@@ -110,19 +121,23 @@ v0 G1,2 H1,2
 [Moog Saw Core] vt
 
 # ======================================================================
-# STYLE 2: SEQUENTIAL CIRCUITS PROPHET-5 CURTIS POLY-BRASS (Voices 4..6)
+# STYLE 2: SEQUENTIAL PROPHET-5 TALKING HEADS HARD SYNC LEAD (Voices 4..6)
 # ======================================================================
-# Sub/Center Layer (Voice 6): Warm pulse with subtle PWM 1 octave down
-v6 w1 pw 0.38 N-12,0 a-5.0 p0 t.010,.35,.60,.15 j1,1 k240 q1.8 jd 1.4 kt.012,.32,.30,.12 kd1800
+# Master Oscillator (Voice 4): PolyBLEP Saw establishing fundamental pitch
+# Links: G5,6 (gate), H5,6 (pitch), and HS 5 (hard sync master resetting Voice 5)
+# Slinky analog glide (g0.038) and driven Curtis CEM3320 lowpass
+v4 w3 a-3.5 p-.15 t.002,.24,.40,.08 g0.038 j1,1 k320 q3.8 jd 2.5 kt.002,.20,.15,.06 kd2400
+v4 G5,6 H5,6 HS 5
+[Prophet Master Saw] vt
+
+# Slaved Hard Sync Oscillator (Voice 5): PolyBLEP Saw with fast pitch-snap sweep
+# When slaved by Voice 4's HS, this creates the iconic screaming Bernie Worrell lead
+v5 w3 N12,0 pt.002,.16,.10,.04 pd 12.0 a-4.0 p.15 t.002,.24,.40,.08 g0.038 j1,1 k350 q3.8 jd 2.5 kt.002,.20,.15,.06 kd2400
+[Prophet Sync Slave] vt
+
+# Sub/Body Layer (Voice 6): Warm pulse 1 octave down for beefy funk low end
+v6 w1 pw 0.45 N-12,0 a-5.0 p0 t.002,.24,.40,.08 g0.038 j1,1 k220 q1.5 jd 1.2
 [Prophet Sub-Pulse] vt
-
-# Right Detuned Saw (Voice 5): PolyBLEP Saw detuned +6 cents for lush Curtis beating
-v5 w3 N0,6 a-4.5 p.20 t.010,.35,.60,.15 j1,1 k300 q2.2 jd 1.5 kt.012,.32,.30,.12 kd2400
-[Prophet Detune Saw] vt
-
-# Left Core Saw (Voice 4): PolyBLEP Saw establishing root pitch, slaving v5 & v6
-v4 w3 a-4.0 p-.20 t.010,.35,.60,.15 j1,1 k280 q2.2 jd 1.5 kt.012,.32,.30,.12 kd2400 G5,6 H5,6
-[Prophet Core Saw] vt
 
 # ======================================================================
 # STYLE 3: EARLY KORG MS20 DUAL VCO SCREAMER (Voices 7..8)
@@ -173,6 +188,50 @@ v16 w0 a-4.5 p.20 N0,5 c 6 0.10 ct .004,.25,.15,.08 cd 0.85 t.003,.30,.40,.08 g0
 v17 w0 a-5.0 p0 N-12,0 c 2 0.20 ct .004,.32,.45,.10 cd 0.60 t.003,.32,.50,.10
 [CZ-101 Sub Square] vt
 
+# ======================================================================
+# STYLE 6: CASIO CZ-101 / CZ-1 GLASS BELLS & CHIMES (Voices 21..23)
+# ======================================================================
+# Crystal Bell Core (Voice 21): CZ Line 4 (Double Sine) with glassy DCW decay
+# Slaves Voices 22 & 23 via G22,23 H22,23, delay send ds 0.38
+v21 w0 a-4.0 p-.30 c 4 0.35 ct .002,.65,.15,.25 cd 0.70 t.002,.70,.25,.30 ds 0.38
+v21 G22,23 H22,23
+[CZ Glass Bell Line 4] vt
+
+# Shimmering Overtone (Voice 22): CZ Line 7 (Resonant Triangle) +12st +5 cents
+v22 w0 N12,5 a-5.0 p.30 c 7 0.20 ct .002,.50,.10,.20 cd 0.80 t.002,.55,.15,.25 ds 0.38
+[CZ Reso-Tri Shimmer] vt
+
+# Warm Fundamental Body (Voice 23): CZ Line 5 (Saw->Triangle)
+v23 w0 a-5.5 p0 c 5 0.15 ct .005,.80,.35,.35 cd 0.50 t.005,.80,.40,.35 ds 0.20
+[CZ Body Pad] vt
+
+# ======================================================================
+# STYLE 7: KORG DW-8000 2-OSC SPACE ARPEGGIO & DELAY (Voices 24..25)
+# ======================================================================
+# 2 DWGS Oscillators per voice feeding NJM2069 Analog VCF and Delay Bus 2
+# Osc 1 (Voice 24): DW Bell (w29), routed to Track 2 (r 2) into DW Delay (ds 0.45)
+# Slaves Voice 25 via G25 H25
+v24 w29 r 2 ds 0.45 a-4.5 p-.25 t.002,.30,.35,.12 j1,1 k680 q3.8 jd 1.8 kt.002,.28,.20,.10 kd3200
+v24 G25 H25
+[DW8000 Space Bell Osc1] vt
+
+# Osc 2 (Voice 25): DW Strings (w15) detuned +6 cents (N0,6) for shimmering chorus
+v25 w15 r 2 ds 0.45 N0,6 a-5.0 p.25 t.002,.30,.35,.12 j1,1 k720 q3.8 jd 1.8 kt.002,.28,.20,.10 kd3200
+[DW8000 Space String Osc2] vt
+
+# ======================================================================
+# STYLE 8: KORG DW-8000 2-OSC HYBRID POWER BRASS / LEAD (Voices 26..27)
+# ======================================================================
+# Osc 1 (Voice 26): DW Brass (w22) through driven 24dB NJM2069 lowpass
+# Slaves Voice 27 via G27 H27, routed to DW Delay Line (r 2 ds 0.35)
+v26 w22 r 2 ds 0.35 a-4.0 p-.20 t.005,.35,.45,.12 g0.030 j1,1 k480 q3.2 jd 2.2 kt.005,.32,.25,.10 kd2800
+v26 G27 H27
+[DW8000 Power Brass Osc1] vt
+
+# Osc 2 (Voice 27): DW Epiano Hard (w19) detuned +8 cents (N0,8) for fat bite
+v27 w19 r 2 ds 0.35 N0,8 a-4.5 p.20 t.005,.35,.45,.12 g0.030 j1,1 k520 q3.2 jd 2.2 kt.005,.32,.25,.10 kd2800
+[DW8000 Epiano Bite Osc2] vt
+
 # ----------------------------------------------------------------------
 # 4. 4-BAR NOTE STREAMS (/SS 0..3)
 # ----------------------------------------------------------------------
@@ -185,19 +244,19 @@ v17 w0 a-5.0 p0 N-12,0 c 2 0.20 ct .004,.32,.45,.10 cd 0.60 t.003,.32,.50,.10
   F2 . F2 .  G2 . Ab2 A2  . C3 . D3  . C2 D1 -
 ] n>d /SS 0
 
-# Stream 1: Prophet-5 Anthem Poly-Brass (F Major / D Minor, 64 steps)
+# Stream 1: Prophet-5 Talking Heads / Bernie Worrell Funk Sync Lead (D Minor, 64 steps)
 [
-  # Bar 1: Triumphant Prophet brass stabs (F major -> A minor)
-  F3 . F3 .  A3 . C4 .  D4 . C4 .  A3 . F3 .
+  # Bar 1: Staccato funk sync lead riff with octave leap and blues snap
+  D3 . D4 .  F3 . G3 Ab3  A3 . C4 .  D4 C4 A3 .
 
-  # Bar 2: Uplifting syncopated brass swell
-  G3 . G3 .  Bb3 . D4 .  C4 . D4 .  E4 . D4 C4
+  # Bar 2: Screaming sync sweep accent and syncopated turnaround
+  D3 . D4 .  F3 . G3 .   A3 C4 D4 .  E4 . D4 C4
 
-  # Bar 3: Powerful rhythmic chord accents
-  D3 . D3 .  F3 . A3 .  C4 . A3 .  G3 . F3 .
+  # Bar 3: Driving syncopated funk bounce
+  D3 . D4 .  F3 . G3 Ab3  A3 . C4 .  D4 C4 A3 .
 
-  # Bar 4: Harmonic resolution & turnaround
-  Bb3 . Bb3 .  D4 . C4 .  A3 . G3 .  F3 . - -
+  # Bar 4: Chromatic climb to screaming high sync turnaround
+  F3 . G3 .  Ab3 A3 . C4  D4 . F4 .  D4 - - -
 ] n>d /SS 1
 
 # Stream 2: Korg MS20 Screamer Acid / EBM Sequence (E Minor, 64 steps)
@@ -238,6 +297,52 @@ v17 w0 a-5.0 p0 N-12,0 c 2 0.20 ct .004,.32,.45,.10 cd 0.60 t.003,.32,.50,.10
   # Bar 4: Harmonic turnaround with rising resonant lead accent
   F2 . F3 .  G2 . G3 .  A3 . C4 B3   . G3 E2 -
 ] n>d /SS 4
+
+# Stream 5: Casio CZ Glassy Digital Bells & Chimes Hook (A Minor / C Major, 64 steps)
+[
+  # Bar 1: Crystalline digital bell arpeggio (Am7)
+  A3 E4 G4 C5  E5 C5 G4 E4  A3 E4 G4 C5  E5 C5 G4 E4
+
+  # Bar 2: Sparkling descent and turnaround (Fmaj7)
+  F3 C4 E4 A4  C5 A4 E4 C4  G3 D4 F4 B4  D5 B4 G4 D4
+
+  # Bar 3: Resonant digital chime swell (Dm7 -> Em7)
+  D3 A3 C4 F4  A4 F4 C4 A3  E3 B3 D4 G4  B4 G4 D4 B3
+
+  # Bar 4: Soaring high glass turnaround
+  F3 C4 A4 C5  G3 D4 B4 D5  A4 E5 G5 A5  E5 C5 A4 -
+] n>d /SS 5
+
+# Stream 6: Korg DW-8000 2-Osc Space Arpeggio (E Minor, 64 steps)
+# Cascading 16ths into the Korg modulated digital delay line
+[
+  # Bar 1: Cosmic bell-string cascade
+  E3 B3 E4 G4  B4 G4 E4 B3  E3 B3 E4 G4  B4 G4 E4 B3
+
+  # Bar 2: Shimmering harmonic shift
+  C3 G3 C4 E4  G4 E4 C4 G3  D3 A3 D4 F#4  A4 F#4 D4 A3
+
+  # Bar 3: Driving DWGS resonance climb
+  E3 B3 E4 G4  B4 G4 E4 B3  G3 D4 G4 B4  D5 B4 G4 D4
+
+  # Bar 4: High turnaround resolving into delay repeats
+  A3 E4 A4 C5  B3 F#4 B4 D#5  E4 B4 E5 G5  B4 G4 E4 -
+] n>d /SS 6
+
+# Stream 7: Korg DW-8000 2-Osc Hybrid Power Brass / Anthem Lead (G Major / E Minor, 64 steps)
+[
+  # Bar 1: Bold 1985 hybrid brass anthem hook
+  G3 . G3 .  B3 . D4 .  E4 . D4 .  B3 . G3 .
+
+  # Bar 2: Syncopated power brass swell
+  A3 . A3 .  C4 . E4 .  D4 . E4 .  F#4 . E4 D4
+
+  # Bar 3: Driving melodic accents
+  E3 . E3 .  G3 . B3 .  D4 . B3 .  A3 . G3 .
+
+  # Bar 4: Soaring triumphant resolution
+  C4 . C4 .  E4 . D4 .  B3 . A3 .  G3 . - -
+] n>d /SS 7
 
 # ----------------------------------------------------------------------
 # 5. STEP SEQUENCER PATTERNS
@@ -360,6 +465,76 @@ y128 %1
 yl 64
 [ce4] x0
 
+# --- SCENE 5 PATTERNS: CASIO CZ-101 GLASS BELLS & CHIMES ---
+y50 %1
+[Casio CZ Glass Bells] yt
+yl 16
+[v21 i&5] x0,1,2,3,4,5,6,7
+[v21 i&5] x8,9,10,11,12,13,14,15
+
+y51 %1
+[CZ Ambient Kick] yt
+yl 16
+[v10 l.9] x0,8
+
+y52 %1
+[CZ Shimmer Hats] yt
+yl 16
+[v11 l.35] x2,6,10,14
+[v11 l.20] x4,12
+
+y129 %1
+[Conductor Scene 5] yt
+yl 64
+[ce5] x0
+
+# --- SCENE 6 PATTERNS: KORG DW-8000 SPACE ARPEGGIO & DELAY ---
+y60 %1
+[DW8000 Space Arp] yt
+yl 16
+[v24 i&6] x0,1,2,3,4,5,6,7
+[v24 i&6] x8,9,10,11,12,13,14,15
+
+y61 %1
+[DW8000 Space Kick] yt
+yl 16
+[v10 l1] x0,6,10,12
+
+y62 %1
+[DW8000 Space Hats] yt
+yl 16
+[v11 l.40] x0,2,4,6,8,10,12,14
+[v11 l.22] x1,3,5,7,9,11,13,15
+
+y130 %1
+[Conductor Scene 6] yt
+yl 64
+[ce6] x0
+
+# --- SCENE 7 PATTERNS: KORG DW-8000 HYBRID POWER BRASS ---
+y70 %1
+[DW8000 Power Brass] yt
+yl 16
+[v26 i&7] x0,1,2,3,4,5,6,7
+[v26 i&7] x8,9,10,11,12,13,14,15
+
+y71 %1
+[DW8000 Power Kick] yt
+yl 16
+[v10 l1] x0,4,8,12
+
+y72 %1
+[DW8000 Snare & Hats] yt
+yl 16
+[v9 l.92] x4,12
+[v11 l.45] x0,2,4,6,8,10,12,14
+[v11 l.26] x1,3,5,7,9,11,13,15
+
+y131 %1
+[Conductor Scene 7] yt
+yl 64
+[ce7] x0
+
 # ----------------------------------------------------------------------
 # 6. CONTROL PLANE DISPATCHER & REAL-TIME CLI CONSOLE BANNERS
 # ----------------------------------------------------------------------
@@ -369,33 +544,39 @@ yl 64
 # Disable master pattern sync locking so 4-bar scenes advance smoothly
 yp -1
 
-# Responder macros triggered by control plane events (ce0..ce4) on scene start
+# Responder macros triggered by control plane events (ce0..ce7) on scene start
 [scene_moog_puts] : [>>> SCENE 0: MINIMOOG MODEL D (3-Osc Bass + Driven Ladder + Portamento) <<<] puts ;
-[scene_prophet_puts] : [>>> SCENE 1: SEQUENTIAL PROPHET-5 (Iconic Curtis CEM3320 Poly-Brass Chords) <<<] puts ;
+[scene_prophet_puts] : [>>> SCENE 1: SEQUENTIAL PROPHET-5 (Talking Heads Hard-Sync Funk Lead) <<<] puts ;
 [scene_korg_puts] : [>>> SCENE 2: EARLY KORG MS20 (Dual VCO Screamer 35 Filter & Hot Analog Drive) <<<] puts ;
 [scene_jupiter_puts] : [>>> SCENE 3: ROLAND JUPITER-8 (Lush Stereo Arpeggio + Roland Space Echo) <<<] puts ;
-[scene_cz_puts] : [>>> SCENE 4: CASIO CZ-101 (Phase Distortion DCW Resonant Synthesis) <<<] puts ;
+[scene_cz_puts] : [>>> SCENE 4: CASIO CZ-101 (Phase Distortion Reso-Bass & Stabs) <<<] puts ;
+[scene_cz_bell_puts] : [>>> SCENE 5: CASIO CZ-101 (Glassy Phase Distortion Bells & Chimes) <<<] puts ;
+[scene_dw_space_puts] : [>>> SCENE 6: KORG DW-8000 (2-Osc Space Arp + Modulated Digital Delay) <<<] puts ;
+[scene_dw_brass_puts] : [>>> SCENE 7: KORG DW-8000 (2-Osc Hybrid Power Brass & Delay Line) <<<] puts ;
 
-# Bind responders to user control event IDs 0..4
-[scene_moog_puts]    /ceb 4 0
-[scene_prophet_puts] /ceb 4 1
-[scene_korg_puts]    /ceb 4 2
-[scene_jupiter_puts] /ceb 4 3
-[scene_cz_puts]      /ceb 4 4
+# Bind responders to user control event IDs 0..7
+[scene_moog_puts]     /ceb 4 0
+[scene_prophet_puts]  /ceb 4 1
+[scene_korg_puts]     /ceb 4 2
+[scene_jupiter_puts]  /ceb 4 3
+[scene_cz_puts]       /ceb 4 4
+[scene_cz_bell_puts]  /ceb 4 5
+[scene_dw_space_puts] /ceb 4 6
+[scene_dw_brass_puts] /ceb 4 7
 
 # ----------------------------------------------------------------------
 # 7. SCENE DEFINITIONS & AUTOMATED PROGRESSION
 # Lanes:
-#   Lane 0: Synth Lead/Bass Track (y0 / y10 / y20 / y30 / y40)
-#   Lane 1: Kick Drum Track (y1 / y11 / y21 / y31 / y41)
-#   Lane 2: Snare / Hats Track (y2 / y12 / y22 / y32 / y42)
-#   Lane 7: Master Conductor Pattern (y124 / y125 / y126 / y127 / y128)
+#   Lane 0: Synth Lead/Bass Track (y0 / y10 / y20 / y30 / y40 / y50 / y60 / y70)
+#   Lane 1: Kick Drum Track (y1 / y11 / y21 / y31 / y41 / y51 / y61 / y71)
+#   Lane 2: Snare / Hats Track (y2 / y12 / y22 / y32 / y42 / y52 / y62 / y72)
+#   Lane 7: Master Conductor Pattern (y124..y131)
 # ----------------------------------------------------------------------
 
 # Scene 0: Minimoog Model D 3-Oscillator Analog Bass Showcase
 ( 0  1  2 -1 -1 -1 -1 124 ) scene_define 0
 
-# Scene 1: Sequential Circuits Prophet-5 Curtis Poly-Brass Chords
+# Scene 1: Sequential Prophet-5 Talking Heads Hard-Sync Funk Lead
 ( 10 11 12 -1 -1 -1 -1 125 ) scene_define 1
 
 # Scene 2: Early Korg MS20 Dual VCO Screamer Filter & Drive
@@ -404,15 +585,27 @@ yp -1
 # Scene 3: Roland Jupiter-8 Stereo Dual-Osc Arpeggiator & Delay
 ( 30 31 32 -1 -1 -1 -1 127 ) scene_define 3
 
-# Scene 4: Casio CZ-101 Phase Distortion Resonant Synthesis
+# Scene 4: Casio CZ-101 Phase Distortion Reso-Bass & Stabs
 ( 40 41 42 -1 -1 -1 -1 128 ) scene_define 4
 
-# Automated 4-bar scene progression cycle:
+# Scene 5: Casio CZ-101 Glassy Phase Distortion Bells & Chimes
+( 50 51 52 -1 -1 -1 -1 129 ) scene_define 5
+
+# Scene 6: Korg DW-8000 2-Osc Space Arpeggio & Modulated Delay
+( 60 61 62 -1 -1 -1 -1 130 ) scene_define 6
+
+# Scene 7: Korg DW-8000 2-Osc Hybrid Power Brass & Delay Line
+( 70 71 72 -1 -1 -1 -1 131 ) scene_define 7
+
+# Automated 4-bar scene progression cycle across all 8 synthesizer scenes:
 0 4 1 scene_chain
 1 4 2 scene_chain
 2 4 3 scene_chain
 3 4 4 scene_chain
-4 4 0 scene_chain
+4 4 5 scene_chain
+5 4 6 scene_chain
+6 4 7 scene_chain
+7 4 0 scene_chain
 
 # ----------------------------------------------------------------------
 # 8. PERFORMANCE MACROS & REALTIME PARAMETER TWEAKS
@@ -428,60 +621,77 @@ yp -1
 [drive_clean] : v0 jd 0.0 v1 jd 0.0 v4 jd 0.0 v7 jd 0.0 [Filter Drive: Clean Bypass] puts ;
 
 # Glissando / Portamento tweaks
-[glide_long] : v0 g0.12 v1 g0.12 v2 g0.12 v7 g0.09 [Glide: Long Slinky] puts ;
-[glide_tight] : v0 g0.045 v1 g0.045 v2 g0.045 v7 g0.035 [Glide: Snappy Default] puts ;
-[glide_off] : v0 g0 v1 g0 v2 g0 v7 g0 [Glide: Disabled (Staccato)] puts ;
+[glide_long] : v0 g0.12 v1 g0.12 v2 g0.12 v4 g0.09 v7 g0.09 [Glide: Long Slinky] puts ;
+[glide_tight] : v0 g0.045 v1 g0.045 v2 g0.045 v4 g0.038 v7 g0.035 [Glide: Snappy Default] puts ;
+[glide_off] : v0 g0 v1 g0 v2 g0 v4 g0 v7 g0 [Glide: Disabled (Staccato)] puts ;
 
 # Synth-Specific Character Tweaks
-[brass_bright] : v4 k550 kd3500 v5 k580 kd3500 v6 k400 kd2800 [Prophet Bright Brass Swell] puts ;
-[brass_warm] : v4 k280 kd2400 v5 k300 kd2400 v6 k240 kd1800 [Prophet Warm Curtis Brass] puts ;
+[prophet_sync_screech] : v5 pd 16.0 v4 k450 kd3200 [Prophet Talking Heads Screaming Hard Sync] puts ;
+[prophet_sync_warm]    : v5 pd 8.0 v4 k280 kd2200 [Prophet Warm Vocal Hard Sync] puts ;
 [korg_screech] : v7 q7.8 jd 5.0 v8 q7.2 jd 4.5 [Korg MS20 Screaming Self-Oscillation] puts ;
 [korg_punch]   : v7 q5.8 jd 3.5 v8 q5.2 jd 3.0 [Korg MS20 Aggressive Industrial Punch] puts ;
 [pwm_wide] : v1 pwd 0.40 PW 3 0.35 [PWM: Wide Sweeping Chorus] puts ;
 [pwm_subtle] : v1 pwd 0.15 PW 3 0.10 [PWM: Subtle Organic Movement] puts ;
 
 # Casio CZ Phase Distortion Tweaks
-[cz_bright] : v15 cd 0.95 v16 cd 0.95 v17 cd 0.85 [Casio CZ: Max DCW Brightness] puts ;
+[cz_bright] : v15 cd 0.95 v16 cd 0.95 v17 cd 0.85 v21 cd 0.90 [Casio CZ: Max DCW Brightness] puts ;
 [cz_resonant] : v16 c 6 0.15 cd 0.95 v15 c 6 0.15 cd 0.90 [Casio CZ: High Resonance Scream] puts ;
-[cz_mellow] : v15 cd 0.40 v16 cd 0.35 v17 cd 0.30 [Casio CZ: Smooth Warm DCW] puts ;
+[cz_mellow] : v15 cd 0.40 v16 cd 0.35 v17 cd 0.30 v21 cd 0.45 [Casio CZ: Smooth Warm DCW] puts ;
 [cz_line_saw] : v15 c 1 0.15 v16 c 1 0.10 [Casio CZ: Line 1 Saw Waveforms] puts ;
 [cz_line_reso] : v15 c 1 0.15 v16 c 6 0.10 [Casio CZ: Dual Saw + Resonant 1] puts ;
+
+# Korg DW-8000 Tweaks
+[dw_delay_mod]    : DL 2 5 8 8 16 24 7 [DW-8000: Swirling Modulated Delay] puts ;
+[dw_delay_tight]  : DL 2 3 4 4 0 0 5 [DW-8000: Tight Slapback Delay] puts ;
+[dw_filter_open]  : v24 k950 kd3500 v26 k850 kd3500 [DW-8000: NJM2069 Filter Wide Open] puts ;
+[dw_filter_warm]  : v24 k480 kd2400 v26 k420 kd2200 [DW-8000: NJM2069 Warm Resonance] puts ;
 
 # Drum Pocket Mute / Solo
 [drums_off] : v9 m1 v10 m1 v11 m1 [Pocket Drums: Muted (Pure Synth Solo)] puts ;
 [drums_on] : v9 m0 v10 m0 v11 m0 [Pocket Drums: Enabled] puts ;
 
 # User Navigation & Scene Cues (Quantized to next bar downbeat)
-[scene_moog_bass] : 0 scene_cue ;
-[scene_prophet] : 1 scene_cue ;
-[scene_korg] : 2 scene_cue ;
-[scene_jupiter] : 3 scene_cue ;
-[scene_casio_cz] : 4 scene_cue ;
+[scene_moog_bass]   : 0 scene_cue ;
+[scene_prophet]     : 1 scene_cue ;
+[scene_korg]        : 2 scene_cue ;
+[scene_jupiter]     : 3 scene_cue ;
+[scene_casio_cz]    : 4 scene_cue ;
+[scene_cz_bass]     : 4 scene_cue ;
+[scene_cz_bell]     : 5 scene_cue ;
+[scene_dw_space]    : 6 scene_cue ;
+[scene_dw_brass]    : 7 scene_cue ;
 
 # Immediate Scene Jumps (Jump right now without waiting)
-[now_moog] : 0 scene_now ;
-[now_prophet] : 1 scene_now ;
-[now_korg] : 2 scene_now ;
-[now_jupiter] : 3 scene_now ;
-[now_cz] : 4 scene_now ;
+[now_moog]     : 0 scene_now ;
+[now_prophet]  : 1 scene_now ;
+[now_korg]     : 2 scene_now ;
+[now_jupiter]  : 3 scene_now ;
+[now_cz]       : 4 scene_now ;
+[now_cz_bass]  : 4 scene_now ;
+[now_cz_bell]  : 5 scene_now ;
+[now_dw_space] : 6 scene_now ;
+[now_dw_brass] : 7 scene_now ;
 
 # Transport Controls
 [play] : Z0 Z! scene_now 0 ;
 [pause] : scene_pause ;
 [resume] : scene_resume ;
-[scenes] : [SCENES: 0:scene_moog_bass 1:scene_prophet 2:scene_korg 3:scene_jupiter 4:scene_casio_cz] puts ;
-[controls] : [LIVE TWEAKS: filter_open, filter_deep, res_high, drive_hot, drive_clean, cz_bright, cz_resonant, cz_mellow, cz_line_saw, cz_line_reso, brass_bright, korg_screech, pwm_wide, drums_off, drums_on] puts ;
+[scenes] : [SCENES: 0:moog 1:prophet(talking_heads) 2:korg_ms20 3:jupiter8 4:cz_bass 5:cz_bell 6:dw_space 7:dw_brass] puts ;
+[controls] : [LIVE TWEAKS: filter_open, filter_deep, res_high, drive_hot, prophet_sync_screech, prophet_sync_warm, cz_bright, cz_resonant, cz_mellow, dw_delay_mod, dw_delay_tight, dw_filter_open, dw_filter_warm, drums_off, drums_on] puts ;
 
 # ----------------------------------------------------------------------
 # 9. STARTUP BANNER & ROSTER
 # ----------------------------------------------------------------------
-[--- VINTAGE ANALOG SYNTHESIZER CAPABILITY ROSTER ---] puts
-[  Scene 0: scene_moog_bass  (Minimoog Model D 1970 3-Oscillator Analog Bass)] puts
-[  Scene 1: scene_prophet    (Sequential Prophet-5 1978 Curtis Poly-Brass Chords)] puts
-[  Scene 2: scene_korg       (Korg MS20 1978 Dual VCO Screamer Filter & Drive)] puts
-[  Scene 3: scene_jupiter    (Roland Jupiter-8 1981 Stereo Dual-Osc Arpeggio)] puts
-[  Scene 4: scene_casio_cz   (Casio CZ-101 1984 Phase Distortion DCW Reso-Synth)] puts
-[Type 'play' to start automated 5-scene arrangement from Scene 0.] puts
+[--- VINTAGE SYNTHESIZER CAPABILITY ROSTER ---] puts
+[  Scene 0: scene_moog_bass   (Minimoog Model D 1970 3-Osc Analog Bass)] puts
+[  Scene 1: scene_prophet     (Sequential Prophet-5 1978 Talking Heads Hard-Sync Funk Lead)] puts
+[  Scene 2: scene_korg        (Korg MS20 1978 Dual VCO Screamer Filter & Drive)] puts
+[  Scene 3: scene_jupiter     (Roland Jupiter-8 1981 Stereo Dual-Osc Arpeggio)] puts
+[  Scene 4: scene_cz_bass     (Casio CZ-101 1984 Phase Distortion Reso-Bass & Stabs)] puts
+[  Scene 5: scene_cz_bell     (Casio CZ-101 1984 Glassy Phase Distortion Bells & Chimes)] puts
+[  Scene 6: scene_dw_space    (Korg DW-8000 1985 2-Osc Space Arp + Modulated Digital Delay)] puts
+[  Scene 7: scene_dw_brass    (Korg DW-8000 1985 2-Osc Hybrid Power Brass & Delay Line)] puts
+[Type 'play' to start automated 8-scene arrangement from Scene 0.] puts
 [Type 'scenes' to list scenes, or cue any scene macro (e.g. 'scene_prophet').] puts
 [Type 'controls' to view live realtime performance parameter macros.] puts
 [Scene transport: 'scene_stop' (or -1 scene_cue) to stop at bar end; 'pause' / 'resume'] puts
