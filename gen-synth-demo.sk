@@ -70,10 +70,10 @@ DD 1 5 3
 DP 1 1
 
 # Bus 2: Hardware-accurate Korg DW-8000 Digital Delay Line
-# Param 51: Coarse 5 (256ms), Param 52: Fine 8, Param 53: Feedback 7,
-# Param 54: Mod Freq 12, Param 55: Mod Depth 18, Param 56: Level 6
-DL 2 5 8 7 12 18 6
-DD 2 12 0
+# Param 51: Coarse 4 (128ms), Param 52: Fine 4, Param 53: Feedback 4,
+# Param 54: Mod Freq 0 (No pitch wobble), Param 55: Mod Depth 0 (Clean studio repeats), Level 4
+DL 2 4 4 4 0 0 4
+DD 2 8 0
 DP 2 1
 
 # ----------------------------------------------------------------------
@@ -224,47 +224,48 @@ v22 w0 N12,7 a-3.0 p-.20 c 7 0.25 ct .002,.50,.10,.25 cd 0.85 t.002,.60,.10,.30 
 # ======================================================================
 # Strictly 2 DWGS digital oscillators per voice into NJM2069 analog 24dB VCF
 # DW Digi Bass (Voices 24 & 25):
-# Osc 1 (Voice 24): DWGS Digital Bass (w28), routed to Track 2 into DW Delay
+# Osc 1 (Voice 24): DWGS Digital Bass (w28), punchy slap transient, dry (ds 0)
 # Slaves Voice 25 via G25 H25
-v24 w28 r 2 ds 0.25 a-2.5 p0 t.002,.22,.15,.06 j1,1 k320 q3.0 jd 1.8 kt.002,.22,.15,.06 kd2200
+v24 w28 r 2 ds 0 a-1.5 p0 t.002,.24,.45,.08 j1,1 k280 q2.4 jd 2.0 kt.002,.24,.15,.06 kd2400
 v24 G25 H25
 [DW8000 Digi Bass Osc1] vt
 
-# Osc 2 (Voice 25): DWGS Electric Bass (w27) detuned +5 cents (N0,5) for punch
-v25 w27 r 2 ds 0.25 N0,5 a-3.0 p0 t.002,.22,.15,.06 j1,1 k350 q3.0 jd 1.8 kt.002,.22,.15,.06 kd2200
+# Osc 2 (Voice 25): DWGS Electric Bass (w27) detuned +5 cents (N0,5) for bottom weight
+v25 w27 r 2 ds 0 N0,5 a-2.0 p0 t.002,.24,.45,.08 j1,1 k300 q2.4 jd 2.0 kt.002,.24,.15,.06 kd2400
 [DW8000 Digi Bass Osc2] vt
 
 # DW Rotary Organ (Voices 28 & 29):
-# Osc 1 (Voice 28): DWGS Organ (w21) through silky NJM2069 filter, slaving v29
-v28 w21 r 2 ds 0.40 a-2.0 p-.25 t.005,.35,.65,.15 j1,1 k900 q1.8
+# Wide open NJM2069 VCF (k4500 q0.7) lets all drawbar harmonics cut through!
+# Osc 1 (Voice 28): DWGS Organ (w21), high sustained drawbar body, subtle delay send (ds 0.25)
+v28 w21 r 2 ds 0.25 a-1.0 p-.25 t.010,.25,.80,.20 j1,1 k4500 q0.7
 v28 G29 H29
 [DW8000 Rotary Organ Osc1] vt
 
-# Osc 2 (Voice 29): DWGS Organ (w21) detuned +8 cents (N0,8) for lush Leslie chorus
-v29 w21 r 2 ds 0.40 N0,8 a-2.5 p.25 t.005,.35,.65,.15 j1,1 k900 q1.8
+# Osc 2 (Voice 29): DWGS Organ (w21) detuned +8 cents (N0,8) for lush Leslie rotary beating
+v29 w21 r 2 ds 0.25 N0,8 a-1.5 p.25 t.010,.25,.80,.20 j1,1 k4500 q0.7
 [DW8000 Rotary Organ Osc2] vt
 
 # ======================================================================
 # STYLE 8: KORG DW-8000 2-OSC POWER BRASS & COSMIC BELLS (Voices 26..27, 30..31)
 # ======================================================================
 # DW 80s Power Brass (Voices 26 & 27):
-# Osc 1 (Voice 26): DWGS Brass (w22) through driven NJM2069 lowpass
-v26 w22 r 2 ds 0.35 a-2.5 p-.20 t.012,.35,.40,.12 j1,1 k450 q2.8 jd 2.0 kt.012,.35,.40,.12 kd2600
+# Osc 1 (Voice 26): DWGS Brass (w22) through sweeping NJM2069 lowpass
+v26 w22 r 2 ds 0.25 a-1.5 p-.20 t.015,.35,.75,.20 j1,1 k420 q2.0 jd 1.5 kt.025,.40,.55,.18 kd3400
 v26 G27 H27
 [DW8000 Power Brass Osc1] vt
 
-# Osc 2 (Voice 27): DWGS Epiano Hard (w19) detuned +8 cents (N0,8) for bite
-v27 w19 r 2 ds 0.35 N0,8 a-3.0 p.20 t.012,.35,.40,.12 j1,1 k480 q2.8 jd 2.0 kt.012,.35,.40,.12 kd2600
+# Osc 2 (Voice 27): DWGS Brass (w22) twin horn detuned +8 cents (N0,8) for massive analog spread
+v27 w22 r 2 ds 0.25 N0,8 a-2.0 p.20 t.015,.35,.75,.20 j1,1 k450 q2.0 jd 1.5 kt.025,.40,.55,.18 kd3400
 [DW8000 Epiano Bite Osc2] vt
 
 # DW Cosmic Bells (Voices 30 & 31):
-# Osc 1 (Voice 30): DWGS Bell (w29) through NJM2069 VCF, slaving v31
-v30 w29 r 2 ds 0.45 a-2.5 p-.25 t.002,.35,.25,.15 j1,1 k900 q3.2 kt.002,.35,.15,.10 kd3200
+# Osc 1 (Voice 30): DWGS Bell (w29) through crisp NJM2069 VCF, slaving v31
+v30 w29 r 2 ds 0.35 a-2.0 p-.25 t.002,.50,.35,.30 j1,1 k3000 q3.2 kt.002,.40,.20,.15 kd2600
 v30 G31 H31
 [DW8000 Cosmic Bell Osc1] vt
 
-# Osc 2 (Voice 31): DWGS Epiano (w18) detuned +6 cents (N0,6) into DW Delay repeats
-v31 w18 r 2 ds 0.45 N0,6 a-3.0 p.25 t.002,.35,.25,.15 j1,1 k920 q3.2 kt.002,.35,.15,.10 kd3200
+# Osc 2 (Voice 31): DWGS Bell (w29) tuned +12st +6 cents (N12,6) for sparkling octave chime
+v31 w29 r 2 ds 0.35 N12,6 a-2.5 p.25 t.002,.50,.35,.30 j1,1 k3200 q3.2 kt.002,.40,.20,.15 kd2600
 [DW8000 Cosmic Bell Osc2] vt
 
 # ======================================================================
@@ -272,14 +273,14 @@ v31 w18 r 2 ds 0.45 N0,6 a-3.0 p.25 t.002,.35,.25,.15 j1,1 k920 q3.2 kt.002,.35,
 # ======================================================================
 # Features:
 #   - MOS 6581 non-linear DAC bit-crush (bc 8,2)
-#   - Authentic 23-bit SID LFSR hardware noise generator (w5 NT 0)
-#   - Zero-sustain percussive envelope prevents hanging oscillators
+#   - Authentic 23-bit SID LFSR hardware noise generator (w5 NT 0) with sustained hiss
+#   - Fast PWM arpeggiator and 8-bit DAC triangle bass
 # Voice 32 (SID Arpeggio Pulse Lead): Fast PWM with SID non-linear DAC curve
 v32 w1 pw 0.35 bc 8,2 pwt .01,.20,.20,.05 pwd 0.20 a-2.5 p-.15 t.001,.16,0,.04 g0.015
 [C64 SID Arp Pulse] vt
 
-# Voice 33 (MOS 6581 23-bit SID LFSR Noise Percussion): Hardware SID snare/hi-hat
-v33 w5 NT 0 bc 8,2 a-2.0 p.15 t.001,.06,0,.02
+# Voice 33 (MOS 6581 23-bit SID LFSR Noise): Authentic long sustained hardware noise
+v33 w5 NT 0 bc 8,2 a-1.5 p.15 t.001,.22,.25,.12
 [C64 SID LFSR Noise] vt
 
 # Voice 34 (SID Triangle Bass): PolyBLEP Triangle through 6581 DAC curve
@@ -290,20 +291,19 @@ v34 w4 bc 8,2 a-2.5 p0 t.002,.22,0,.04
 # STYLE 10: ATARI POKEY & NES RETRO ARCADE CHIPTUNE (Voices 35..38)
 # ======================================================================
 # Features:
-#   - Atari POKEY 4-bit metallic buzzing noise generator (w5 NT 1)
-#   - NES 15-bit periodic white noise generator (w5 NT 5)
+#   - Atari POKEY 4-bit metallic buzzing noise generator (w5 NT 1) with sustained crunch
+#   - NES 15-bit periodic white noise generator (w5 NT 5) with sustained explosion decay
 #   - NES 25% duty cycle pulse lead and 4-bit stepped triangle bass (bc 4,0)
-#   - Zero-sustain plucks guarantee no hanging or stuck oscillators
 # Voice 35 (NES 25% Pulse Lead): Characteristic NES arcade chiptune timbre
 v35 w1 pw 0.25 a-2.5 p-.20 t.001,.14,0,.03 g0.010
 [NES 25% Pulse Lead] vt
 
-# Voice 36 (Atari POKEY 4-bit Metallic Noise): 15-step harsh buzzing arcade hit
-v36 w5 NT 1 a-2.0 p.20 t.001,.05,0,.02
+# Voice 36 (Atari POKEY 4-bit Metallic Noise): Bold sustained 15-step buzzing hit
+v36 w5 NT 1 a-1.5 p.20 t.001,.20,.30,.10
 [POKEY 4-bit Noise] vt
 
-# Voice 37 (NES 15-bit Periodic Noise Snare): Authentic 32767-step NES noise
-v37 w5 NT 5 a-2.0 p-.20 t.001,.08,0,.03
+# Voice 37 (NES 15-bit Periodic Noise Snare): Authentic sustained 32767-step NES noise
+v37 w5 NT 5 a-1.5 p-.20 t.001,.25,.25,.12
 [NES 15-bit Noise] vt
 
 # Voice 38 (NES Stepped 4-bit Triangle Bass): Authentic 4-bit DAC stair-step bass
@@ -378,17 +378,17 @@ v38 w4 bc 4,0 a-2.5 p0 t.002,.18,0,.03
 
 # Stream 14: Casio CZ-101 Digi-Brass Stabs & Chords (A Minor, 64 steps)
 [
-  # Bar 1: Crisp phase distortion brass stabs on upbeats
-  . . . .  E4 . . .  . . . .  G4 . A4 .
+  # Bar 1: Crisp phase distortion brass stabs with DCW bloom and sustain
+  E4 - - .  . . . .  G4 - - .  A4 - - .
 
   # Bar 2: Rising brass answer
-  . . . .  E4 . . .  . . . .  B4 . A4 .
+  E4 - - .  . . . .  B4 - - .  A4 - - .
 
   # Bar 3: Syncopated brass punch
-  . . . .  E4 . . .  . . . .  G4 . A4 .
+  E4 - - .  . . . .  G4 - - .  A4 - - .
 
   # Bar 4: Triumphant brass swell into turnaround
-  F4 . . . G4 . . .  A4 . . .  E4 . . .
+  F4 - - .  G4 - - .  A4 - - -  E4 - - .
 ] n>d /SS 14
 
 # Stream 5: Casio CZ-101 Space Harp (Preset 14 crystalline cascading arpeggios, 64 steps)
@@ -408,77 +408,77 @@ v38 w4 bc 4,0 a-2.5 p0 t.002,.18,0,.03
 
 # Stream 15: Casio CZ-101 Glass Bells & Chimes (Preset 9 sparkling bell highlights, 64 steps)
 [
-  # Bar 1: Shimmering double-sine crystal chimes
-  E5 . . .  . . G5 .  . . . .  A5 . . .
+  # Bar 1: Shimmering double-sine crystal chimes with lingering ring
+  E5 - - -  . . G5 -  . . . .  A5 - - .
 
   # Bar 2: Sparkling bell descent
-  C5 . . .  . . E5 .  . . . .  D5 . . .
+  C5 - - -  . . E5 -  . . . .  D5 - - .
 
   # Bar 3: Resonant triangle chime accent
-  A4 . . .  . . C5 .  . . . .  B4 . . .
+  A4 - - -  . . C5 -  . . . .  B4 - - .
 
   # Bar 4: Cosmic bell resolution
-  C5 . . .  D5 . . .  E5 . . .  A5 . . .
+  C5 - - .  D5 - - .  E5 - - -  A5 - - .
 ] n>d /SS 15
 
 # Stream 6: Korg DW-8000 2-Osc Digi-Bass (E Minor, 64 steps)
 [
-  # Bar 1: Tight DWGS digital slap/synth bass groove
-  E2 . E2 .  G2 . A2 .  B2 . D3 .  E3 D3 B2 .
+  # Bar 1: Tight DWGS digital slap/synth bass groove with solid sustain
+  E2 - . E2  . E2 G2 -  A2 - . B2  . D3 E3 .
 
   # Bar 2: Bouncing funk octave turnaround
-  E2 . E2 .  G2 . A2 .  B2 D3 E3 .  G3 . F#3 E3
+  E2 - . E2  . E2 G2 -  B2 - D3 -  G3 . F#3 E3
 
   # Bar 3: Relentless driving Digi-Bass pocket
-  E2 . E2 .  G2 . A2 .  B2 . D3 .  E3 D3 B2 .
+  E2 - . E2  . E2 G2 -  A2 - . B2  . D3 E3 .
 
   # Bar 4: Harmonic turnaround into delay
-  C2 . C3 .  D2 . D3 .  B2 . A2 .  E2 . . .
+  C2 - C3 -  D2 - D3 -  B2 - A2 -  E2 - - .
 ] n>d /SS 6
 
 # Stream 16: Korg DW-8000 Rotary Organ Chords (E Minor rock/funk swells, 64 steps)
 [
-  # Bar 1: Rich Leslie rotary organ chord swells
-  . . E4 .  . . G4 .  . . B4 .  E4 . . .
+  # Bar 1: Rich sustained rotary organ swells (held half-notes / chords)
+  E4 - - -  - - - -  G4 - - -  - - - -
 
-  # Bar 2: Swirling high organ answer
-  . . E4 .  . . G4 .  . . D5 .  B4 . . .
+  # Bar 2: Swirling organ melodic rise
+  B4 - - -  - - - -  E5 - - -  - - - -
 
-  # Bar 3: Driving rotary organ chord punch
-  . . E4 .  . . G4 .  . . B4 .  E4 . . .
+  # Bar 3: Driving organ chord swell
+  D5 - - -  - - - -  B4 - - -  - - - -
 
-  # Bar 4: Sustained harmonic turnaround
-  C4 . . .  D4 . . .  B3 . . .  E4 . . .
+  # Bar 4: Sustained harmonic cadence into rest
+  C5 - - -  D5 - - -  B4 - - -  E5 - - .
 ] n>d /SS 16
 
 # Stream 7: Korg DW-8000 2-Osc Power Brass (G Major / E Minor, 64 steps)
 [
-  # Bar 1: Bold 1985 DWGS hybrid brass anthem hook
-  G3 . G3 .  B3 . D4 .  E4 . D4 .  B3 . G3 .
+  # Bar 1: Heroic 1985 DWGS analog brass anthem (held sustaining horns)
+  G3 - - -  B3 - - -  D4 - - -  - - - .
 
-  # Bar 2: Syncopated power brass swell into turnaround
-  A3 . A3 .  C4 . E4 .  D4 . E4 .  F#4 . E4 D4
+  # Bar 2: Soaring brass swell into turnaround
+  E4 - - -  - - - -  D4 - - -  B3 - - .
 
-  # Bar 3: Driving melodic accents
-  E3 . E3 .  G3 . B3 .  D4 . B3 .  A3 . G3 .
+  # Bar 3: Punchy syncopated brass anthem
+  G3 - - -  C4 - - -  D4 - - -  - - - .
 
-  # Bar 4: Soaring triumphant resolution
-  C4 . C4 .  E4 . D4 .  B3 . A3 .  G3 . . .
+  # Bar 4: Triumphant brass resolution
+  E4 - - -  D4 - - -  B3 - - -  G3 - - .
 ] n>d /SS 7
 
 # Stream 17: Korg DW-8000 Cosmic Bells (Glistening digital bell echoes, 64 steps)
 [
-  # Bar 1: Cosmic bell accents through modulated delay
-  . . . .  D5 . . .  . . . .  B4 . . .
+  # Bar 1: High crystalline bell shimmer with sparkling sustain
+  . . . .  B5 - - -  . . . .  E6 - - -
 
-  # Bar 2: High crystalline bell shimmer
-  . . . .  E5 . . .  . . . .  D5 . . .
+  # Bar 2: Bell echo cascades
+  . . . .  D6 - - -  . . . .  B5 - - -
 
-  # Bar 3: Bell echo response
-  . . . .  B4 . . .  . . . .  G4 . . .
+  # Bar 3: Harmonized bell answer
+  . . . .  G5 - - -  . . . .  E5 - - -
 
-  # Bar 4: Cascading bell turnaround
-  E5 . . . D5 . . .  B4 . . .  G4 . . .
+  # Bar 4: Cascading turnaround
+  D5 - - -  B4 - - -  G4 - - -  E4 - - .
 ] n>d /SS 17
 
 # Stream 8: Commodore 64 MOS 6581 SID Fast Arpeggio Lead (D Minor, 64 steps)
@@ -906,9 +906,9 @@ yp -1
 [cz_mellow]   : v15 cd 0.40 v16 cd 0.35 v17 cd 0.30 v21 cd 0.45 [Casio CZ: Smooth Warm DCW] puts ;
 
 # Korg DW-8000 Tweaks
-[dw_delay_mod]   : DL 2 5 8 8 16 24 7 [DW-8000: Swirling Modulated Delay] puts ;
-[dw_delay_tight] : DL 2 3 4 4 0 0 5 [DW-8000: Tight Slapback Delay] puts ;
-[dw_filter_warm] : v24 k480 kd2400 v26 k420 kd2200 [DW-8000: NJM2069 Warm Resonance] puts ;
+[dw_delay_mod]   : DL 2 4 4 4 2 2 4 [DW-8000: Subtle Spatial Stereo Delay] puts ;
+[dw_delay_tight] : DL 2 3 4 3 0 0 5 [DW-8000: Tight Studio Slapback] puts ;
+[dw_delay_off]   : DL 2 0 0 0 0 0 0 [DW-8000: Digital Delay Bypass] puts ;
 
 # Chiptune LFSR & DAC Hardware Tweaks
 [nt_sid]        : v33 NT 0 v36 NT 0 v37 NT 0 [LFSR Noise: MOS 6581 SID 23-bit Hardware Preset] puts ;
