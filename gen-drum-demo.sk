@@ -208,23 +208,23 @@ v17 w117 f440 a-3.5 p-.25
 # Voices play back bit-accurate 1-bit CMOS and 9.38 kHz 8-bit PCM models from slots 118..122:
 
 # v18: Casio VL-1 Square Chirp Kick ("Po")
-v18 w118 f440 a-1.5 p0
+v18 w118 f440 a-0.5 p0
 [VL-1 Po Kick] vt
 
 # v19: Casio VL-1 Resonant Noise Snare ("Ka")
-v19 w119 f440 a-3.0 p0
+v19 w119 f440 a-2.0 p0
 [VL-1 Ka Snare] vt
 
 # v20: Casio VL-1 Highpass Micro-Tick Hat ("Chi")
-v20 w120 f440 a-4.5 p.20
+v20 w120 f440 a-3.5 p.20
 [VL-1 Chi Hat] vt
 
 # v21: Casio SK-1 8-Bit Lo-Fi High Bongo
-v21 w121 f440 a-3.5 p-.25
+v21 w121 f440 a-2.0 p-.25
 [SK-1 Hi Bongo] vt
 
 # v22: Casio SK-1 8-Bit Lo-Fi Low Bongo
-v22 w122 f440 a-3.5 p.25
+v22 w122 f440 a-2.0 p.25
 [SK-1 Lo Bongo] vt
 
 # ----------------------------------------------------------------------
@@ -622,51 +622,51 @@ yp -1
 [scene_casio_puts]     /ceb 4 8
 
 # --- MASTER CONDUCTOR PATTERNS (Scene Announcement Events) ---
-# Each conductor pattern runs 64 steps (4 bars) with [ce<id>] on step 0
+# Each conductor pattern runs 64 steps (4 bars) with [O ce<id>] on step 0
 y120 %1
 [Conductor Scene 0] yt
 yl 64
-[ce0] x0
+[O ce0] x0
 
 y121 %1
 [Conductor Scene 1] yt
 yl 64
-[ce1] x0
+[O ce1] x0
 
 y122 %1
 [Conductor Scene 2] yt
 yl 64
-[ce2] x0
+[O ce2] x0
 
 y123 %1
 [Conductor Scene 3] yt
 yl 64
-[ce3] x0
+[O ce3] x0
 
 y124 %1
 [Conductor Scene 4] yt
 yl 64
-[ce4] x0
+[O ce4] x0
 
 y125 %1
 [Conductor Scene 5] yt
 yl 64
-[ce5] x0
+[O ce5] x0
 
 y126 %1
 [Conductor Scene 6] yt
 yl 64
-[ce6] x0
+[O ce6] x0
 
 y127 %1
 [Conductor Scene 7] yt
 yl 64
-[ce7] x0
+[O ce7] x0
 
 y128 %1
 [Conductor Scene 8] yt
 yl 64
-[ce8] x0
+[O ce8] x0
 
 # ----------------------------------------------------------------------
 # 5. SCENE MATRIX & ARRANGER DEFINITION
@@ -745,15 +745,15 @@ yl 64
 [scene_casio]     : 8 scene_cue ;
 
 # Jump to scene immediately without waiting for bar end:
-[now_bossa]       : 0 scene_now ;
-[now_disco]       : 1 scene_now ;
-[now_electro]     : 2 scene_now ;
-[now_freestyle]   : 3 scene_now ;
-[now_synthpop]    : 4 scene_now ;
-[now_simmons]     : 5 scene_now ;
-[now_gogo]        : 6 scene_now ;
-[now_climax]      : 7 scene_now ;
-[now_casio]       : 8 scene_now ;
+[now_bossa]       : O 0 scene_now ;
+[now_disco]       : O 1 scene_now ;
+[now_electro]     : O 2 scene_now ;
+[now_freestyle]   : O 3 scene_now ;
+[now_synthpop]    : O 4 scene_now ;
+[now_simmons]     : O 5 scene_now ;
+[now_gogo]        : O 6 scene_now ;
+[now_climax]      : O 7 scene_now ;
+[now_casio]       : O 8 scene_now ;
 
 # Master Play / Stop macros
 [play] : Z0 Z! scene_now 0 ;

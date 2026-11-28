@@ -261,6 +261,11 @@ static uint64_t seq_scene_apply_tick = UINT64_MAX;
 
 static void seq_scene_apply_locked(int scene_id, uint64_t now) {
   if (scene_id < 0 || scene_id >= SCENE_MAX) return;
+
+  for (int i = 0; i < synth_config.voice_max; i++) {
+    envelope_velocity(i, 0.0f);
+  }
+
   seq_scene_t *sc = &seq_scenes[scene_id];
   for (int lane = 0; lane < SCENE_LANES; lane++) {
     int old_pat = seq_lane_pattern[lane];

@@ -6539,7 +6539,7 @@ Usage: src dst scene_copy
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `267` (`skode_clause_scene_cue_c483`)
+- **Discrete Opcode ID**: `268` (`skode_clause_scene_cue_c485`)
 - **Summary**: queue scene change at next downbeat
 
 **Description & Details**:
@@ -6583,7 +6583,7 @@ Usage: (p0 p1 p2 ...) scene_define scene_id
 
 - **Arity**: `1`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `268` (`skode_clause_scene_now_c485`)
+- **Discrete Opcode ID**: `267` (`skode_clause_scene_now_c484`)
 - **Summary**: switch scene immediately across all lanes
 
 **Description & Details**:
@@ -6605,7 +6605,7 @@ Usage: scene_now scene_id (or scene_id scene_now)
 
 - **Arity**: `0`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `270` (`skode_clause_scene_pause_c487`)
+- **Discrete Opcode ID**: `269` (`skode_clause_scene_pause_c486`)
 - **Summary**: pause playback of active scene in place
 
 **Description & Details**:
@@ -6627,7 +6627,7 @@ Usage: scene_pause (or pause)
 
 - **Arity**: `0`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `271` (`skode_clause_scene_resume_c488`)
+- **Discrete Opcode ID**: `270` (`skode_clause_scene_resume_c487`)
 - **Summary**: resume playback of paused scene
 
 **Description & Details**:
@@ -6649,7 +6649,7 @@ Usage: scene_resume (or resume)
 
 - **Arity**: `0`
 - **Execution Model**: `realtime (audio thread safe)`
-- **Discrete Opcode ID**: `269` (`skode_clause_scene_stop_c486`)
+- **Discrete Opcode ID**: `271` (`skode_clause_scene_stop_c488`)
 - **Summary**: queue clean musical stop at end of current scene
 
 **Description & Details**:
