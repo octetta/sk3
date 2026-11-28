@@ -622,51 +622,51 @@ yp -1
 [scene_casio_puts]     /ceb 4 8
 
 # --- MASTER CONDUCTOR PATTERNS (Scene Announcement Events) ---
-# Each conductor pattern runs 64 steps (4 bars) with [O ce<id>] on step 0
+# Each conductor pattern runs 64 steps (4 bars) with [ce<id>] on step 0
 y120 %1
 [Conductor Scene 0] yt
 yl 64
-[O ce0] x0
+[ce0] x0
 
 y121 %1
 [Conductor Scene 1] yt
 yl 64
-[O ce1] x0
+[ce1] x0
 
 y122 %1
 [Conductor Scene 2] yt
 yl 64
-[O ce2] x0
+[ce2] x0
 
 y123 %1
 [Conductor Scene 3] yt
 yl 64
-[O ce3] x0
+[ce3] x0
 
 y124 %1
 [Conductor Scene 4] yt
 yl 64
-[O ce4] x0
+[ce4] x0
 
 y125 %1
 [Conductor Scene 5] yt
 yl 64
-[O ce5] x0
+[ce5] x0
 
 y126 %1
 [Conductor Scene 6] yt
 yl 64
-[O ce6] x0
+[ce6] x0
 
 y127 %1
 [Conductor Scene 7] yt
 yl 64
-[O ce7] x0
+[ce7] x0
 
 y128 %1
 [Conductor Scene 8] yt
 yl 64
-[O ce8] x0
+[ce8] x0
 
 # ----------------------------------------------------------------------
 # 5. SCENE MATRIX & ARRANGER DEFINITION
