@@ -9,6 +9,7 @@
 #include "udp.h"
 #endif
 #include "http.h"
+#include "synth-alloc.h"
 
 void voice_show(skode_t *ctx, int v, char c, int verbose) {
   char s[1024];
@@ -148,6 +149,7 @@ void system_show(skode_t *ctx) {
   if (skred_tcp_status(tcp_stat, sizeof(tcp_stat)) > 0) {
     ctx->printf(ctx, "%s", tcp_stat);
   }
+  synth_mem_summary(ctx);
 }
 
 void skode_macros_show(skode_t *ctx, int pasteable) {

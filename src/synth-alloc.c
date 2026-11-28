@@ -25,12 +25,151 @@
 
 #include "synth-config.h"
 #include "synth-state.h"
+#include "synth-alloc.h"
+#include "skode.h"
 
 /* ------------------------------------------------------------------ */
 /* Globals defined here                                                */
 /* ------------------------------------------------------------------ */
 
 skred_engine_t skred_global_engine;
+
+/* ------------------------------------------------------------------ */
+/* Allocation registry (control-thread write / /s read only)          */
+/* ------------------------------------------------------------------ */
+
+static synth_mem_rec_t s_mem_recs[SYNTH_MEM_REC_MAX];
+static int             s_mem_rec_count = 0;
+static size_t          s_mem_total     = 0;
+
+void synth_mem_register(const char *name, const char *kind,
+                        size_t elem_size, int count, int is_dynamic) {
+    if (!name || !kind || count <= 0 || elem_size == 0) return;
+
+    size_t bytes = (size_t)count * elem_size;
+
+    /* Check if an entry with this name already exists; if so, update in place */
+    for (int i = 0; i < s_mem_rec_count; i++) {
+        if (s_mem_recs[i].name == name || strcmp(s_mem_recs[i].name, name) == 0) {
+            s_mem_total -= s_mem_recs[i].bytes;
+            s_mem_recs[i].kind = kind;
+            s_mem_recs[i].elem_size = elem_size;
+            s_mem_recs[i].count = count;
+            s_mem_recs[i].bytes = bytes;
+            s_mem_recs[i].is_dynamic = is_dynamic ? 1 : 0;
+            s_mem_total += bytes;
+            return;
+        }
+    }
+
+    if (s_mem_rec_count >= SYNTH_MEM_REC_MAX) return;
+
+    s_mem_recs[s_mem_rec_count++] = (synth_mem_rec_t){
+        .name       = name,
+        .kind       = kind,
+        .elem_size  = elem_size,
+        .count      = count,
+        .bytes      = bytes,
+        .is_dynamic = is_dynamic ? 1 : 0
+    };
+    s_mem_total += bytes;
+}
+
+void synth_mem_unregister(const char *name) {
+    if (!name) return;
+    for (int i = 0; i < s_mem_rec_count; i++) {
+        if (s_mem_recs[i].name == name || strcmp(s_mem_recs[i].name, name) == 0) {
+            s_mem_total -= s_mem_recs[i].bytes;
+            for (int j = i; j < s_mem_rec_count - 1; j++) {
+                s_mem_recs[j] = s_mem_recs[j + 1];
+            }
+            s_mem_rec_count--;
+            return;
+        }
+    }
+}
+
+void synth_mem_clear_static(void) {
+    int dst = 0;
+    size_t new_total = 0;
+    for (int i = 0; i < s_mem_rec_count; i++) {
+        if (s_mem_recs[i].is_dynamic) {
+            s_mem_recs[dst++] = s_mem_recs[i];
+            new_total += s_mem_recs[i].bytes;
+        }
+    }
+    s_mem_rec_count = dst;
+    s_mem_total = new_total;
+}
+
+size_t synth_mem_total_bytes(void) {
+    return s_mem_total;
+}
+
+void synth_mem_report(struct skode_s *ctx) {
+    if (!ctx || !ctx->printf) return;
+
+    ctx->printf(ctx, "# memory allocations (large static + dynamic >= 4 KiB)\n");
+    ctx->printf(ctx, "# %-24s %-16s %10s %8s %8s %s\n",
+                "name", "kind", "bytes", "count", "elem", "dyn");
+
+    int shown = 0;
+    for (int i = 0; i < s_mem_rec_count; i++) {
+        const synth_mem_rec_t *r = &s_mem_recs[i];
+        if (r->bytes < 4096) continue;
+        shown++;
+        ctx->printf(ctx, "# %-24s %-16s %10zu %8d %8zu %s\n",
+                    r->name, r->kind, r->bytes, r->count,
+                    r->elem_size, r->is_dynamic ? "dyn" : "static");
+    }
+
+    /* Also check for loaded wavetable audio sample data (sw.data) */
+    size_t wave_pcm_total = 0;
+    int wave_pcm_count = 0;
+    if (sw.data && sw.size) {
+        for (int w = 0; w < synth_config.wave_table_max; w++) {
+            if (sw.data[w] && sw.size[w] > 0) {
+                int ch = (sw.channels && sw.channels[w] > 1) ? sw.channels[w] : 1;
+                size_t pcm_bytes = (size_t)sw.size[w] * sizeof(float) * ch;
+                wave_pcm_total += pcm_bytes;
+                wave_pcm_count++;
+                if (pcm_bytes >= 4096) {
+                    char wave_label[48];
+                    snprintf(wave_label, sizeof(wave_label), "wave-pcm[%d]", w);
+                    ctx->printf(ctx, "# %-24s %-16s %10zu %8d %8zu dyn\n",
+                                wave_label, "wave-data", pcm_bytes, sw.size[w], sizeof(float));
+                    shown++;
+                }
+            }
+        }
+    }
+
+    size_t grand_total = s_mem_total + wave_pcm_total;
+    double total_mb = (double)grand_total / (1024.0 * 1024.0);
+    ctx->printf(ctx, "# total tracked: %zu bytes (%.2f MB across %d records + %d waves, %d shown >= 4 KiB)\n",
+                grand_total, total_mb, s_mem_rec_count, wave_pcm_count, shown);
+}
+
+void synth_mem_summary(struct skode_s *ctx) {
+    if (!ctx || !ctx->printf) return;
+
+    size_t wave_pcm_total = 0;
+    int wave_pcm_count = 0;
+    if (sw.data && sw.size) {
+        for (int w = 0; w < synth_config.wave_table_max; w++) {
+            if (sw.data[w] && sw.size[w] > 0) {
+                int ch = (sw.channels && sw.channels[w] > 1) ? sw.channels[w] : 1;
+                wave_pcm_total += (size_t)sw.size[w] * sizeof(float) * ch;
+                wave_pcm_count++;
+            }
+        }
+    }
+
+    size_t grand_total = s_mem_total + wave_pcm_total;
+    double total_mb = (double)grand_total / (1024.0 * 1024.0);
+    ctx->printf(ctx, "# memory: %.2f MB tracked (%d records, %d waves, /s 8 for details)\n",
+                total_mb, s_mem_rec_count, wave_pcm_count);
+}
 
 /* ------------------------------------------------------------------ */
 /* Internal allocator                                                  */
@@ -53,6 +192,7 @@ static void *synth_alloc(int n, size_t sz, const char *name) {
                 "(%d x %zu = %zu bytes)\n", name, n, sz, (size_t)n * sz);
         exit(1);
     }
+    synth_mem_register(name, "voice/wave-meta", sz, n, /*is_dynamic=*/0);
     return p;
 }
 
@@ -278,6 +418,7 @@ void synth_alloc_voices(int voice_max) {
 }
 
 void synth_free_voices(void) {
+    synth_mem_clear_static();
     VFREE(phase);            VFREE(phase_inc);       VFREE(table);
     VFREE(table_right);      VFREE(source_type);     VFREE(sample_r);
     VFREE(mip_level);
@@ -392,6 +533,7 @@ void synth_alloc_waves(int wave_table_max) {
 }
 
 void synth_free_waves(void) {
+    synth_mem_clear_static();
     if (sw.source && sw.source_is_heap) {
         for (int i = 0; i < synth_config.wave_table_max; i++) {
             if (sw.source_is_heap[i] && sw.source[i]) {

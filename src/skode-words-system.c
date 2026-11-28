@@ -1,4 +1,5 @@
 #include "skode-internal.h"
+#include "synth-alloc.h"
 #include <ctype.h>
 #include <math.h>
 #include <stdlib.h>
@@ -333,6 +334,7 @@ int skode_exec_slashs(skode_t *ctx, ands_t *s, const double *arg, int argc) {
       case 1: show_threads(ctx); break;
       case 4: show_stats(ctx); break;
       case 6: ctx->printf(ctx, "%s", seq_stats()); break;
+      case 8: synth_mem_report(ctx); break;
     }
   }
   return 0;
