@@ -41,7 +41,8 @@ void voice_show_connected(skode_t *ctx, int root_voice, int verbose) {
     if (sv.amp_mod_osc[v] >= 0)  candidates[cand_count++] = sv.amp_mod_osc[v];
     if (sv.ring_osc[v] >= 0)     candidates[cand_count++] = sv.ring_osc[v];
     if (sv.pan_mod_osc[v] >= 0)  candidates[cand_count++] = sv.pan_mod_osc[v];
-    if (sv.cz_mod_osc[v] >= 0)   candidates[cand_count++] = sv.cz_mod_osc[v];
+    if (sv.cz_mode[v] != 0 && sv.cz_mod_depth[v] != 0.0f && sv.cz_mod_osc[v] >= 0)
+      candidates[cand_count++] = sv.cz_mod_osc[v];
 
     // Forward links (MIDI, Velocity, Hard Sync, Trigger):
     for (int i = 0; i < SYNTH_VOICE_LINKS_MAX; i++) {

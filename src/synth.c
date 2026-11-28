@@ -302,8 +302,11 @@ void synth_capture(skred_engine_t *engine, float *buffer, float *input, int num_
   }
 
   for (int n = 0; n < nvoices; n++) {
+    if (!voice_active[n]) continue;
     int m;
-    m = sv.cz_mod_osc[n];   if (m >= 0 && m < nvoices) voice_active[m] = 1;
+    if (sv.cz_mode[n] != 0 && sv.cz_mod_depth[n] != 0.0f) {
+      m = sv.cz_mod_osc[n];   if (m >= 0 && m < nvoices) voice_active[m] = 1;
+    }
     m = sv.freq_mod_osc[n]; if (m >= 0 && m < nvoices) voice_active[m] = 1;
     m = sv.pan_mod_osc[n];  if (m >= 0 && m < nvoices) voice_active[m] = 1;
     m = sv.amp_mod_osc[n];  if (m >= 0 && m < nvoices) voice_active[m] = 1;

@@ -1238,7 +1238,7 @@ int envelope_velocity(int voice, float f) {
       amp_envelope_schedule_one_shot_release(voice);
       if (sv.use_filter_envelope[voice])
           envelope_trigger_e(&sv.filter_envelope[voice], f);
-      if (sv.use_cz_envelope[voice])
+      if (sv.use_cz_envelope[voice] && sv.cz_mode[voice] != 0)
           envelope_trigger_e(&sv.cz_envelope[voice], f);
       if (sv.use_freq_envelope[voice])
           envelope_trigger_e(&sv.freq_envelope[voice], f);

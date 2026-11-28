@@ -648,8 +648,9 @@ static int graph_edges(int voice, graph_edge_t *edge, int max) {
     SKRED_VOICE_EDGE_FREQ_MOD, "freq-mod");
   count = graph_add(edge, count, max, sv.pan_mod_osc[voice],
     SKRED_VOICE_EDGE_PAN_MOD, "pan-mod");
-  count = graph_add(edge, count, max, sv.cz_mod_osc[voice],
-    SKRED_VOICE_EDGE_PHASE_MOD, "phase-mod");
+  if (sv.cz_mode[voice] != 0 && sv.cz_mod_depth[voice] != 0.0f)
+    count = graph_add(edge, count, max, sv.cz_mod_osc[voice],
+      SKRED_VOICE_EDGE_PHASE_MOD, "phase-mod");
   count = graph_add(edge, count, max, sv.ring_osc[voice],
     SKRED_VOICE_EDGE_RING_MOD, "ring-mod");
   for (int i = 0; i < SYNTH_VOICE_LINKS_MAX; i++)
