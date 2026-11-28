@@ -14,12 +14,13 @@
 #    6. Simmons SDS-V Electronic (1981) - Pitch-Diving Disco Toms & Lasers
 #    7. D.C. Go-Go & Boogie Funk (1985)  - Syncopated Cowbell & Congas
 #    8. All-Star Analog Climax           - Full Vintage Hardware Jam
+#    9. Kraftwerk "Numbers" (1981)       - German Vox Speech & Delay Matrix
 #
 #  Features:
-#    - 18 procedurally generated drum instruments (wavetables 100..117)
-#    - 18 fully labeled stereo voices (v0..v17 with custom panning)
-#    - 8-stage automated scene progression via the Scene Arranger matrix
-#    - Interactive scene cues and performance macro effects
+#    - 22 procedurally generated drum & speech instruments (wavetables 100..126)
+#    - 27 fully labeled stereo voices (v0..v26 with custom panning & delay)
+#    - 10-stage automated scene progression via the Scene Arranger matrix
+#    - Interactive scene cues, fade in/out macros, and performance effects
 # ======================================================================
 
 [===============================================================] puts
@@ -129,6 +130,20 @@ M 124 16
 [drum:sk1 type:bongo_lo] 122 gen!
 [SK-1 Lo Bongo] wt 122
 
+# --- KRAFTWERK "NUMBERS" (1981) PROCEDURAL GERMAN ROBOTIC SPEECH (vox!) ---
+# Synthesizes German counting numbers directly into wavetables using robot persona 4
+[AY1:90 N:90 S:110] 123 4 105 vox!
+[Kraftwerk Eins] wt 123
+
+[T:50 S:60 V:60 AY1:110] 124 4 105 vox!
+[Kraftwerk Zwei] wt 124
+
+[D:50 R:60 AY1:120] 125 4 105 vox!
+[Kraftwerk Drei] wt 125
+
+[F:80 IY1:100 ER:90] 126 4 105 vox!
+[Kraftwerk Vier] wt 126
+
 # ----------------------------------------------------------------------
 # 2. VOICE DEFINITIONS & STEREO PANNING
 # ----------------------------------------------------------------------
@@ -226,6 +241,28 @@ v21 w121 f440 a-2.0 p-.25
 # v22: Casio SK-1 8-Bit Lo-Fi Low Bongo
 v22 w122 f440 a-2.0 p.25
 [SK-1 Lo Bongo] vt
+
+# --- KRAFTWERK "NUMBERS" (1981) ROBOTIC VOX VOICES & DELAY BUS ---
+# Spatial ping-pong stereo delay matrix for syncopated robotic echoes
+DL 1 4 4 5 0 0 6
+DD 1 4 2
+DP 1 1
+
+# v23: Kraftwerk German Speech "Eins" (Panned Left-Center, Stereo Delay Send)
+v23 w123 f440 a-3.5 p-.20 ds 0.40
+[Kraftwerk Eins] vt
+
+# v24: Kraftwerk German Speech "Zwei" (Panned Right-Center, Stereo Delay Send)
+v24 w124 f440 a-3.5 p.20 ds 0.40
+[Kraftwerk Zwei] vt
+
+# v25: Kraftwerk German Speech "Drei" (Panned Left-Center, Stereo Delay Send)
+v25 w125 f440 a-3.5 p-.20 ds 0.40
+[Kraftwerk Drei] vt
+
+# v26: Kraftwerk German Speech "Vier" (Panned Right-Center, Stereo Delay Send)
+v26 w126 f440 a-3.5 p.20 ds 0.40
+[Kraftwerk Vier] vt
 
 # ----------------------------------------------------------------------
 # 3. DISCRETE STEP SEQUENCER PATTERNS (y0..y69)
@@ -590,6 +627,48 @@ y74 %1
 yl 16
 [v17 l.7] x6,14
 
+# --- STYLE 9: KRAFTWERK "NUMBERS" (1981, COMPUTERWELT) ---
+# Iconic 16th-note electro groove with procedural German robotic speech & delay repeats
+
+# Pattern 80: Driving Four-on-the-Floor Electronic Club Kick (Steps 0, 4, 8, 10, 12)
+y80 %1
+[Kraftwerk Kick] yt
+yl 16
+[v1 l1] x0,4,8,10,12
+
+# Pattern 81: Electronic Snare + Laser Zap Accents (Steps 4, 12 snare; 14 zap)
+y81 %1
+[Kraftwerk Snare/Zap] yt
+yl 16
+[v2 l.9] x4,12
+[v17 l.75] x14
+
+# Pattern 82: Relentless 16th Robot Hi-Hat Ticks with Sizzle Open Hat
+y82 %1
+[Kraftwerk Robot Hats] yt
+yl 16
+[v5 l.55] x0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
+[v6 l.7] x6,14
+
+# Pattern 83: Procedural German Robotic Counting Sequence (4-Bar Progression, 64 Steps)
+# Eins (Step 0) -> Zwei (Step 16) -> Drei (Step 32) -> Vier (Step 48) + Syncopated Repeat (56, 60)
+y83 %1
+[Kraftwerk German Vox] yt
+yl 64
+[v23 l1] x0
+[v24 l1] x16
+[v25 l1] x32
+[v26 l1] x48
+[v23 l.85] x56
+[v24 l.85] x60
+
+# Pattern 84: Syncopated Claves & Cowbell Counterpoint
+y84 %1
+[Kraftwerk Claves/Bell] yt
+yl 16
+[v11 l.8] x2,7,10,13
+[v12 l.75] x8
+
 # ----------------------------------------------------------------------
 # 4. CONTROL PLANE EVENT RESPONDERS & CONDUCTOR PATTERNS
 # ----------------------------------------------------------------------
@@ -609,8 +688,9 @@ yp -1
 [scene_gogo_puts]      : [>>> SCENE 6: 1985 D.C. GO-GO & BOOGIE FUNK <<<] puts ;
 [scene_climax_puts]    : [>>> SCENE 7: ALL-STAR VINTAGE HARDWARE CLIMAX <<<] puts ;
 [scene_casio_puts]     : [>>> SCENE 8: CASIO VL-1 (1979) & SK-1 (1985) LO-FI ROCK-1 & BONGO RHYTHM <<<] puts ;
+[scene_numbers_puts]   : [>>> SCENE 9: KRAFTWERK (1981) NUMBERS / COMPUTERWELT <<<] puts ;
 
-# Bind responders to user control event IDs 0..8
+# Bind responders to user control event IDs 0..9
 [scene_bossa_puts]     /ceb 4 0
 [scene_disco_puts]     /ceb 4 1
 [scene_electro_puts]   /ceb 4 2
@@ -620,6 +700,7 @@ yp -1
 [scene_gogo_puts]      /ceb 4 6
 [scene_climax_puts]    /ceb 4 7
 [scene_casio_puts]     /ceb 4 8
+[scene_numbers_puts]   /ceb 4 9
 
 # --- MASTER CONDUCTOR PATTERNS (Scene Announcement Events) ---
 # Each conductor pattern runs 64 steps (4 bars) with [ce<id>] on step 0
@@ -668,17 +749,22 @@ y128 %1
 yl 64
 [ce8] x0
 
+y129 %1
+[Conductor Scene 9] yt
+yl 64
+[ce9] x0
+
 # ----------------------------------------------------------------------
 # 5. SCENE MATRIX & ARRANGER DEFINITION
 # Lanes:
 #   Lane 0: Kick (v0/v1/v18)
 #   Lane 1: Snare & Rimshot (v2/v3/v19)
 #   Lane 2: Hi-Hats (v5/v6/v20)
-#   Lane 3: Claps, Claves & Bongos (v4/v11/v21/v22)
+#   Lane 3: Claps, Claves, Bongos & German Vox (v4/v11/v21/v22/v23..v26)
 #   Lane 4: Congas, Toms & Zaps (v7/v8/v9/v10/v16/v17)
 #   Lane 5: Cowbell & Maracas (v12/v13)
 #   Lane 6: Cymbals (Crash & Ride) (v14/v15)
-#   Lane 7: Master Conductor / Scene Event (Patterns 120-128)
+#   Lane 7: Master Conductor / Scene Event (Patterns 120-129)
 # ----------------------------------------------------------------------
 
 # Scene 0: Roland CR-78 Bossa Nova (1978)
@@ -708,6 +794,9 @@ yl 64
 # Scene 8: Casio VL-1 & SK-1 Lo-Fi Toy Keyboard Rhythm (1979 / 1985)
 ( 70 71 72 73 74 -1 -1 128 ) scene_define 8
 
+# Scene 9: Kraftwerk "Numbers" (1981) German Robotic Vox & Delay Matrix
+( 80 81 82 83 84 -1 -1 129 ) scene_define 9
+
 # ----------------------------------------------------------------------
 # 6. AUTOMATED SCENE PROGRESSION CHAIN
 # Structure:
@@ -719,7 +808,8 @@ yl 64
 #   Scene 5 (Simmons Tom Solo)   - 4 bars -> Scene 6
 #   Scene 6 (Go-Go Cowbell Funk) - 4 bars -> Scene 7
 #   Scene 7 (All-Star Climax)    - 4 bars -> Scene 8
-#   Scene 8 (Casio VL-1 / SK-1)  - 4 bars -> Loop back to Scene 0
+#   Scene 8 (Casio VL-1 / SK-1)  - 4 bars -> Scene 9
+#   Scene 9 (Kraftwerk Numbers)  - 4 bars -> Loop in place (9 -> 9)
 # ----------------------------------------------------------------------
 0 4 1 scene_chain
 1 4 2 scene_chain
@@ -729,11 +819,16 @@ yl 64
 5 4 6 scene_chain
 6 4 7 scene_chain
 7 4 8 scene_chain
-8 4 0 scene_chain
+8 4 9 scene_chain
+9 4 9 scene_chain
 
 # ----------------------------------------------------------------------
 # 7. INTERACTIVE NAVIGATION MACROS & CONTROLS
 # ----------------------------------------------------------------------
+# Smooth Volume Fade In / Fade Out Macros (using volume smoother)
+[fade_out]        : -60.0 V [Master Volume: Fade Out (-60 dB, Click-Free)] puts ;
+[fade_in]         : -2.5 V  [Master Volume: Fade In (-2.5 dB, Performance Level)] puts ;
+
 [scene_bossa]     : 0 scene_cue ;
 [scene_disco]     : 1 scene_cue ;
 [scene_electro]   : 2 scene_cue ;
@@ -743,6 +838,7 @@ yl 64
 [scene_gogo]      : 6 scene_cue ;
 [scene_climax]    : 7 scene_cue ;
 [scene_casio]     : 8 scene_cue ;
+[scene_numbers]   : 9 scene_cue ;
 
 # Jump to scene immediately without waiting for bar end:
 [now_bossa]       : O 0 scene_now ;
@@ -754,12 +850,14 @@ yl 64
 [now_gogo]        : O 6 scene_now ;
 [now_climax]      : O 7 scene_now ;
 [now_casio]       : O 8 scene_now ;
+[now_numbers]     : O 9 scene_now ;
 
 # Master Play / Stop macros
 [play] : Z0 Z! scene_now 0 ;
 
 # Display directory of scenes
-[scenes] : [SCENES: 0:scene_bossa 1:scene_disco 2:scene_electro 3:scene_freestyle 4:scene_synthpop 5:scene_simmons 6:scene_gogo 7:scene_climax 8:scene_casio] puts ;
+[scenes] : [SCENES: 0:scene_bossa 1:scene_disco 2:scene_electro 3:scene_freestyle 4:scene_synthpop 5:scene_simmons 6:scene_gogo 7:scene_climax 8:scene_casio 9:scene_numbers] puts ;
+[controls] : [LIVE CONTROLS: fade_in, fade_out, scenes, play, pause, resume, scene_stop] puts ;
 
 # ----------------------------------------------------------------------
 # 8. STARTUP GUIDE BANNER
@@ -774,7 +872,9 @@ yl 64
 [  Scene 6: scene_gogo      (1985 Washington D.C. Go-Go Cowbell & Congas)] puts
 [  Scene 7: scene_climax    (All-Star Vintage Analog Hardware Jam)] puts
 [  Scene 8: scene_casio     (Casio VL-1 1979 & SK-1 1985 Lo-Fi Toy Keyboard Rhythm)] puts
+[  Scene 9: scene_numbers   (Kraftwerk 1981 Numbers / Computerwelt Vox & Delay)] puts
 [Type 'play' to start automated arrangement from Scene 0.] puts
-[Type 'scenes' to list scenes, or any scene macro (e.g. 'scene_casio') to cue live.] puts
+[Type 'fade_in' / 'fade_out' for click-free volume transitions.] puts
+[Type 'scenes' to list scenes, or any scene macro (e.g. 'scene_numbers') to cue live.] puts
 [Scene transport: 'scene_stop' (or -1 scene_cue) to stop at bar end; 'pause' / 'resume'] puts
 [===============================================================] puts

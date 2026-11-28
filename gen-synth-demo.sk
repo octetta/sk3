@@ -198,25 +198,28 @@ v18 w0 a-4.5 p-.25 N0,7 c 1 0.15 ct .015,.35,.50,.10 cd 0.80 t.010,.35,.50,.10 d
 # STYLE 6: CASIO CZ-101 SPACE HARP & GLASS BELLS (Voices 19..22)
 # ======================================================================
 # Iconic CZ Preset 14 'Space Harp' (Voices 19 & 20):
+# Evoking a real acoustic concert harp: sharp 1ms glassy pluck transient
+# followed by natural .65s spruce wooden decay and delicate string release (.35s)
 # Voice 19 (Space Harp Core): CZ Line 5 (Saw->Triangle) fast percussive pluck
 # Slaves Voice 20 via G20 H20, sent through rich stereo delay (ds 0.45)
-v19 w0 a-3.5 p-.25 c 5 0.12 ct .001,.38,0,.22 cd 0.85 t.001,.45,0,.22 ds 0.45
+v19 w0 a-3.5 p-.25 c 5 0.12 ct .001,.38,0,.22 cd 0.85 t.001,.65,0,.35 ds 0.45
 v19 G20 H20
 [CZ-101 Space Harp Line 5] vt
 
 # Voice 20 (Space Harp Sub): CZ Line 3 (Triangle) 1 octave down for body
-v20 w0 a-4.5 p.25 N-12,0 c 3 0.10 ct .001,.38,0,.22 cd 0.70 t.001,.45,0,.22 ds 0.45
+v20 w0 a-4.5 p.25 N-12,0 c 3 0.10 ct .001,.38,0,.22 cd 0.70 t.001,.65,0,.35 ds 0.45
 [CZ-101 Space Harp Sub] vt
 
 # Iconic CZ Preset 9 'Glass Bells & Chimes' (Voices 21 & 22):
-# Voice 21 (Crystal Bell Core): CZ Line 4 (Double Sine) with glassy DCW decay & long release
+# Evoking authentic crystal carillons: pure double-sine inharmonic strike with 1.6s lingering ring
+# Voice 21 (Crystal Bell Core): CZ Line 4 (Double Sine) with glassy DCW decay & long chime release
 # Slaves Voice 22 via G22 H22, delay send ds 0.45
-v21 w0 a-3.0 p.20 c 4 0.25 ct .002,1.0,.20,.70 cd 0.75 t.002,1.2,.30,.80 ds 0.45
+v21 w0 a-3.0 p.20 c 4 0.25 ct .002,1.2,.25,.80 cd 0.75 t.002,1.6,.35,1.0 ds 0.45
 v21 G22 H22
 [CZ Glass Bell Line 4] vt
 
 # Voice 22 (Shimmering Overtone): CZ Line 7 (Resonant Triangle) +12st +7 cents
-v22 w0 N12,7 a-4.0 p-.20 c 7 0.25 ct .002,.80,.15,.60 cd 0.85 t.002,1.0,.20,.75 ds 0.45
+v22 w0 N12,7 a-4.0 p-.20 c 7 0.25 ct .002,1.0,.20,.70 cd 0.85 t.002,1.4,.25,.90 ds 0.45
 [CZ Reso-Tri Shimmer] vt
 
 # ======================================================================
@@ -235,15 +238,17 @@ v25 w27 r 2 ds 0 N0,5 a-4.0 p0 t.002,.24,.45,.08 j1,1 k300 q2.4 jd 2.0 kt.002,.2
 [DW8000 Digi Bass Osc2] vt
 
 # DW Rotary Organ (Voices 28 & 29):
-# Wide open NJM2069 VCF (k4500 q0.7) lets all drawbar harmonics cut through!
-# High sustained drawbar body (sustain .88) and warm acoustic room/Leslie decay (release .45)
+# Evoking a real Hammond B3 through a rotating Leslie speaker:
+# Instant attack (.004s), full drawbar sustain (.95), warm room release (.42s),
+# wide open NJM2069 analog filter (k4800 q0.6) with zero muffled envelope closing,
+# and dual-oscillator detuning (+8 cents) for authentic rotary acoustic chorus beating!
 # Osc 1 (Voice 28): DWGS Organ (w21), high sustained drawbar body, rich delay send (ds 0.30)
-v28 w21 r 2 ds 0.30 a-3.2 p-.25 t.008,.30,.88,.45 j1,1 k4500 q0.7
+v28 w21 r 2 ds 0.30 a-3.2 p-.25 t.004,.10,.95,.42 j1,1 k4800 q0.6
 v28 G29 H29
 [DW8000 Rotary Organ Osc1] vt
 
 # Osc 2 (Voice 29): DWGS Organ (w21) detuned +8 cents (N0,8) for lush Leslie rotary beating
-v29 w21 r 2 ds 0.30 N0,8 a-3.7 p.25 t.008,.30,.88,.45 j1,1 k4500 q0.7
+v29 w21 r 2 ds 0.30 N0,8 a-3.7 p.25 t.004,.10,.95,.42 j1,1 k4800 q0.6
 [DW8000 Rotary Organ Osc2] vt
 
 # ======================================================================
@@ -260,14 +265,14 @@ v27 w22 r 2 ds 0.25 N0,8 a-5.2 p.20 t.015,.35,.75,.20 j1,1 k450 q2.0 jd 1.5 kt.0
 [DW8000 Epiano Bite Osc2] vt
 
 # DW Cosmic Bells (Voices 30 & 31):
-# Deep, shimmering crystalline bells with extended celestial sustain (.40) and long chime release (.75)
+# Deep, shimmering crystalline bells with extended celestial sustain (.40) and long chime release (1.0s)
 # Osc 1 (Voice 30): DWGS Bell (w29) through crisp NJM2069 VCF, slaving v31
-v30 w29 r 2 ds 0.40 a-3.8 p-.25 t.002,1.0,.40,.75 j1,1 k3200 q3.0 kt.002,.80,.25,.40 kd2800
+v30 w29 r 2 ds 0.40 a-3.8 p-.25 t.002,1.2,.40,1.0 j1,1 k3200 q3.0 kt.002,1.0,.25,.50 kd2800
 v30 G31 H31
 [DW8000 Cosmic Bell Osc1] vt
 
 # Osc 2 (Voice 31): DWGS Bell (w29) tuned +12st +6 cents (N12,6) for sparkling octave chime
-v31 w29 r 2 ds 0.40 N12,6 a-4.8 p.25 t.002,1.0,.40,.75 j1,1 k3400 q3.0 kt.002,.80,.25,.40 kd2800
+v31 w29 r 2 ds 0.40 N12,6 a-4.8 p.25 t.002,1.2,.40,1.0 j1,1 k3400 q3.0 kt.002,1.0,.25,.50 kd2800
 [DW8000 Cosmic Bell Osc2] vt
 
 # ======================================================================
@@ -381,16 +386,16 @@ v38 w4 bc 4,0 a-3.5 p0 t.002,.18,0,.03
 # Stream 14: Casio CZ-101 Digi-Brass Stabs & Chords (A Minor, 64 steps)
 [
   # Bar 1: Crisp phase distortion brass stabs with DCW bloom and sustain
-  E4 - - .  . . . .  G4 - - .  A4 - - .
+  E4 . . -  - - - -  G4 . . -  A4 . . -
 
   # Bar 2: Rising brass answer
-  E4 - - .  . . . .  B4 - - .  A4 - - .
+  E4 . . -  - - - -  B4 . . -  A4 . . -
 
   # Bar 3: Syncopated brass punch
-  E4 - - .  . . . .  G4 - - .  A4 - - .
+  E4 . . -  - - - -  G4 . . -  A4 . . -
 
   # Bar 4: Triumphant brass swell into turnaround
-  F4 - - .  G4 - - .  A4 - - -  E4 - - -
+  F4 . . -  G4 . . -  A4 . . -  - - - -
 ] n>d /SS 14
 
 # Stream 5: Casio CZ-101 Space Harp (Preset 14 crystalline cascading arpeggios, 64 steps)
@@ -411,16 +416,16 @@ v38 w4 bc 4,0 a-3.5 p0 t.002,.18,0,.03
 # Stream 15: Casio CZ-101 Glass Bells & Chimes (Preset 9 sparkling bell highlights, 64 steps)
 [
   # Bar 1: Shimmering double-sine crystal chimes with lingering ring
-  E5 - - -  . . G5 -  . . . .  A5 - - -
+  E5 . . .  . . . .  G5 . . .  . . . .
 
   # Bar 2: Sparkling bell descent
-  C5 - - -  . . E5 -  . . . .  D5 - - -
+  C5 . . .  . . . .  D5 . . .  . . . .
 
   # Bar 3: Resonant triangle chime accent
-  A4 - - -  . . C5 -  . . . .  B4 - - -
+  A4 . . .  . . . .  B4 . . .  . . . .
 
   # Bar 4: Cosmic bell resolution with extended glassy decay
-  C5 - - -  D5 - - -  E5 - - -  A5 - - -
+  C5 . . .  D5 . . .  E5 . . -  - - - -
 ] n>d /SS 15
 
 # Stream 6: Korg DW-8000 2-Osc Digi-Bass (E Minor, 64 steps)
@@ -441,16 +446,16 @@ v38 w4 bc 4,0 a-3.5 p0 t.002,.18,0,.03
 # Stream 16: Korg DW-8000 Rotary Organ Chords (E Minor rock/funk swells, 64 steps)
 [
   # Bar 1: Rich sustained rotary organ swells (held half-notes / chords)
-  E4 - - -  - - - -  G4 - - -  - - - -
+  E4 . . .  . . . .  G4 . . .  . . . .
 
   # Bar 2: Swirling organ melodic rise
-  B4 - - -  - - - -  E5 - - -  - - - -
+  B4 . . .  . . . .  E5 . . .  . . . .
 
   # Bar 3: Driving organ chord swell
-  D5 - - -  - - - -  B4 - - -  - - - -
+  D5 . . .  . . . .  B4 . . .  . . . .
 
   # Bar 4: Sustained harmonic cadence into rest
-  C5 - - -  D5 - - -  B4 - - -  E5 - - -
+  C5 . . .  D5 . . .  B4 . . -  - - - -
 ] n>d /SS 16
 
 # Stream 7: Korg DW-8000 2-Osc Power Brass (G Major / E Minor, 64 steps)
@@ -471,16 +476,16 @@ v38 w4 bc 4,0 a-3.5 p0 t.002,.18,0,.03
 # Stream 17: Korg DW-8000 Cosmic Bells (Glistening digital bell echoes, 64 steps)
 [
   # Bar 1: High crystalline bell shimmer with sparkling sustain
-  . . . .  B5 - - -  . . . .  E6 - - -
+  - - - -  B5 . . .  - - - -  E6 . . .
 
   # Bar 2: Bell echo cascades
-  . . . .  D6 - - -  . . . .  B5 - - -
+  - - - -  D6 . . .  - - - -  B5 . . .
 
   # Bar 3: Harmonized bell answer
-  . . . .  G5 - - -  . . . .  E5 - - -
+  - - - -  G5 . . .  - - - -  E5 . . .
 
   # Bar 4: Cascading turnaround
-  D5 - - -  B4 - - -  G4 - - -  E4 - - -
+  D5 . . .  B4 . . .  G4 . . -  - - - -
 ] n>d /SS 17
 
 # Stream 8: Commodore 64 MOS 6581 SID Fast Arpeggio Lead (D Minor, 64 steps)
@@ -954,7 +959,12 @@ yp -1
 [pause]    : scene_pause ;
 [resume]   : scene_resume ;
 [scenes]   : [SCENES: 0:moog 1:prophet 2:korg_ms20 3:jupiter8 4:cz_bass 5:cz_bell 6:dw_space 7:dw_brass 8:sid_c64 9:arcade_nes] puts ;
-[controls] : [LIVE TWEAKS: filter_open, filter_deep, res_high, drive_hot, glide_long, prophet_warm, prophet_bright, korg_screech, korg_punch, cz_bright, cz_resonant, cz_mellow, dw_delay_mod, dw_delay_tight, nt_sid, nt_pokey_buzz, nt_nes_white, sid_dac_on, sid_dac_off, nes_tri_step, drums_off, drums_on] puts ;
+
+# Smooth Master Volume Fade Macros (Click-Free via Volume Smoother)
+[fade_out] : -60.0 V [Master Volume: Fade Out (-60 dB, Click-Free)] puts ;
+[fade_in]  : -3.5 V  [Master Volume: Fade In (-3.5 dB, Performance Level)] puts ;
+
+[controls] : [LIVE TWEAKS: fade_in, fade_out, filter_open, filter_deep, res_high, drive_hot, glide_long, prophet_warm, prophet_bright, korg_screech, korg_punch, cz_bright, cz_resonant, cz_mellow, dw_delay_mod, dw_delay_tight, nt_sid, nt_pokey_buzz, nt_nes_white, sid_dac_on, sid_dac_off, nes_tri_step, drums_off, drums_on] puts ;
 
 # ----------------------------------------------------------------------
 # 9. STARTUP BANNER & ROSTER
@@ -971,6 +981,7 @@ yp -1
 [  Scene 8: scene_sid         (Commodore 64 MOS 6581 SID Hardware 23-Bit Noise & Non-Linear DAC Arp)] puts
 [  Scene 9: scene_arcade      (Atari POKEY & Nintendo NES 4-Bit Metallic Noise & Stepped Triangle Bass)] puts
 [Type 'play' to start automated 10-scene arrangement from Scene 0.] puts
+[Type 'fade_in' / 'fade_out' for click-free volume transitions.] puts
 [Type 'scenes' to list scenes, or cue any scene macro (e.g. 'scene_sid').] puts
 [Type 'controls' to view live realtime performance parameter macros.] puts
 [Scene transport: 'scene_stop' (or -1 scene_cue) to stop at bar end; 'pause' / 'resume'] puts
